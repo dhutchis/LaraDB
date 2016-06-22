@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE log4j:configuration SYSTEM "http://logging.apache.org/log4j/1.2/apidocs/org/apache/log4j/xml/doc-files/log4j.dtd">
+<log4j:configuration>
+  <appender name="CONSOLE" class="org.apache.log4j.ConsoleAppender">
+    <layout class="org.apache.log4j.PatternLayout">
+      <param name="ConversionPattern"
+             value="%d{DATE} %p - %C{1}.%M(%L) -  %m%n"/>
+    </layout>
+  </appender>
+
+  <logger name="org.apache">
+    <level value="INFO"/>
+  </logger>
+  <logger name="org.apache.zookeeper">
+    <level value="WARN"/>
+  </logger>
+  <!--<logger name="org.apache.accumulo">-->
+  <!--<level value="TRACE"/>-->
+  <!--</logger>-->
+
+
+  <logger name="edu.mit.ll.d4m" >
+    <level value="ERROR" />
+  </logger>
+
+  <logger name="edu.mit.ll.graphulo">
+    <level value="DEBUG" />
+  </logger>
+
+  <logger name="edu.washington.cs.laragraphulo">
+    <level value="DEBUG" />
+  </logger>
+
+  <root>
+    <level value="WARN"/>
+    <appender-ref ref="CONSOLE"/>
+  </root>
+
+</log4j:configuration>

@@ -5,7 +5,7 @@ before_install:
   - wget https://github.com/apache/accumulo/archive/1.8.zip
   - unzip 1.8.zip
   - cd accumulo-1.8
-  - echo "current MAVEN_OPTS is $MAVEN_OPTS"
+  - [ -f "~/.mavenrc" ] && echo "Contents of ~/.mavenrc:" && cat ~/.mavenrc || echo "Does not exist: ~/.mavenrc"
   - echo "MAVEN_OPTS='-Xmx1g -XX:MaxPermSize=512m'" > ~/.mavenrc
   - mvn clean install -P assemble -P docs -DskipTests -Dfindbugs.skip -Drat.skip -Dcheckstyle.skip -Dhadoop.version=2.7.2
   - cd ..

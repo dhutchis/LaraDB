@@ -1,4 +1,4 @@
-package edu.washington.cs
+package edu.washington.cs.laragraphulo
 
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Range
@@ -24,8 +24,8 @@ class IteratorHarnessTest(input: IteratorTestInput,
         ByteBuffer.allocate(4).putInt(i).array()
 
     val DATA = sortedMapOf(
-          Key("r","cf","cq") to Value(intToBytes(1)),
-          Key("r2","cf","cq") to Value(intToBytes(2))
+          Key("r", "cf", "cq") to Value(intToBytes(1)),
+          Key("r2", "cf", "cq") to Value(intToBytes(2))
       )
 
 

@@ -1,4 +1,4 @@
-package edu.washington.cs
+package edu.washington.cs.laragraphulo
 
 import org.junit.Test
 import kotlin.test.assertEquals
