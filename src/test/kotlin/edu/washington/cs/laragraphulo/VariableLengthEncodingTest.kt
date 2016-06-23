@@ -127,7 +127,7 @@ class VariableLengthEncodingTest {
 
 
   @Test
-  @Ignore("This test passes but is quite slow. The innermost body executes 5^10 = 9.7M times. " +
+  @Ignore("Ignored because this test is slow. The innermost body executes 5^10 = 9.7M times. " +
       "See the lighter-weight mini version.")
   fun testEncodeDecodeFullFull() {
     val ba = ByteArray(4)
@@ -192,20 +192,31 @@ class VariableLengthEncodingTest {
    */
   @Test
   fun testEncodeDecodeExample() {
-    val listOrig = listOf(
+    assertEncodeDecode(listOf(
         byteArrayOf(5, 0, 2, 2),
         byteArrayOf(3),
         byteArrayOf(),
         byteArrayOf(7, 1)
-    ).map { ByteBuffer.wrap(it) }
-    val bbEnc = escapeAndJoin(listOrig)
-    val listNew = splitAndUnescape(ByteBufferUtil.toBytes(bbEnc))
-    assertEquals(listOrig, listNew)
-//    listOrig.zip(listNew).forEach { Assert.assertEquals(it.first, it.second) }
+    ).map { ByteBuffer.wrap(it) })
   }
 
   @Test
-  @Ignore("Not a test.")
+  fun testEncodeDecodeEmpty() {
+    assertEncodeDecode(listOf(
+        byteArrayOf()
+    ).map { ByteBuffer.wrap(it) })
+//    assertEncodeDecode(listOf()) fails
+  }
+
+  fun assertEncodeDecode(listOrig: List<ByteBuffer>) {
+    val bbEnc = escapeAndJoin(listOrig)
+    val listNew = splitAndUnescape(ByteBufferUtil.toBytes(bbEnc))
+    assertEquals(listOrig, listNew)
+  }
+
+
+  //  @Test
+  @Suppress("unused")
   fun printByteTable() {
     for (i in Byte.MIN_VALUE..Byte.MAX_VALUE) {
       val b = i.toByte()
@@ -236,4 +247,3 @@ class VariableLengthEncodingTest {
 
 
 }
-

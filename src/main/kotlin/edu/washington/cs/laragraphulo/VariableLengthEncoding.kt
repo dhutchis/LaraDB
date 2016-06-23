@@ -24,14 +24,24 @@ fun escape(arr: ByteArray, off: Int, len: Int): ByteBuffer {
  * Modifies `bb`. Assumes that `bb` has enough remaining capacity.
  */
 fun escape(arr: ByteArray, off: Int, len: Int, bb: ByteBuffer): ByteBuffer {
-  for (i in 0..len-1) {
-    val b = arr[off + i]
-    when (b) {
-      sep -> bb.put(esc).put(sep)
-      esc -> bb.put(esc).put(esc)
-      else -> bb.put(b)
+  var i = off
+  var start = off
+  while (i < off+len) {
+    when (arr[i]) {
+      esc -> {
+        bb.put(arr, start, i - start)
+            .put(esc).put(esc)
+        start = i+1
+      }
+      sep -> {
+        bb.put(arr, start, i - start)
+            .put(esc).put(sep)
+        start = i+1
+      }
     }
+    i++
   }
+  bb.put(arr,start,i-start)
   return bb
 }
 
@@ -125,30 +135,34 @@ fun splitAndUnescape(arr: ByteArray): List<ByteBuffer> =
  * `510220300711 -> [ 5022, 3, '', 71 ]`.
  */
 fun splitAndUnescape(arr: ByteArray, off: Int, len: Int): List<ByteBuffer> {
+  assert(len == 0 ||
+      len == 1 && arr[off] != esc ||
+      len > 1 && (arr[off+len-1] != esc || arr[off+len-2] == esc)
+      , {"Bad input array; last byte is an unescaped escape byte "+esc})
   var bb = ByteBuffer.allocate(len)
   val list: ArrayList<ByteBuffer> = arrayListOf()
 
+  var start = off
   var i = off
   while (i < off+len) {
-    val b = arr[i]
-    when (b) {
+    when (arr[i]) {
       esc -> {
-        bb.put(arr[i+1])
-        i += 2
+        bb.put(arr,start,i-start)
+        i++
+        start = i
       }
       sep -> {
+        bb.put(arr,start,i-start)
+        start = i + 1
         val bbnew = bb.slice()
         bb.flip()
         list.add(bb)
         bb = bbnew
-        i++
-      }
-      else -> {
-        bb.put(b)
-        i++
       }
     }
+    i++
   }
+  bb.put(arr,start,i-start)
   bb.flip()
   list.add(bb)
   return list
