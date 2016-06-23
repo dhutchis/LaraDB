@@ -1,6 +1,7 @@
 package edu.washington.cs.laragraphulo
 
 
+import org.apache.accumulo.core.client.lexicoder.UIntegerLexicoder
 import org.apache.accumulo.core.util.ByteBufferUtil
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.WritableComparator
@@ -8,6 +9,7 @@ import org.junit.Assert
 import org.junit.Ignore
 import org.junit.Test
 import java.nio.ByteBuffer
+import java.util.*
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -122,7 +124,6 @@ class VariableLengthEncodingTest {
         }
       }
     }
-
   }
 
 
@@ -215,13 +216,47 @@ class VariableLengthEncodingTest {
   }
 
 
-  //  @Test
+//  @Test
   @Suppress("unused")
   fun printByteTable() {
+    val lex = UIntegerLexicoder()
     for (i in Byte.MIN_VALUE..Byte.MAX_VALUE) {
       val b = i.toByte()
-      System.out.format("%+4d %3x%n", b, b)
+//      System.out.format("%+4d %3x%n", b, b)
+      System.out.format("%+4d %3x : ", b, b)
+      for (byte in lex.encode(i)) {
+        System.out.format("%3x ", byte)
+      }
+      System.out.println()
     }
+  }
+
+//  @Test
+  @Suppress("unused")
+  fun printIntegerTable() {
+    val lex = UIntegerLexicoder()
+    for (i in -5..270) {
+      //      System.out.format("%+4d %3x%n", b, b)
+      System.out.format("%+4d %3x : ", i, i)
+      for (byte in lex.encode(i)) {
+        System.out.format("%3x ", byte)
+      }
+      System.out.println()
+    }
+  }
+
+//  @Test
+  @Suppress("unused")
+  fun testUIntLexicoder() {
+    val a = 2
+    val b = 17
+    assertTrue(a < b)
+    val lex = UIntegerLexicoder()
+    val x = lex.encode(a)
+    val y = lex.encode(b)
+    System.out.println("x: "+Arrays.toString(x))
+    System.out.println("y: "+Arrays.toString(y))
+    assertTrue(WritableComparator.compareBytes(x, 0, x.size, y, 0, y.size) < 0)
   }
 
 
@@ -230,11 +265,19 @@ class VariableLengthEncodingTest {
   @Test
   fun compareStringLengths() {
     val s1 = "abcd" // "greater" - expect return value > 0
-    val s2 = "ab"   // "lessor"
+    val s2 = "ab"   // "lesser"
     val t1 = Text(s1)
     val t2 = Text(s2)
     assertEquals(0, WritableComparator.compareBytes(t1.bytes, 0, t2.length, t2.bytes, 0, t2.length))
     assertTrue(WritableComparator.compareBytes(t1.bytes, 0, t1.length, t2.bytes, 0, t2.length) > 0, "expect abcd > ab")
+
+    val a = Text("10")  // "greater"
+    val b = Text("110")
+    assertTrue(WritableComparator.compareBytes(a.bytes, 0, a.length, b.bytes, 0, b.length) < 0, "expect \"10\" < \"111\" for strings")
+
+    val x = byteArrayOf(1, 0)    // "greater"
+    val y = byteArrayOf(1, 1, 0)
+    assertTrue(WritableComparator.compareBytes(x, 0, x.size, y, 0, y.size) < 0, "expect 1,0 < 1,1,1 for bytes")
   }
 
   /** Determine which is greater: -1 (FF) or 0 (00). */
