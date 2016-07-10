@@ -29,7 +29,6 @@ class IteratorHarnessTest(input: IteratorTestInput,
       )
 
 
-    @Suppress("unused")
     @JvmStatic
     @Parameterized.Parameters
     fun parameters(): Array<Array<Any>> {
