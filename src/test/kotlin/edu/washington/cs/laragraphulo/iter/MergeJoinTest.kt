@@ -157,7 +157,6 @@ class MergeJoinTest(
         )
     )
 
-    // todo - implement column family filter handling on MergeJoin
     val tcolfamfilterInclusive = Params(
         name = "1-skvi row-wise colfam-inclusive-filter",
         input = listOf(
@@ -245,7 +244,9 @@ class MergeJoinTest(
                     )
                 )
             )
-        )
+        ),
+        tcolfamfilterInclusive,
+        tcolfamfilterExclusive
     ) // end of test data
 
     @JvmStatic

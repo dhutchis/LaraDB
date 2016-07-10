@@ -17,12 +17,12 @@ class MapToSkviAdapter(
 {
   private val log = LogManager.getLogger(MapToSkviAdapter::class.java)
 
-  companion object {
-    private val EMPTY_ITER = Iterators.peekingIterator<Map.Entry<Key,Value>>(Iterators.emptyIterator())
-  }
+//  companion object {
+//    private val EMPTY_ITER = Iterators.peekingIterator<Map.Entry<Key,Value>>(Iterators.emptyIterator())
+//  }
 
   private lateinit var inner: PeekingIterator<Map.Entry<Key, Value>>
-  private lateinit var seekRng: Range
+  private lateinit var seekData: SeekData
 
   override fun init(source: SortedKeyValueIterator<Key, Value>?, options: Map<String, String>, env: IteratorEnvironment) {
     if (source != null)
@@ -40,22 +40,35 @@ class MapToSkviAdapter(
   override operator fun next() {
     inner.next()
     // check if we passed the seek range
-    if (inner.hasNext() && !seekRng.contains(inner.peek().key))
-      inner = EMPTY_ITER
+    findTop()
   }
 
+  private fun Key.matchesFilter(): Boolean =
+      seekData.range.contains(this) &&
+      !(seekData.inclusive xor seekData.columnFamilies.contains(this.columnFamilyData))
+  // incl=T ==> contains
+  // incl=F ==> !contains
+  // incl=T  contains T F <- xor
+  // incl=T !contains F T
+  // incl=F  contains F T
+  // incl=F !contains T F
+
+  /** check if we passed the seek range or if we need to worry about column families */
+  private fun findTop() {
+    while (inner.hasNext() && !inner.peek().key.matchesFilter())
+      inner.next()
+  }
+
+
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
-    // TODO adapt to handle columnFamilies
-    seekRng = range
+    seekData = SeekData(range, columnFamilies, inclusive)
     // seek to first entry inside range
     inner = Iterators.peekingIterator(when {
       range.isInfiniteStartKey -> origMap
       range.isStartKeyInclusive -> origMap.tailMap(range.startKey)
       else -> origMap.tailMap(range.startKey.followingKey(PartialKey.ROW_COLFAM_COLQUAL_COLVIS_TIME))
     }.entries.iterator())
-    // check if we passed the seek range
-    if (inner.hasNext() && !seekRng.contains(inner.peek().key))
-      inner = EMPTY_ITER
+    findTop()
   }
 
   override fun getTopKey(): Key = inner.peek().key
