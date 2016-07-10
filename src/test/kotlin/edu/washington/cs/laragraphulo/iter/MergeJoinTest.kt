@@ -246,7 +246,55 @@ class MergeJoinTest(
             )
         ),
         tcolfamfilterInclusive,
-        tcolfamfilterExclusive
+        tcolfamfilterExclusive,
+        Params(
+            name = "3-skvi row-wise",
+            input = listOf(
+                sortedMapOf(
+                    Key("r", "", "1") to Value(),
+                    Key("r", "", "2") to Value(),
+                    Key("r3", "", "3") to Value(),
+                    Key("r5", "", "7") to Value()
+                ) to SeekData.ALL,
+                sortedMapOf(
+                    Key("r2", "", "1") to Value(),
+                    Key("r2", "", "2") to Value(),
+                    Key("r3", "", "4") to Value(),
+                    Key("r5", "", "8") to Value()
+                ) to SeekData.ALL,
+                sortedMapOf(
+                    Key("r3", "", "5") to Value(),
+                    Key("r3", "", "6") to Value(),
+                    Key("r4", "", "2") to Value(),
+                    Key("r5", "", "9") to Value()
+                ) to SeekData.ALL
+            ),
+            comparator = MergeJoin.SkipKeyComparator.ROW, expected = listOf(
+            listOf(
+                sortedMapOf(
+                    Key("r3", "", "3") to Value()
+                ),
+                sortedMapOf(
+                    Key("r3", "", "4") to Value()
+                ),
+                sortedMapOf(
+                    Key("r3", "", "5") to Value(),
+                    Key("r3", "", "6") to Value()
+                )
+            ),
+            listOf(
+                sortedMapOf(
+                    Key("r5", "", "7") to Value()
+                ),
+                sortedMapOf(
+                    Key("r5", "", "8") to Value()
+                ),
+                sortedMapOf(
+                    Key("r5", "", "9") to Value()
+                )
+            )
+        )
+        )
     ) // end of test data
 
     @JvmStatic
