@@ -39,8 +39,8 @@ class MergeJoin(
       override fun skipSeekKey(keyToAdvanceTo: Key, currentKey: Key): Key =
           GraphuloUtil.keyCopy(keyToAdvanceTo, partialKey)
 
-      override fun compare(o1: Key?, o2: Key?): Int =
-          o1!!.compareTo(o2!!, partialKey)
+      override fun compare(o1: Key, o2: Key): Int =
+          o1.compareTo(o2, partialKey)
     }
 
     companion object {

@@ -15,6 +15,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import java.util.*
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
@@ -99,13 +100,17 @@ class MergeJoinTest(
     }
   }
 
+  // it would be nice to have a method close() on Collider, ensuring it gets called when all is finished, but not easy with Accumulo
+
   class AssertingCollider(
       comparator: Comparator<Key>,
       val expected: List<List<SortedMap<Key, Value>>>
   ) : AllCollider(comparator)
   {
     private val iter = expected.iterator()
-    private var collidecnt = 0
+    var collidecnt = 0
+      get
+      private set
 
     override fun collide(vararg sets: SortedMap<Key, Value>): Iterator<Pair<Key, Value>> {
       collidecnt++
@@ -122,11 +127,14 @@ class MergeJoinTest(
           Pair(it.first.toSkvi().seek(it.second), it.second)
         }.toTypedArray()
 
+    val ac = AssertingCollider(params.comparator, params.expected)
+
     val mj =
 //        MergeJoin(params.comparator, PrintAllCollider(params.comparator), *arr)
-        MergeJoin(params.comparator, AssertingCollider(params.comparator, params.expected), *arr)
+        MergeJoin(params.comparator, ac, *arr)
     while (mj.hasNext())
       mj.next()
+    assertEquals(params.expected.size, ac.collidecnt)
   }
 
 
@@ -144,7 +152,8 @@ class MergeJoinTest(
                 Key("r2", "", "1") to Value()
             ) to SeekData.ALL
         ),
-        comparator = MergeJoin.SkipKeyComparator.ROW, expected = listOf(
+        comparator = MergeJoin.SkipKeyComparator.ROW,
+        expected = listOf(
             listOf( // first call to collide
                 sortedMapOf( // first skvi
                     Key("r", "", "1") to Value(),
@@ -166,7 +175,8 @@ class MergeJoinTest(
                 Key("r2", "a", "1") to Value()
             ) to SeekData(Range(), setOf(ArrayByteSequence("a")), true)
         ),
-        comparator = MergeJoin.SkipKeyComparator.ROW, expected = listOf(
+        comparator = MergeJoin.SkipKeyComparator.ROW,
+        expected = listOf(
             listOf(
                 sortedMapOf(
                     Key("r", "a", "1") to Value()
@@ -186,7 +196,8 @@ class MergeJoinTest(
                 Key("r2", "a", "1") to Value()
             ) to SeekData(Range(), setOf(ArrayByteSequence("a")), false)
         ),
-        comparator = MergeJoin.SkipKeyComparator.ROW, expected = listOf(
+        comparator = MergeJoin.SkipKeyComparator.ROW,
+        expected = listOf(
         listOf(
             sortedMapOf(
                 Key("r", "b", "2") to Value()
@@ -194,6 +205,18 @@ class MergeJoinTest(
         )
       )
     )
+
+    val biginput1 = sortedMapOf(
+        Key("r1", "0", "1") to Value("1".toByteArray()),
+        Key("r1", "0", "2") to Value(),
+        Key("r1", "0", "3") to Value(),
+        Key("r1", "1", "1") to Value(),
+        Key("r1", "1", "2") to Value(),
+        Key("r1", "1", "3") to Value(),
+        Key("r1", "2", "2") to Value(),
+        Key("r1", "2", "3") to Value()
+      )
+
 
     val data: Array<Params> = arrayOf(
         t1,
@@ -208,7 +231,8 @@ class MergeJoinTest(
                     Key("r3", "", "2") to Value()
                 ) to SeekData(Range("r2", true, null, false), setOf(), false)
             ),
-            comparator = MergeJoin.SkipKeyComparator.ROW, expected = listOf(
+            comparator = MergeJoin.SkipKeyComparator.ROW,
+            expected = listOf(
                 listOf(
                     sortedMapOf(
                         Key("r2", "", "1") to Value(),
@@ -234,14 +258,11 @@ class MergeJoinTest(
                     Key("r3", "", "4") to Value()
                 ) to SeekData.ALL
             ),
-            comparator = MergeJoin.SkipKeyComparator.ROW, expected = listOf(
+            comparator = MergeJoin.SkipKeyComparator.ROW,
+            expected = listOf(
                 listOf(
-                    sortedMapOf(
-                        Key("r3", "", "3") to Value()
-                    ),
-                    sortedMapOf(
-                        Key("r3", "", "4") to Value()
-                    )
+                    sortedMapOf(Key("r3", "", "3") to Value()),
+                    sortedMapOf(Key("r3", "", "4") to Value())
                 )
             )
         ),
@@ -261,7 +282,7 @@ class MergeJoinTest(
                     Key("r2", "", "2") to Value(),
                     Key("r3", "", "4") to Value(),
                     Key("r5", "", "8") to Value()
-                ) to SeekData.ALL,
+                ) to SeekData(Range(Key("r2","","2"),true,null,false), setOf(), false),
                 sortedMapOf(
                     Key("r3", "", "5") to Value(),
                     Key("r3", "", "6") to Value(),
@@ -269,33 +290,84 @@ class MergeJoinTest(
                     Key("r5", "", "9") to Value()
                 ) to SeekData.ALL
             ),
-            comparator = MergeJoin.SkipKeyComparator.ROW, expected = listOf(
-            listOf(
-                sortedMapOf(
-                    Key("r3", "", "3") to Value()
+            comparator = MergeJoin.SkipKeyComparator.ROW,
+            expected = listOf(
+                listOf(
+                    sortedMapOf(Key("r3", "", "3") to Value()),
+                    sortedMapOf(Key("r3", "", "4") to Value()),
+                    sortedMapOf(
+                        Key("r3", "", "5") to Value(),
+                        Key("r3", "", "6") to Value()
+                    )
                 ),
-                sortedMapOf(
-                    Key("r3", "", "4") to Value()
-                ),
-                sortedMapOf(
-                    Key("r3", "", "5") to Value(),
-                    Key("r3", "", "6") to Value()
+                listOf(
+                    sortedMapOf(Key("r5", "", "7") to Value()),
+                    sortedMapOf(Key("r5", "", "8") to Value()),
+                    sortedMapOf(Key("r5", "", "9") to Value())
                 )
-            ),
-            listOf(
+            )
+        ),
+        Params(
+            name = "3-skvi row-colf-colq-wise",
+            input = listOf(
                 sortedMapOf(
-                    Key("r5", "", "7") to Value()
-                ),
-                sortedMapOf(
-                    Key("r5", "", "8") to Value()
-                ),
-                sortedMapOf(
+                    Key("r", "", "1") to Value(),
+                    Key("r", "", "2") to Value(),
+                    Key("r3", "", "3") to Value(),
+                    Key("r5", "", "7") to Value(),
                     Key("r5", "", "9") to Value()
+                ) to SeekData.ALL,
+                sortedMapOf(
+                    Key("r2", "", "1") to Value(),
+                    Key("r2", "", "2") to Value(),
+                    Key("r3", "", "3") to Value(),
+                    Key("r5", "", "8") to Value(),
+                    Key("r5", "", "9") to Value()
+                ) to SeekData(Range(Key("r2","","2"),true,null,false), setOf(), false),
+                sortedMapOf(
+                    Key("r3", "", "3") to Value(),
+                    Key("r3", "", "6") to Value(),
+                    Key("r4", "", "2") to Value(),
+                    Key("r5", "", "9") to Value()
+                ) to SeekData.ALL
+            ),
+            comparator = MergeJoin.SkipKeyComparator.ROW_COLF_COLQ,
+            expected = listOf(
+                listOf(
+                    sortedMapOf(Key("r3", "", "3") to Value()),
+                    sortedMapOf(Key("r3", "", "3") to Value()),
+                    sortedMapOf(Key("r3", "", "3") to Value())
+                ),
+                listOf(
+                    sortedMapOf(Key("r5", "", "9") to Value()),
+                    sortedMapOf(Key("r5", "", "9") to Value()),
+                    sortedMapOf(Key("r5", "", "9") to Value())
+                )
+            )
+        ),
+        Params(
+            name = "3-skvi row-colq-wise",
+            input = listOf(
+                biginput1 to SeekData(Range(), setOf(ArrayByteSequence("0")), true),
+                biginput1 to SeekData(Range(), setOf(ArrayByteSequence("1")), true),
+                biginput1 to SeekData(Range(), setOf(ArrayByteSequence("2")), true)
+            ),
+            comparator = MergeJoin.SkipKeyComparator.Companion.ROW_COLQ,
+            expected = listOf(
+                listOf(
+                    sortedMapOf(Key("r1", "0", "2") to Value()),
+                    sortedMapOf(Key("r1", "1", "2") to Value()),
+                    sortedMapOf(Key("r1", "2", "2") to Value())
+                ),
+                listOf(
+                    sortedMapOf(Key("r1", "0", "3") to Value()),
+                    sortedMapOf(Key("r1", "1", "3") to Value()),
+                    sortedMapOf(Key("r1", "2", "3") to Value())
                 )
             )
         )
-        )
     ) // end of test data
+
 
     @JvmStatic
     @Parameterized.Parameters(name = "test {index}: {0}")
@@ -303,7 +375,5 @@ class MergeJoinTest(
       return data
     }
   }
-
-
 
 }
