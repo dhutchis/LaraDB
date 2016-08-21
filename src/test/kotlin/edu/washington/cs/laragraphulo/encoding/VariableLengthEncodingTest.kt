@@ -1,4 +1,4 @@
-package edu.washington.cs.laragraphulo
+package edu.washington.cs.laragraphulo.encoding
 
 
 import org.apache.accumulo.core.client.lexicoder.UIntegerLexicoder
@@ -254,8 +254,8 @@ class VariableLengthEncodingTest {
     val lex = UIntegerLexicoder()
     val x = lex.encode(a)
     val y = lex.encode(b)
-    System.out.println("x: "+Arrays.toString(x))
-    System.out.println("y: "+Arrays.toString(y))
+    System.out.println("x: "+ Arrays.toString(x))
+    System.out.println("y: "+ Arrays.toString(y))
     assertTrue(WritableComparator.compareBytes(x, 0, x.size, y, 0, y.size) < 0)
   }
 

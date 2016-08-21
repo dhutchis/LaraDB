@@ -150,7 +150,7 @@ class MergeJoinTest(
                 Key("r", "", "1") to Value(),
                 Key("r", "", "2") to Value(),
                 Key("r2", "", "1") to Value()
-            ) to SeekData.ALL
+            ) to SeekData.SEEK_ALL
         ),
         comparator = MergeJoin.SkipKeyComparator.ROW,
         expected = listOf(
@@ -251,12 +251,12 @@ class MergeJoinTest(
                     Key("r", "", "1") to Value(),
                     Key("r", "", "2") to Value(),
                     Key("r3", "", "3") to Value()
-                ) to SeekData.ALL,
+                ) to SeekData.SEEK_ALL,
                 sortedMapOf(
                     Key("r2", "", "1") to Value(),
                     Key("r2", "", "2") to Value(),
                     Key("r3", "", "4") to Value()
-                ) to SeekData.ALL
+                ) to SeekData.SEEK_ALL
             ),
             comparator = MergeJoin.SkipKeyComparator.ROW,
             expected = listOf(
@@ -276,7 +276,7 @@ class MergeJoinTest(
                     Key("r", "", "2") to Value(),
                     Key("r3", "", "3") to Value(),
                     Key("r5", "", "7") to Value()
-                ) to SeekData.ALL,
+                ) to SeekData.SEEK_ALL,
                 sortedMapOf(
                     Key("r2", "", "1") to Value(),
                     Key("r2", "", "2") to Value(),
@@ -288,7 +288,7 @@ class MergeJoinTest(
                     Key("r3", "", "6") to Value(),
                     Key("r4", "", "2") to Value(),
                     Key("r5", "", "9") to Value()
-                ) to SeekData.ALL
+                ) to SeekData.SEEK_ALL
             ),
             comparator = MergeJoin.SkipKeyComparator.ROW,
             expected = listOf(
@@ -316,7 +316,7 @@ class MergeJoinTest(
                     Key("r3", "", "3") to Value(),
                     Key("r5", "", "7") to Value(),
                     Key("r5", "", "9") to Value()
-                ) to SeekData.ALL,
+                ) to SeekData.SEEK_ALL,
                 sortedMapOf(
                     Key("r2", "", "1") to Value(),
                     Key("r2", "", "2") to Value(),
@@ -329,7 +329,7 @@ class MergeJoinTest(
                     Key("r3", "", "6") to Value(),
                     Key("r4", "", "2") to Value(),
                     Key("r5", "", "9") to Value()
-                ) to SeekData.ALL
+                ) to SeekData.SEEK_ALL
             ),
             comparator = MergeJoin.SkipKeyComparator.ROW_COLF_COLQ,
             expected = listOf(
@@ -371,9 +371,7 @@ class MergeJoinTest(
 
     @JvmStatic
     @Parameterized.Parameters(name = "test {index}: {0}")
-    fun parameters(): Array<out Any> {
-      return data
-    }
+    fun parameters(): Array<out Any> = data
   }
 
 }

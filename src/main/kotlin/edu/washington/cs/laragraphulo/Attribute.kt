@@ -19,7 +19,14 @@ Attribute<T>(val name: String,
              /**
               * A method for encoding to and decoding from a byte[].
               */
-             val encoder: LexicoderPlus<T>) : Serializable {
+             val encoder: LexicoderPlus<T>,
+             /**
+              * Interpretation for missing values.
+              * Maybe include it in ByteArray format too?
+              * null means no default value.
+              */
+             val default: T?
+) : Serializable {
   init {
     Preconditions.checkArgument(width == -1 || width > 0, "bad width")
   }

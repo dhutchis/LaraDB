@@ -12,13 +12,17 @@ import org.apache.log4j.LogManager
 import java.nio.charset.StandardCharsets
 import java.util.*
 
+/**
+ * Holds the information that an SKVI is seeked with.
+ * @see SortedKeyValueIterator.seek
+ */
 data class SeekData (
     val range: Range,
     val columnFamilies: Collection<ByteSequence>,
     val inclusive: Boolean
 ) {
   companion object {
-    val ALL = SeekData(Range(), setOf(), false)
+    val SEEK_ALL = SeekData(Range(), setOf(), false)
   }
 }
 
