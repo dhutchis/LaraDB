@@ -105,6 +105,27 @@ interface Property<R> {
 open class EPropMap<L> {
   private val nodeMap: MutableMap<Class<out Property<in L>>, Node<in L, out Property<in L>>> = hashMapOf()
 
+  /**
+   * All properties associated in the EPropMap, keyed by class.
+   */
+  val propMap: Map<Class<out Property<in L>>, Property<in L>>
+    get() {
+      return nodeMap.mapValues{
+        e ->
+        // I can't convince the type-checker to allow this statement, so I rewrote getNodeInner
+//        this.getNodeInner(e.key, e.value).content!!
+        val (c, n1) = e
+        val n2 = e.value.find()
+        if (n1 !== n2 && n1.backset.size == 1 && n1.backset.single() === this) {
+          // path compression: connect directly to end node when safe to do so
+          nodeMap.put(c, n2)
+          n1.backset.clear() // n1 is now eligible for garbage collection
+        }
+        n2.content!!
+      }
+    } // computed on the fly
+
+
   private companion object {
     // map for this class is out Property<in TupleFunction> -- let L:R=TupleFunction:Function, stores
     // actual R=Function, P:Property<R>=Inputs:Property<Function>
@@ -122,10 +143,11 @@ open class EPropMap<L> {
 
   private fun <H, P: Property<H>, L:H> EPropMap<L>
       .getNode(c: Class<P>): Node<H, P>? {
-//        val n1 = nodeMap.get(c) ?: return null
     val n1 = mapGet(nodeMap, c) ?: return null
-//        @Suppress("UNCHECKED_CAST")
-//        val n1 = nodeMap[c] as Node<H,P>? ?: return null
+    return getNodeInner(c, n1)
+  }
+
+  private fun <H, P: Property<H>, L:H> EPropMap<L>.getNodeInner(c: Class<P>, n1: Node<H, P>): Node<H, P> {
     val n2 = n1.find()
     if (n1 !== n2 && n1.backset.size == 1 && n1.backset.single() === this) {
       // path compression: connect directly to end node when safe to do so
