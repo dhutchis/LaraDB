@@ -1,6 +1,8 @@
-package edu.uw.droolypeg.test4
+package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.base.Preconditions
 import java.util.*
+import kotlin.reflect.KProperty
 
 /** Thrown if Drools concludes contradictory facts */
 class Contradiction(msg : String, vararg objs: Any) : RuntimeException(msg+"\n\t"+objs.joinToString(separator = "\n\t"))
@@ -17,72 +19,72 @@ class Contradiction(msg : String, vararg objs: Any) : RuntimeException(msg+"\n\t
  */
 interface Property<R> {
 
-    /**
-     * Returned by [Property.merge].
-     * The [newprop] is the updated property, and
-     * [implied] is the set of newly implied properties resulting from it.
-     */
-    data class NewPropWithImplied<in R, out P:Property<in R>>(val newprop: P,
-                                                        val implied: Set<Property<in R>> = emptySet())
+  /**
+   * Returned by [Property.merge].
+   * The [newprop] is the updated property, and
+   * [implied] is the set of newly implied properties resulting from it.
+   */
+  data class NewPropWithImplied<in R, out P: Property<in R>>(val newprop: P,
+                                                             val implied: Set<Property<in R>> = emptySet())
 
-    /**
-     * Return properties resulting from merging this property with another.
-     * Throw a [Contradiction] if incompatible.
-     * If this property needs updating as a result of the merge,
-     * return the updated property, along with all implied properties that were not implied before.
-     * Return `Pair(this, emptySet())` if no update is necessary.
-     * The `this` indicates that the property has not changed by referential equality.
-     *
-     * Example: let property P1 be HasAttributeNameAndType({(Age -> int)})
-     * and P2 be HasAttributeNameAndType({(Name -> String)}).
-     * P1.impliedProperties() returns {HasAttributeName({Age})}.
-     * P2.impliedProperties() returns {HasAttributeName({Name})}.
-     * P1.merge(P2) returns Pair(HasAttributeNameAndType({(Age -> int), (Name -> String)}), {HasAttributeName({Age, Name})}).
-     * P1.merge(P1) returns Pair(this, {}).
-     */
-    fun merge(newp: Property<R>): NewPropWithImplied<R, Property<R>> {
-        if (newp.javaClass != javaClass) throw IllegalArgumentException("Merging a different kind of property! $newp")
-        if (this != newp) throw Contradiction("Concluded differing properties, and no resolution has been defined!", this, newp)
-        return NewPropWithImplied(this)
+  /**
+   * Return properties resulting from merging this property with another.
+   * Throw a [Contradiction] if incompatible.
+   * If this property needs updating as a result of the merge,
+   * return the updated property, along with all implied properties that were not implied before.
+   * Return `Pair(this, emptySet())` if no update is necessary.
+   * The `this` indicates that the property has not changed by referential equality.
+   *
+   * Example: let property P1 be HasAttributeNameAndType({(Age -> int)})
+   * and P2 be HasAttributeNameAndType({(Name -> String)}).
+   * P1.impliedProperties() returns {HasAttributeName({Age})}.
+   * P2.impliedProperties() returns {HasAttributeName({Name})}.
+   * P1.merge(P2) returns Pair(HasAttributeNameAndType({(Age -> int), (Name -> String)}), {HasAttributeName({Age, Name})}).
+   * P1.merge(P1) returns Pair(this, {}).
+   */
+  fun merge(newp: Property<R>): NewPropWithImplied<R, Property<R>> {
+    if (newp.javaClass != javaClass) throw IllegalArgumentException("Merging a different kind of property! $newp")
+    if (this != newp) throw Contradiction("Concluded differing properties, and no resolution has been defined!", this, newp)
+    return NewPropWithImplied(this)
+  }
+
+  /**
+   * Properties implied by the existence of this one.
+   * In terms of the lattice of properties, these are the properties *less than* this one.
+   *
+   * For example, Sorted(["id", "age"]) implies the properties HasAttributeName({"id", "age"})
+   */
+  fun impliedProperties(): Set<Property<in R>> = emptySet()
+  // for each p in impliedProperties()
+  // assert(p.javaClass in Property.ImpliedEquivalenceMap[this.javaClass], "broken equivalence implication contract")
+
+  /**
+   * Equivalences implied by an equivalence of this class.
+   * This companion object implements these methods "statically".
+   *
+   * Contract: if it is possible for an instance of this class to imply a property,
+   * then this class should imply an equivalence of that property's class when there is an
+   * equivalence for this class.
+   */
+  companion object /*ImpliedEquivMap*/ {
+    private val map: MutableMap<Class<out Property<*>>, MutableSet<Class<out Property<*>>>> = hashMapOf()
+
+    @Suppress("UNCHECKED_CAST")
+    fun <L>getImpliedEquiv(c: Class<out Property<out L>>): Set<Class<out Property<in L>>> =
+        map[c]?.toSet() as Set<Class<out Property<in L>>>?
+            ?: emptySet<Class<out Property<in L>>>()
+
+    fun <L>addImpliedEquiv(c: Class<out Property<out L>>,
+                           vararg ps: Class<out Property<in L>>) {
+      if (c !in map)
+        map.put(c, hashSetOf(*ps))
+      else
+        map[c]!!.addAll(ps)
     }
 
-    /**
-     * Properties implied by the existence of this one.
-     * In terms of the lattice of properties, these are the properties *less than* this one.
-     *
-     * For example, Sorted(["id", "age"]) implies the properties HasAttributeName({"id", "age"})
-     */
-    fun impliedProperties(): Set<Property<in R>> = emptySet()
-    // for each p in impliedProperties()
-    // assert(p.javaClass in Property.ImpliedEquivalenceMap[this.javaClass], "broken equivalence implication contract")
-
-    /**
-     * Equivalences implied by an equivalence of this class.
-     * This companion object implements these methods "statically".
-     *
-     * Contract: if it is possible for an instance of this class to imply a property,
-     * then this class should imply an equivalence of that property's class when there is an
-     * equivalence for this class.
-     */
-    companion object /*ImpliedEquivMap*/ {
-        private val map: MutableMap<Class<out Property<*>>, MutableSet<Class<out Property<*>>>> = hashMapOf()
-
-        @Suppress("UNCHECKED_CAST")
-        fun <L>getImpliedEquiv(c: Class<out Property<out L>>): Set<Class<out Property<in L>>> =
-                map[c]?.toSet() as Set<Class<out Property<in L>>>?
-                ?: emptySet<Class<out Property<in L>>>()
-
-        fun <L>addImpliedEquiv(c: Class<out Property<out L>>,
-                               vararg ps: Class<out Property<in L>>) {
-            if (c !in map)
-                map.put(c, hashSetOf(*ps))
-            else
-                map[c]!!.addAll(ps)
-        }
-
-        // idea: add a method to print the lattice of properties by equivalence
-        // would be nice if properties registered themselves in a global class map
-    }
+    // idea: add a method to print the lattice of properties by equivalence
+    // would be nice if properties registered themselves in a global class map
+  }
 }
 
 /**
@@ -101,230 +103,237 @@ interface Property<R> {
  * This class tracks which EPropMaps are in the same equivalence class for each property. See [getEquiv].
  */
 open class EPropMap<L> {
-    private  val nodeMap: MutableMap<Class<out Property<in L>>, Node<in L, out Property<in L>>> = hashMapOf()
+  private val nodeMap: MutableMap<Class<out Property<in L>>, Node<in L, out Property<in L>>> = hashMapOf()
 
-    private companion object {
-        // map for this class is out Property<in TupleFunction> -- let L:R=TupleFunction:Function, stores
-        // actual R=Function, P:Property<R>=Inputs:Property<Function>
-        @Suppress("UNCHECKED_CAST")
-        private fun <H, P:Property<H>, L: H>mapGet(map: Map<Class<out Property<in L>>, Node<in L, out Property<in L>>>,
-                                           c: Class<P>): Node<H, P>? = map[c] as Node<H,P>?
+  private companion object {
+    // map for this class is out Property<in TupleFunction> -- let L:R=TupleFunction:Function, stores
+    // actual R=Function, P:Property<R>=Inputs:Property<Function>
+    @Suppress("UNCHECKED_CAST")
+    private fun <H, P: Property<H>, L: H>mapGet(map: Map<Class<out Property<in L>>, Node<in L, out Property<in L>>>,
+                                                c: Class<P>): Node<H, P>? = map[c] as Node<H, P>?
 
-        // map for this class is for L:R=TupleFunction:Function
-        // want to put R=Function, P:Property<R>=Inputs:Property<Function>
-        inline fun <H, reified P:Property<H>, L: H>mapPut(map: MutableMap<Class<out Property<in L>>, Node<H, P>>,
-                                                          n: Node<H,P>) {
-            map.put(P::class.java, n)
-        }
+    // map for this class is for L:R=TupleFunction:Function
+    // want to put R=Function, P:Property<R>=Inputs:Property<Function>
+    inline fun <H, reified P: Property<H>, L: H>mapPut(map: MutableMap<Class<out Property<in L>>, Node<H, P>>,
+                                                       n: Node<H, P>) {
+      map.put(P::class.java, n)
     }
+  }
 
-    private fun <H, P:Property<H>, L:H> EPropMap<L>
-            .getNode(c: Class<P>): Node<H, P>? {
+  private fun <H, P: Property<H>, L:H> EPropMap<L>
+      .getNode(c: Class<P>): Node<H, P>? {
 //        val n1 = nodeMap.get(c) ?: return null
-        val n1 = mapGet(nodeMap, c) ?: return null
+    val n1 = mapGet(nodeMap, c) ?: return null
 //        @Suppress("UNCHECKED_CAST")
 //        val n1 = nodeMap[c] as Node<H,P>? ?: return null
-        val n2 = n1.find()
-        if (n1 !== n2 && n1.backset.size == 1 && n1.backset.single() === this) {
-            // path compression: connect directly to end node when safe to do so
-            nodeMap.put(c, n2)
-            n1.backset.clear() // n1 is now eligible for garbage collection
-        }
-        return n2
+    val n2 = n1.find()
+    if (n1 !== n2 && n1.backset.size == 1 && n1.backset.single() === this) {
+      // path compression: connect directly to end node when safe to do so
+      nodeMap.put(c, n2)
+      n1.backset.clear() // n1 is now eligible for garbage collection
     }
+    return n2
+  }
 
 //    private inline fun <H, reified P:Property<H>, L:H> EPropMap<L>
 //            .putNode(n: Node<H,P>) {
 //        nodeMap.put(P::class.java,n)
 //    }
 
-    private fun <H, P:Property<H>, L:H> EPropMap<L>
-            .putNode(c: Class<P>, n: Node<H,P>) {
-        nodeMap.put(c, n)
+  private fun <H, P: Property<H>, L:H> EPropMap<L>
+      .putNode(c: Class<P>, n: Node<H, P>) {
+    nodeMap.put(c, n)
+  }
+
+
+
+  /** Get the Property for this property type in the map, if one exists. Null otherwise.
+   * The shorthand for this function is `epropmap[c]`. */
+  //    @Suppress("UNCHECKED_CAST")
+  operator fun <H, P: Property<H>, L:H> EPropMap<L>
+      .get(c: Class<P>): P? = getNode(c)?.content //as P?
+
+  /** The shorthand for this function is `c in epropmap` or `c !in epropmap`.
+   * Implemented as `epropmap[c] == null`? See [get]. */
+  operator fun <H, L:H> EPropMap<L>
+      .contains(c: Class<out Property<H>>): Boolean = get(c) != null
+
+  /**
+   * Return the set of EPropMaps that are equivalent for this property.
+   */
+  fun <H, P: Property<H>, L:H> EPropMap<L>
+      .getEquiv(c: Class<P>): Set<EPropMap<out H>> {
+    return getNode(c)?.backset ?: return setOf(this)
+  }
+
+  // consider adding an addAll method that takes an Iterable<Property<R>>
+  // and making this one call addAll.
+  // Make addAll tail-recursive by chaining iterators.
+  /**
+   * Add a property.
+   * @return whether anything has changed as a result of adding the property. False if nothing changed.
+   */
+  fun <H, L:H> EPropMap<L>
+      .add(p: Property<H>): Boolean {
+    val c = p.javaClass
+    val newimp: Set<Property<in L>>
+    val changed: Boolean
+    if (c !in nodeMap) {
+      nodeMap.put(c, Node(p, this))
+      newimp = p.impliedProperties()
+      changed = true
+    } else {
+      val n = getNode(c)!! //nodeMap[c]!!.find()
+      if (n.content == null) {
+        n.content = p
+        newimp = p.impliedProperties()
+        changed = true
+      } else {
+        val (newprop, implied) = n.content!!.merge(p)
+        if (newprop !== n.content) {
+          n.content = newprop
+          changed = true
+        } else
+          changed = implied.isNotEmpty()
+        newimp = implied
+      }
+    }
+    newimp.forEach { add(it) }
+    return changed
+  }
+
+  /**
+   * Equate two EPropMaps to be equivalent for the given property.
+   * @return whether anything has changed as a result of adding the equivalence. False if nothing changed.
+   */
+  fun <H, L:H, U:H, P: Property<H>> EPropMap<L>
+      .equiv(c: Class<P>, omap: EPropMap<U>): Boolean {
+    // if already equivalent, do nothing
+    if (isEquiv(c, omap)) return false
+
+    // do the implied equivalences first
+    Property.getImpliedEquiv(c).forEach {
+      it: Class<out Property<in H>> ->
+      @Suppress("UNCHECKED_CAST")
+      equiv(it as Class<out Property<Any?>>, omap)
     }
 
+    if (c !in nodeMap && c !in omap.nodeMap) {
+      // neither this nor omap has an entry for c
+      // add a new empty Node and connect this and omap to it
+      val n: Node<H, Property<H>> = Node(this, omap)
+      this.nodeMap.put(c, n)
+      omap.nodeMap.put(c, n) // <H,Property<H>,U>
+    } else if (c in nodeMap && c !in omap.nodeMap || c !in nodeMap && c in omap.nodeMap) {
+      // mapin has an entry for c but mapout does not
+      // connect mapout to the node in mapin and increment its rank
+      val (mapin, mapout) = if (c in nodeMap) Pair(this, omap) else Pair(omap, this)
+      val n = mapin.getNode(c)!! // I decided to eagerly traverse rather than wait until later
+      mapout.putNode(c, n)
+      n.backset.add(mapout)
+    } else {
+      // both this and omap have an entry for c
+      // point the lower rank Node nlow to the higher rank Node nhigh; promote nhigh's rank
+      // merge nlow's contents, if any, into nhigh's contents, if any
+      // demote nlow to non-root-Node status (rank=0, contents=null)
+      // if the merge creates new implied properties, add them in
+      val n1 = getNode(c)!! //as Node<H,P> //nodeMap[c]!!.find()
+      val n2 = omap.getNode(c)!! //nodeMap[c]!!.find()
+      val (nlow, nhigh) = if (n1.backset.size < n2.backset.size) Pair(n1, n2) else Pair(n2, n1)
+      nlow.ptr = nhigh// path compression: connect directly to end node, decrementing ranks of middle nodes
+      nhigh.backset.addAll(nlow.backset)
+      if (nlow.content == null) ;
+      else if (nhigh.content == null) {
+        nhigh.content = nlow.content
+        nlow.content = null
+      } else {
+        val (newprop, implied) = nhigh.content!!.merge(nlow.content!!)
+        nlow.content = null
+        @Suppress("UNCHECKED_CAST") // if we were rigorous with F-Bounded Quantification, this would not be necessary
+        if (newprop !== nhigh.content)
+          nhigh.content = newprop as P
+        implied.forEach { add(it) }
+      }
+    }
+    return true
+  }
 
+  fun <H, P: Property<H>, L:H> EPropMap<L>
+      .isEquiv(c: Class<P>, omap: EPropMap<out H>): Boolean {
+    return c in nodeMap && c in omap.nodeMap && nodeMap[c]!!.find() === omap.nodeMap[c]!!.find()
+  }
 
-    /** Get the Property for this property type in the map, if one exists. Null otherwise.
-     * The shorthand for this function is `epropmap[c]`. */
-//    @Suppress("UNCHECKED_CAST")
-    operator fun <H, P:Property<H>, L:H> EPropMap<L>
-            .get(c: Class<P>): P? = getNode(c)?.content //as P?
+  // The design of this class needs re-thinking if we want thread-safe access to EPropMap
+  private class Node<L, P : Property<L>>(vararg backers: EPropMap<out L>) {
+    /** Union find pointer to the representative node. */
+    var ptr: Node<L, P> = this
+    /** Content of root nodes. Contract: `content != null` if and only if `ptr === this`. */
+    var content: P? = null
+    /** Number of pointers to this node. If `rank == 1`, then a map can safely discard this. */
+    val backset: MutableSet<EPropMap<out L>> = hashSetOf(*backers) // I hope this does not need to be IdentityHashSet
 
-    /** The shorthand for this function is `c in epropmap` or `c !in epropmap`.
-     * Implemented as `epropmap[c] == null`? See [get]. */
-    operator fun <H, L:H>EPropMap<L>
-            .contains(c: Class<out Property<H>>): Boolean = get(c) != null
-
-    /**
-     * Return the set of EPropMaps that are equivalent for this property.
-     */
-    fun <H, P:Property<H>, L:H> EPropMap<L>
-            .getEquiv(c: Class<P>): Set<EPropMap<out H>> {
-        return getNode(c)?.backset ?: return setOf(this)
+    constructor(content: P, vararg backers: EPropMap<out L>) : this(*backers) {
+      this.content = content
     }
 
-    // consider adding an addAll method that takes an Iterable<Property<R>>
-    // and making this one call addAll.
-    // Make addAll tail-recursive by chaining iterators.
-    /**
-     * Add a property.
-     * @return whether anything has changed as a result of adding the property. False if nothing changed.
-     */
-    fun <H, L:H> EPropMap<L>
-            .add(p: Property<H>): Boolean {
-        val c = p.javaClass
-        val newimp: Set<Property<in L>>
-        val changed: Boolean
-        if (c !in nodeMap) {
-            nodeMap.put(c, Node(p, this))
-            newimp = p.impliedProperties()
-            changed = true
-        } else {
-            val n = getNode(c)!! //nodeMap[c]!!.find()
-            if (n.content == null) {
-                n.content = p
-                newimp = p.impliedProperties()
-                changed = true
-            } else {
-                val (newprop, implied) = n.content!!.merge(p)
-                if (newprop !== n.content) {
-                    n.content = newprop
-                    changed = true
-                } else
-                    changed = implied.isNotEmpty()
-                newimp = implied
-            }
-        }
-        newimp.forEach { add(it) }
-        return changed
+    /** union find */
+    fun find(): Node<L, P> {
+      if (this === ptr)
+        return this
+      ptr = ptr.find0(backset)
+      return ptr
     }
 
-    /**
-     * Equate two EPropMaps to be equivalent for the given property.
-     * @return whether anything has changed as a result of adding the equivalence. False if nothing changed.
-     */
-    fun <H, L:H, U:H, P:Property<H>> EPropMap<L>
-            .equiv(c: Class<P>, omap: EPropMap<U>): Boolean {
-        // if already equivalent, do nothing
-        if (isEquiv(c, omap)) return false
-
-        // do the implied equivalences first
-        Property.getImpliedEquiv(c).forEach {
-            it: Class<out Property<in H>> ->
-            @Suppress("UNCHECKED_CAST")
-            equiv(it as Class<out Property<Any?>>, omap)
-        }
-
-        if (c !in nodeMap && c !in omap.nodeMap) {
-            // neither this nor omap has an entry for c
-            // add a new empty Node and connect this and omap to it
-            val n: Node<H,Property<H>> = Node(this, omap)
-            this.nodeMap.put(c, n)
-            omap.nodeMap.put(c, n) // <H,Property<H>,U>
-        } else if (c in nodeMap && c !in omap.nodeMap || c !in nodeMap && c in omap.nodeMap) {
-            // mapin has an entry for c but mapout does not
-            // connect mapout to the node in mapin and increment its rank
-            val (mapin, mapout) = if (c in nodeMap) Pair(this, omap) else Pair(omap, this)
-            val n = mapin.getNode(c)!! // I decided to eagerly traverse rather than wait until later
-            mapout.putNode(c, n)
-            n.backset.add(mapout)
-        } else {
-            // both this and omap have an entry for c
-            // point the lower rank Node nlow to the higher rank Node nhigh; promote nhigh's rank
-            // merge nlow's contents, if any, into nhigh's contents, if any
-            // demote nlow to non-root-Node status (rank=0, contents=null)
-            // if the merge creates new implied properties, add them in
-            val n1 = getNode(c)!! //as Node<H,P> //nodeMap[c]!!.find()
-            val n2 = omap.getNode(c)!! //nodeMap[c]!!.find()
-            val (nlow, nhigh) = if (n1.backset.size < n2.backset.size) Pair(n1, n2) else Pair(n2, n1)
-            nlow.ptr = nhigh// path compression: connect directly to end node, decrementing ranks of middle nodes
-            nhigh.backset.addAll(nlow.backset)
-            if (nlow.content == null) ;
-            else if (nhigh.content == null) {
-                nhigh.content = nlow.content
-                nlow.content = null
-            } else {
-                val (newprop, implied) = nhigh.content!!.merge(nlow.content!!)
-                nlow.content = null
-                @Suppress("UNCHECKED_CAST") // if we were rigorous with F-Bounded Quantification, this would not be necessary
-                if (newprop !== nhigh.content)
-                    nhigh.content = newprop as P
-                implied.forEach { add(it) }
-            }
-        }
-        return true
+    /** path compression: connect directly to end node, decrementing ranks of middle nodes */
+    private fun find0(backers: Set<EPropMap<out L>>): Node<L, P> {
+      if (this === ptr)
+        return this
+      ptr = ptr.find0(backers + backset)
+      backset.removeAll(backers)
+      return ptr
     }
+  }
 
-    fun <H, P:Property<H>, L:H> EPropMap<L>
-            .isEquiv(c: Class<P>, omap: EPropMap<out H>): Boolean {
-        return c in nodeMap && c in omap.nodeMap && nodeMap[c]!!.find() === omap.nodeMap[c]!!.find()
+  override fun toString(): String {
+    val sb = StringBuilder("{")
+    nodeMap.keys.forEach { it: Class<out Property<in L>> ->
+      @Suppress("UNCHECKED_CAST")
+      sb.append(get(it as Class<Property<Any?>>)).append(", ")
     }
-
-    // The design of this class needs re-thinking if we want thread-safe access to EPropMap
-    private class Node<L, P : Property<L>>(vararg backers: EPropMap<out L>) {
-        /** Union find pointer to the representative node. */
-        var ptr: Node<L,P> = this
-        /** Content of root nodes. Contract: `content != null` if and only if `ptr === this`. */
-        var content: P? = null
-        /** Number of pointers to this node. If `rank == 1`, then a map can safely discard this. */
-        val backset: MutableSet<EPropMap<out L>> = hashSetOf(*backers) // I hope this does not need to be IdentityHashSet
-
-        constructor(content: P, vararg backers: EPropMap<out L>) : this(*backers) {
-            this.content = content
-        }
-
-        /** union find */
-        fun find(): Node<L,P> {
-            if (this === ptr)
-                return this
-            ptr = ptr.find0(backset)
-            return ptr
-        }
-
-        /** path compression: connect directly to end node, decrementing ranks of middle nodes */
-        private fun find0(backers: Set<EPropMap<out L>>): Node<L,P> {
-            if (this === ptr)
-                return this
-            ptr = ptr.find0(backers + backset)
-            backset.removeAll(backers)
-            return ptr
-        }
-    }
-
-    override fun toString(): String {
-        val sb = StringBuilder("{")
-        nodeMap.keys.forEach { it: Class<out Property<in L>> ->
-            @Suppress("UNCHECKED_CAST")
-            sb.append(get(it as Class<Property<Any?>>)).append(", ")
-        }
-        if (nodeMap.isNotEmpty()) sb.delete(sb.length-2, sb.length)
-        return sb.append('}').toString()
-    }
+    if (nodeMap.isNotEmpty()) sb.delete(sb.length-2, sb.length)
+    return sb.append('}').toString()
+  }
 }
 
 
+/**
+ *
+ *
+ * See [edu.washington.cs.laragraphulo.opt.viz.generateDot] to generate a visualization of the operator tree
+ */
+abstract class Op<R>(vararg val args: Op<*>) : EPropMap<R>() {
 
+  override fun toString() = this.javaClass.simpleName + Arrays.toString(args) + "+Props:" + super.toString()
 
+  /**
+   * A short string describing this operator and not any of the children.
+   * Used for visualizing the Op.
+   */
+  fun toShortStr(): String = this.javaClass.simpleName //+ "+Props:" + super.toString()
 
-abstract class Op<R>(vararg args: Op<*>) : EPropMap<R>() {
-    val args = args
+  /** Structural Equality / Referential Transparency:
+   * two Ops are equal if they are the same class and have equal argument subtrees. */
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
 
-    override fun toString() = this.javaClass.simpleName + Arrays.toString(args) + "+Props:" + super.toString()
+    other as Op<*>
 
-    /** Structural Equality / Referential Transparency:
-     * two Ops are equal if they are the same class and have equal argument subtrees. */
-    override fun equals(other: Any?): Boolean{
-        if (this === other) return true
-        if (other?.javaClass != javaClass) return false
+    if (!Arrays.equals(args, other.args)) return false
 
-        other as Op<*>
-
-        if (!Arrays.equals(args, other.args)) return false
-
-        return true
-    }
-    override fun hashCode(): Int = Arrays.hashCode(args)
+    return true
+  }
+  override fun hashCode(): Int = Arrays.hashCode(args)
 }
 
 /**
@@ -333,7 +342,7 @@ abstract class Op<R>(vararg args: Op<*>) : EPropMap<R>() {
  *
 // * For objects that have properties, recommended to subclass this object and fill in the properties via [objProps].
  */
- class Obj<R>(val obj: R): Op<R>() {
+class Obj<R>(val obj: R): Op<R>() {
 //    init {
 //        objProps().forEach { add(it) }
 //    }
@@ -347,15 +356,15 @@ abstract class Op<R>(vararg args: Op<*>) : EPropMap<R>() {
 //     */
 //    fun objProps(): Set<Property<R>> = emptySet()
 
-    override fun toString() = "Obj($obj)"
-    override fun equals(other: Any?): Boolean{
-        if (this === other) return true
-        if (other?.javaClass != javaClass) return false
-        other as Obj<*>
-        if (obj != other.obj) return false
-        return true
-    }
-    override fun hashCode(): Int = obj?.hashCode() ?: 0
+  override fun toString() = "Obj($obj)"
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+    other as Obj<*>
+    if (obj != other.obj) return false
+    return true
+  }
+  override fun hashCode(): Int = obj?.hashCode() ?: 0
 }
 
 
@@ -367,16 +376,16 @@ abstract class Op<R>(vararg args: Op<*>) : EPropMap<R>() {
  * As such it overrides equals() and hashCode().
  */
 class ConstantProps<R>(private val props: Set<Property<R>> = emptySet()) : Op<R>() {
-    init {
-        props.forEach { add(it) }
-    }
+  init {
+    props.forEach { add(it) }
+  }
 
-    constructor(prop: Property<R>): this(setOf(prop))
+  constructor(prop: Property<R>): this(setOf(prop))
 
-    override fun equals(other: Any?): Boolean = this === other
-    override fun hashCode(): Int{
-        return props.hashCode()
-    }
+  override fun equals(other: Any?): Boolean = this === other
+  override fun hashCode(): Int{
+    return props.hashCode()
+  }
 }
 
 
