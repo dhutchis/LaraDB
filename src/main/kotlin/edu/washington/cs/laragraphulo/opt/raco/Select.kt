@@ -8,6 +8,7 @@ class Select(val rel: Op<Relation>,
   init {
     // todo: initial properties
   }
+  // todo: add invoke execution
 }
 
 

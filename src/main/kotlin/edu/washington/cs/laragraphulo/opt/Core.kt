@@ -343,6 +343,13 @@ abstract class Op<R>(vararg val args: Op<*>) : EPropMap<R>() {
    */
   open fun toShortStr(): String = this.javaClass.simpleName //+ "+Props:" + super.toString()
 
+  /**
+   * Run this operator on a concrete object
+   */
+  open operator fun invoke(vararg argobs: Any): R {
+    throw NotImplementedError()
+  }
+
   /** Structural Equality / Referential Transparency:
    * two Ops are equal if they are the same class and have equal argument subtrees. */
   override fun equals(other: Any?): Boolean{
@@ -377,6 +384,11 @@ class Obj<R>(val obj: R): Op<R>() {
 //     * is determined by Obj.
 //     */
 //    fun objProps(): Set<Property<R>> = emptySet()
+
+  override operator fun invoke(vararg argobs: Any): R {
+    Preconditions.checkArgument(argobs.isEmpty(), "No arguments expected to an Obj. Given ", argobs)
+    return obj
+  }
 
   override fun toString() = "Obj($obj)"
   override fun equals(other: Any?): Boolean{
