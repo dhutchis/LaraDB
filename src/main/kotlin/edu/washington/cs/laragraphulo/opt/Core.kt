@@ -341,7 +341,7 @@ abstract class Op<R>(vararg val args: Op<*>) : EPropMap<R>() {
    * A short string describing this operator and not any of the children.
    * Used for visualizing the Op.
    */
-  fun toShortStr(): String = this.javaClass.simpleName //+ "+Props:" + super.toString()
+  open fun toShortStr(): String = this.javaClass.simpleName //+ "+Props:" + super.toString()
 
   /** Structural Equality / Referential Transparency:
    * two Ops are equal if they are the same class and have equal argument subtrees. */
