@@ -30,24 +30,24 @@ import java.io.Serializable
  *
  *
  */
-class Schema(
-    val distrIndex: List<Attribute<*>>,
-    val localIndex: List<Attribute<*>>,
-    /**
-     * A list of the attribute groups. Each group is potentially stored in a different file.
-     * The ordering of attributes within groups is lexicographic.
-     */
-    val attrGroups: List<Set<Attribute<*>>>
-) : Serializable
-{
-  init {
-    val ct = distrIndex.count() + localIndex.count() + attrGroups.sumBy { it.count() }
-    val distct = distrIndex.map { it.name }.union(localIndex.map { it.name }).union(
-        attrGroups.flatMap { it.map { it.name } }
-    ).count()
-    Preconditions.checkArgument(ct == distct, "Some attributes have the same name! ", distrIndex, localIndex, attrGroups)
-  }
-
-
-}
-
+//class Schema(
+//    val distrIndex: List<Attribute<*>>,
+//    val localIndex: List<Attribute<*>>,
+//    /**
+//     * A list of the attribute groups. Each group is potentially stored in a different file.
+//     * The ordering of attributes within groups is lexicographic.
+//     */
+//    val attrGroups: List<Set<Attribute<*>>>
+//) : Serializable
+//{
+//  init {
+//    val ct = distrIndex.count() + localIndex.count() + attrGroups.sumBy { it.count() }
+//    val distct = distrIndex.map { it.name }.union(localIndex.map { it.name }).union(
+//        attrGroups.flatMap { it.map { it.name } }
+//    ).count()
+//    Preconditions.checkArgument(ct == distct, "Some attributes have the same name! ", distrIndex, localIndex, attrGroups)
+//  }
+//
+//
+//}
+//
