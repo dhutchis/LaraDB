@@ -1,9 +1,9 @@
 /**
  * Base objects that we build operations over
  */
-package edu.washington.cs.laragraphulo.opt.raco
+package edu.washington.cs.laragraphulo.opt
 
-interface Relation
+interface AssociativeTable
 
 /**
  * @param[R] Return type of the expression

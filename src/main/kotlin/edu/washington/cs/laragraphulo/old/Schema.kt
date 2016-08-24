@@ -1,4 +1,4 @@
-package edu.washington.cs.laragraphulo
+package edu.washington.cs.laragraphulo.old
 
 import com.google.common.base.Preconditions
 import java.io.Serializable

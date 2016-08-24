@@ -286,7 +286,7 @@ open class EPropMap<L> {
   }
 
   // The design of this class needs re-thinking if we want thread-safe access to EPropMap
-  private class Node<L, P : Property<L>>(vararg backers: EPropMap<out L>) {
+  private class Node<L, P : Property<in L>>(vararg backers: EPropMap<out L>) {
     /** Union find pointer to the representative node. */
     var ptr: Node<L, P> = this
     /** Content of root nodes. Contract: `content != null` if and only if `ptr === this`. */
@@ -316,15 +316,11 @@ open class EPropMap<L> {
     }
   }
 
-  override fun toString(): String {
-    val sb = StringBuilder("{")
-    nodeMap.keys.forEach { it: Class<out Property<in L>> ->
-      @Suppress("UNCHECKED_CAST")
-      sb.append(get(it as Class<Property<Any?>>)).append(", ")
-    }
-    if (nodeMap.isNotEmpty()) sb.delete(sb.length-2, sb.length)
-    return sb.append('}').toString()
-  }
+  override fun toString(): String = "{" +
+  nodeMap.keys.map { it: Class<out Property<in L>> ->
+    @Suppress("UNCHECKED_CAST")
+    get(it as Class<Property<Any?>>).toString()
+  }.reduce { p1, p2 -> p1+", "+p2 } + "}"
 }
 
 
