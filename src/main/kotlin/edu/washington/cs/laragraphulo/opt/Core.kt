@@ -1,6 +1,8 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
+import com.google.common.collect.ClassToInstanceMap
+import com.google.common.collect.MutableClassToInstanceMap
 import java.util.*
 import kotlin.reflect.KProperty
 
@@ -103,6 +105,7 @@ interface Property<R> {
  * This class tracks which EPropMaps are in the same equivalence class for each property. See [getEquiv].
  */
 open class EPropMap<L> {
+//  private val testMap = com.google.common.collect.MutableClassToInstanceMap.create<Property<in L>>()
   private val nodeMap: MutableMap<Class<out Property<in L>>, Node<in L, out Property<in L>>> = hashMapOf()
 
   /**
