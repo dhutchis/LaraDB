@@ -1,8 +1,6 @@
-/**
- * Created by dhutchis on 8/23/16.
- */
 package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSortedMap
 
 /**
@@ -120,9 +118,9 @@ open class Schema protected constructor(
 
 open class AccessPath(
     /** distributed access path */
-    val dap: ImmutableSortedMap<String, Attribute<*>>,
+    val dap: ImmutableList<Attribute<*>>,
     /** local access path */
-    val lap: ImmutableSortedMap<String, Attribute<*>>,
+    val lap: ImmutableList<Attribute<*>>,
     /**
      * column access path
      * A list of the attribute groups. Each group is potentially stored in a different file.
@@ -131,8 +129,8 @@ open class AccessPath(
     val cap: ImmutableSortedMap<String, ColumnFamily>
 ) : Schema(
     ImmutableSortedMap.naturalOrder<String, Attribute<*>>()
-        .putAll(dap)
-        .putAll(lap)
+        .putAll(dap.map { it.name to it }.toMap())
+        .putAll(lap.map { it.name to it }.toMap())
         .build(),
     ImmutableSortedMap.naturalOrder<String, Attribute<*>>()
         .putAll(cap.flatMap { it.value.attributes.entries }.map { it.key to it.value }.toMap())
@@ -201,6 +199,12 @@ open class AccessPath(
 
 
   // an access path fragment is an access path that may have a subset of the column access paths
+
+//  open class AccumuloFlow(
+//
+//  ) : AccessPath
+
+  // context: Scan, Minc, Majc
 
 
 }
