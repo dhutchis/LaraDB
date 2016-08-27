@@ -10,8 +10,8 @@ import org.junit.Ignore
 import org.junit.Test
 import java.nio.ByteBuffer
 import java.util.*
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 class VariableLengthEncodingTest {
 
@@ -269,15 +269,15 @@ class VariableLengthEncodingTest {
     val t1 = Text(s1)
     val t2 = Text(s2)
     assertEquals(0, WritableComparator.compareBytes(t1.bytes, 0, t2.length, t2.bytes, 0, t2.length))
-    assertTrue(WritableComparator.compareBytes(t1.bytes, 0, t1.length, t2.bytes, 0, t2.length) > 0, "expect abcd > ab")
+    assertTrue("expect abcd > ab", WritableComparator.compareBytes(t1.bytes, 0, t1.length, t2.bytes, 0, t2.length) > 0)
 
     val a = Text("10")  // "greater"
     val b = Text("110")
-    assertTrue(WritableComparator.compareBytes(a.bytes, 0, a.length, b.bytes, 0, b.length) < 0, "expect \"10\" < \"111\" for strings")
+    assertTrue("expect \"10\" < \"111\" for strings", WritableComparator.compareBytes(a.bytes, 0, a.length, b.bytes, 0, b.length) < 0)
 
     val x = byteArrayOf(1, 0)    // "greater"
     val y = byteArrayOf(1, 1, 0)
-    assertTrue(WritableComparator.compareBytes(x, 0, x.size, y, 0, y.size) < 0, "expect 1,0 < 1,1,1 for bytes")
+    assertTrue("expect 1,0 < 1,1,1 for bytes", WritableComparator.compareBytes(x, 0, x.size, y, 0, y.size) < 0)
   }
 
   /** Determine which is greater: -1 (FF) or 0 (00). */
@@ -285,7 +285,7 @@ class VariableLengthEncodingTest {
   fun compareNegativeWithZero() {
     val n = byteArrayOf(-1) // 0xFF "greatest"
     val z = byteArrayOf(0)  // 0x00 "least"
-    assertTrue(WritableComparator.compareBytes(n,0,1,z,0,1) > 0, "expect 0xFF > 0x00")
+    assertTrue("expect 0xFF > 0x00", WritableComparator.compareBytes(n,0,1,z,0,1) > 0)
   }
 
 

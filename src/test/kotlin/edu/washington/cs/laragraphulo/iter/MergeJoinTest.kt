@@ -15,8 +15,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import java.util.*
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * MergeJoinTest is initialized with input data as a parameter.
@@ -69,7 +67,7 @@ class MergeJoinTest(
       val sets = Array<SortedMap<Key,Value>>(skvis.size, { TreeMap() })
       for (i in skvis.indices) {
         val skvi = skvis[i]
-        assertTrue(skvi.hasTop())
+        Assert.assertTrue(skvi.hasTop())
         val mapRes: SortedMap<Key, Value> = sets[i]
         mapRes.put(skvi.topKey, skvi.topValue)
         val origKey = skvi.topKey
@@ -134,7 +132,7 @@ class MergeJoinTest(
         MergeJoin(params.comparator, ac, *arr)
     while (mj.hasNext())
       mj.next()
-    assertEquals(params.expected.size, ac.collidecnt)
+    Assert.assertEquals(params.expected.size, ac.collidecnt)
   }
 
 

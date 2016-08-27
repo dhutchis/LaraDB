@@ -5,18 +5,24 @@ import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
-import org.apache.commons.lang3.ArrayUtils
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.URL
 import java.util.*
+
+/**
+ * An attribute name.
+ */
+typealias Name = String
+typealias CfName = Name
+
 
 class CSVScan(val url: Op<URL>,
               val accessPath: Op<AccessPath>,
               /**
                * For each csv column, define an attribute name and a conversion from String to byte[]
                */
-              val csvSchema: Op<List<Pair<String, LexicoderPlus<String>>>>,
+              val csvSchema: Op<List<Pair<Name, LexicoderPlus<String>>>>,
               val delimiter: Op<Char> = Obj(',')
 ) : Op<IteratorFlow>(url, accessPath) {
   init {
@@ -30,7 +36,7 @@ private class CSVScan_impl(val url: URL,
                            /**
                             * For each csv column, define an attribute name and a conversion from String to byte[]
                             */
-                           val csvSchema: List<Pair<String, LexicoderPlus<String>>>,
+                           val csvSchema: List<Pair<Name, LexicoderPlus<String>>>,
                            val delimiter: Char = ','
 )
 
@@ -40,7 +46,7 @@ private fun doit(csvScan: CSVScan_impl): Iterator<Pair<Key, Value>> {
       CSVFormat.newFormat(csvScan.delimiter))
   val dap: List<Int> = csvScan.accessPath.dap.map { attr -> csvScan.csvSchema.indexOfFirst { attr.name == it.first } }
   val lap: List<Int> = csvScan.accessPath.lap.map { attr -> csvScan.csvSchema.indexOfFirst { attr.name == it.first } }
-  val cap: List<Pair<String, List<Pair<String,Int>>>> = csvScan.accessPath.cap.map { cfpair -> cfpair.key to cfpair.value.attributes.map { attrpair -> attrpair.key to csvScan.csvSchema.indexOfFirst { attrpair.key == it.first } }}
+  val cap: List<Pair<CfName, List<Pair<Name,Int>>>> = csvScan.accessPath.cap.map { cfpair -> cfpair.key to cfpair.value.attributes.map { attrpair -> attrpair.key to csvScan.csvSchema.indexOfFirst { attrpair.key == it.first } }}
 
   return object: Iterator<Pair<Key, Value>> {
 
@@ -102,6 +108,11 @@ fun concatArrays(vararg arrs: ByteArray): ByteArray {
   }
   return a
 }
+
+
+
+
+
 
 
 // class ChangeAccessPath -- destroys sort
