@@ -1,7 +1,8 @@
-package edu.washington.cs.laragraphulo.opt
+package old
 
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSortedMap
+import edu.washington.cs.laragraphulo.opt.*
 
 /**
  * Union two maps together.
@@ -9,7 +10,7 @@ import com.google.common.collect.ImmutableSortedMap
  * @return [m1] if the maps are equal (agree on everything), otherwise the newly merged map
  * @throws Contradiction If the maps both have a key but disagree on the value.
  */
-private fun <K : Comparable<K>,V> mergeMaps(m1: ImmutableSortedMap<K,V>, m2: ImmutableSortedMap<K,V>): ImmutableSortedMap<K,V> {
+private fun <K : Comparable<K>,V> mergeMaps(m1: ImmutableSortedMap<K, V>, m2: ImmutableSortedMap<K, V>): ImmutableSortedMap<K, V> {
   if (m1 == m2)
     return m1
   val builder = ImmutableSortedMap.naturalOrder<K,V>()

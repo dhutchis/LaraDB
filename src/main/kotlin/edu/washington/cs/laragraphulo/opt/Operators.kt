@@ -46,7 +46,7 @@ private fun doit(csvScan: CSVScan_impl): Iterator<Pair<Key, Value>> {
       CSVFormat.newFormat(csvScan.delimiter))
   val dap: List<Int> = csvScan.accessPath.dap.map { attr -> csvScan.csvSchema.indexOfFirst { attr.name == it.first } }
   val lap: List<Int> = csvScan.accessPath.lap.map { attr -> csvScan.csvSchema.indexOfFirst { attr.name == it.first } }
-  val cap: List<Pair<CfName, List<Pair<Name,Int>>>> = csvScan.accessPath.cap.map { cfpair -> cfpair.key to cfpair.value.attributes.map { attrpair -> attrpair.key to csvScan.csvSchema.indexOfFirst { attrpair.key == it.first } }}
+  val cap: List<Pair<CfName, List<Pair<Name,Int>>>> = csvScan.accessPath.cap.map { cfpair -> cfpair.name to cfpair.attributes.map { attrpair -> attrpair.name to csvScan.csvSchema.indexOfFirst { attrpair.name == it.first } }}
 
   return object: Iterator<Pair<Key, Value>> {
 

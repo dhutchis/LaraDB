@@ -1,6 +1,7 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
+import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSortedMap
 import edu.washington.cs.laragraphulo.LexicoderPlus
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
@@ -56,11 +57,11 @@ data class Attribute<T>(
 //}
 
 data class ColumnFamily internal constructor(
-    val name: String,
-    val attributes: ImmutableSortedMap<String, Attribute<*>>
+    val name: Name,
+    val attributes: ImmutableList<Attribute<*>>
 ) {
-  constructor(name:String, attrs: Collection<Attribute<*>>)
-  : this(name, ImmutableSortedMap.copyOf(attrs.map { it.name to it }.toMap()))
+  constructor(name:Name, attrs: Collection<Attribute<*>>)
+  : this(name, ImmutableList.copyOf(attrs))
 }
 
 
