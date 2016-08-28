@@ -13,7 +13,7 @@ import java.util.*
  * @param[T] Data type of this attribute's values.
  */
 data class Attribute<T>(
-    val name: String,
+    val name: Name,
     /**
      * `> 0` means fixed width.
      * `-1` means variable width.
