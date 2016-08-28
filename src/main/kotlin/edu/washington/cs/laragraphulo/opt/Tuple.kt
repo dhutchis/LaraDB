@@ -157,6 +157,34 @@ sealed class AccessPath(
 
 
 
+// need to subclass AccessPath because this tells us how to interpret each part of the Key/Value
+sealed class AccumuloAccessPath(
+    /** distributed access path */
+    dap: ImmutableList<Attribute<*>>,
+    /** local access path */
+    lap: ImmutableList<Attribute<*>>,
+    /**
+     * column access path
+     * A list of the attribute groups. Each group is potentially stored in a different file.
+     * The ordering of attributes within groups is lexicographic.
+     */
+    cap: ImmutableList<ColumnFamily>,
+    /** Is the iterator flow sorted according to the access path? */
+    val sorted: Boolean,
+    /** Placeholder for union */
+    val sumRequired: Any? = null
+) : AccessPath(dap, lap, cap) {
+
+
+  class AccumuloAccessPathImpl(
+      dap: Collection<Attribute<*>>,
+      lap: Collection<Attribute<*>>,
+      cap: Collection<ColumnFamily>,
+      sorted: Boolean,
+      sumRequired: Any?
+  ) : AccumuloAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap), sorted, sumRequired)
+}
+
 
 
 
@@ -208,9 +236,31 @@ fun Iterator<Tuple>.ext(f: ExtFun): Iterator<Tuple> {
   return Iterators.concat(Iterators.transform(this, f as (Tuple?) -> Iterator<Tuple>))
 }
 
+data class OrderByKeyKeyComparator(val schema: Schema) : Comparator<Tuple> {
+  override fun compare(t1: Tuple, t2: Tuple): Int {
+    schema.keyAttributes.forEach {
+      val b1 = t1[it.name]
+      val b2 = t2[it.name]
+      val c = WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
+          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
+      if (c != 0)
+        return@compare c
+    }
+    return 0
+  }
+}
+
 
 // later this will need to be a full interface, so that subclasses can maintain state
 typealias MultiplyOp = (Array<Tuple>) -> Iterator<Tuple>
+
+/*
+  0. check that common keys are in the front of every iterator *in the same order*
+  1. align tuples on common key (the Aligner)
+  2. Collider: with the postcondition to advance all iterators past the common keys
+     Returns an Iterator<Tuple> - the tuples must conform to the colliderSchema -
+  2a. If holding all in memory, put all in memory and pass the maps to
+ */
 
 /**
  * @return resulting schema and the iterator stream
