@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableMap
 import com.google.common.collect.Iterators
+import org.apache.hadoop.io.WritableComparator
 import java.nio.ByteBuffer
 import java.util.*
 import java.util.regex.Pattern
@@ -208,7 +209,7 @@ fun Iterator<Tuple>.ext(f: ExtFun): Iterator<Tuple> {
 }
 
 
-
+// later this will need to be a full interface, so that subclasses can maintain state
 typealias MultiplyOp = (Array<Tuple>) -> Iterator<Tuple>
 
 /**
@@ -233,5 +234,21 @@ fun mergeJoin(
 
   // assert that the input Iterator<Tuple>s are sorted in the right way...
 
+  val comp = Comparator<Tuple> { o1, o2 ->
+    // tuples must match on all common key attributes
+    commonNames.forEach {
+      val b1 = o1[it.third]
+      val b2 = o2[it.third]
+      val c = WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
+          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
+      if (c != 0)
+        return@Comparator c
+    }
+    0
+  }
+
+  // todo - replace this with code a la MergeJoin. This code just merges; it doesn't multiply
+  return resultSchema to Iterators.mergeSorted(inputs.map { it.second }, comp)
 }
 
+// method to check that an iterator is sorted in the right way, on the fly
