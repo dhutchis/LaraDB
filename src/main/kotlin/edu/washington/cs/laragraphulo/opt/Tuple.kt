@@ -44,6 +44,7 @@ sealed class RelationSchema(
       return name
     }
 
+    fun build(attrs: Collection<Attribute<*>>): RelationSchema = RelationSchemaImpl(attrs)
   }
 
 //  /**
@@ -101,7 +102,7 @@ sealed class RelationSchema(
 
 
 
-  class RelationSchemaImpl(attrs: Collection<Attribute<*>>)
+  private class RelationSchemaImpl(attrs: Collection<Attribute<*>>)
   : RelationSchema(ImmutableList.copyOf(attrs))
 }
 
@@ -112,8 +113,12 @@ sealed class Schema(
     val valAttribtues: ImmutableList<Attribute<*>>
 ) : RelationSchema(ImmutableList.builder<Attribute<*>>().addAll(keyAttributes).addAll(valAttribtues).build()) {
 
+  companion object {
+    fun build( kas: Collection<Attribute<*>>,
+               vas: Collection<Attribute<*>>): Schema = SchemaImpl(kas, vas)
+  }
 
-  class SchemaImpl(
+  private class SchemaImpl(
       kas: Collection<Attribute<*>>,
       vas: Collection<Attribute<*>>
   ) : Schema(ImmutableList.copyOf(kas), ImmutableList.copyOf(vas))
@@ -147,7 +152,13 @@ sealed class AccessPath(
         "one of the attributes was mentioned twice in two separate column families", cap)
   }
 
-  class AccessPathImpl(
+  companion object {
+    fun build( dap: Collection<Attribute<*>>,
+               lap: Collection<Attribute<*>>,
+               cap: Collection<ColumnFamily>): AccessPath = AccessPathImpl(dap,lap,cap)
+  }
+
+  private class AccessPathImpl(
       dap: Collection<Attribute<*>>,
       lap: Collection<Attribute<*>>,
       cap: Collection<ColumnFamily>
@@ -169,20 +180,32 @@ sealed class AccumuloAccessPath(
      * The ordering of attributes within groups is lexicographic.
      */
     cap: ImmutableList<ColumnFamily>,
-    /** Is the iterator flow sorted according to the access path? */
-    val sorted: Boolean,
+    /** An int such that all [keyAttributes] whose index is less than sortedUpto are sorted.
+     * 0 means nothing is sorted. Valid up to and including [dap].size+[lap].size. */
+    val sortedUpto: Int,
     /** Placeholder for union */
     val sumRequired: Any? = null
 ) : AccessPath(dap, lap, cap) {
+  init {
+    Preconditions.checkElementIndex(sortedUpto, dap.size+lap.size+1, "sortedUpto is an int such that all keyAttributes $keyAttributes " +
+        "whose index is less than sortedUpto are sorted. 0 means nothing is sorted. Valid up to and including ${dap.size+lap.size}. Given: $sortedUpto")
+  }
 
+  companion object {
+    fun build( dap: Collection<Attribute<*>>,
+               lap: Collection<Attribute<*>>,
+               cap: Collection<ColumnFamily>,
+               sortedUpto: Int,
+               sumRequired: Any?): AccumuloAccessPath = AccumuloAccessPathImpl(dap,lap,cap,sortedUpto,sumRequired)
+  }
 
-  class AccumuloAccessPathImpl(
+  private class AccumuloAccessPathImpl(
       dap: Collection<Attribute<*>>,
       lap: Collection<Attribute<*>>,
       cap: Collection<ColumnFamily>,
-      sorted: Boolean,
+      sortedUpto: Int,
       sumRequired: Any?
-  ) : AccumuloAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap), sorted, sumRequired)
+  ) : AccumuloAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap), sortedUpto, sumRequired)
 }
 
 
@@ -193,11 +216,26 @@ sealed class AccumuloAccessPath(
 
 
 
+interface RelaxedTuple {
+  operator fun get(name: Name): Any?
+  operator fun get(idx: Int): Any?
+  operator fun set(name: Name, v: Any?)
+  operator fun set(idx: Int, v: Any?)
+}
 
-
-interface Tuple {
-  operator fun get(name: Name): ByteBuffer
-  operator fun get(idx: Int): ByteBuffer
+interface Tuple : RelaxedTuple {
+  override operator fun get(name: Name): ByteBuffer
+  override operator fun get(idx: Int): ByteBuffer
+  @Deprecated("Use the ByteBuffer version", ReplaceWith("if (v is ByteBuffer) set(name, v) else throw IllegalArgumentException(\"\$v is not a ByteBuffer\")", "java.nio.ByteBuffer"), DeprecationLevel.ERROR)
+  override fun set(name: String, v: Any?) {
+    if (v is ByteBuffer) set(name, v)
+    else throw IllegalArgumentException("$v is not a ByteBuffer")
+  }
+  @Deprecated("Use the ByteBuffer version", ReplaceWith("if (v is ByteBuffer) set(idx, v) else throw IllegalArgumentException(\"\$v is not a ByteBuffer\")", "java.nio.ByteBuffer"), DeprecationLevel.ERROR)
+  override fun set(idx: Int, v: Any?) {
+    if (v is ByteBuffer) set(idx, v)
+    else throw IllegalArgumentException("$v is not a ByteBuffer")
+  }
   operator fun set(name: Name, v: ByteBuffer)
   operator fun set(idx: Int, v: ByteBuffer)
 }
@@ -254,6 +292,10 @@ data class OrderByKeyKeyComparator(val schema: Schema) : Comparator<Tuple> {
 // later this will need to be a full interface, so that subclasses can maintain state
 typealias MultiplyOp = (Array<Tuple>) -> Iterator<Tuple>
 
+interface Collider {
+  // TODO
+}
+
 /*
   0. check that common keys are in the front of every iterator *in the same order*
   1. align tuples on common key (the Aligner)
@@ -280,7 +322,7 @@ fun mergeJoin(
   val commonNames: List<Triple<Int, Int, String>> = schemaNames.reduce { pa, pb -> pa.filter { ita -> pb.any { it.third == ita.third } } }
   val resultKeyNames: List<Triple<Int, Int, String>> = schemaNames.fold(commonNames) { acc, names -> acc + (names.filterNot { itn -> acc.any { it.third == itn.third } })}
   val resultKeyAttributes: List<Attribute<*>> = resultKeyNames.map { schemas[it.first].keyAttributes[it.second] }
-  val resultSchema: Schema = Schema.SchemaImpl(resultKeyAttributes, multiplyOpValSchema.attributes)
+  val resultSchema: Schema = Schema.build(resultKeyAttributes, multiplyOpValSchema.attributes)
 
   // assert that the input Iterator<Tuple>s are sorted in the right way...
 
