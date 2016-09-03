@@ -24,9 +24,6 @@ import java.util.*
  * For each parameter in the [parameters],
  * JUnit constructs a [MergeJoinTest] passing in that parameter as a constructor argument
  * and runs all the tests defined inside.
- *
- * @param[input] Each item defines the entries and initial seek of a [SortedKeyValueIterator],
- *        along with what ShipKeyComparator is used.
  */
 @RunWith(Parameterized::class)
 class MergeJoinTest(
@@ -36,6 +33,10 @@ class MergeJoinTest(
   data class Params(
       /** name of the test */
       val name: String,
+      /**
+       * Each item defines the entries and initial seek of a [SortedKeyValueIterator],
+       *        along with what ShipKeyComparator is used.
+       */
       val input: List<Pair<SortedMap<Key, Value>, SeekData>>,
       val comparator: MergeJoin.SkipKeyComparator,
       val expected: List<List<SortedMap<Key, Value>>>

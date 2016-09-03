@@ -1,13 +1,14 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
-import com.google.common.collect.ImmutableList
-import com.google.common.collect.ImmutableMap
-import com.google.common.collect.Iterators
+import com.google.common.collect.*
+import com.sun.org.apache.xpath.internal.operations.Bool
 import org.apache.hadoop.io.WritableComparator
 import java.nio.ByteBuffer
 import java.util.*
+import java.util.function.Function
 import java.util.regex.Pattern
+import kotlin.comparisons.nullsLast
 
 
 // I am leaning toward storing attribute data separately (a list/array of names, a separate one for types, etc.)
@@ -169,7 +170,7 @@ sealed class AccessPath(
 
 
 // need to subclass AccessPath because this tells us how to interpret each part of the Key/Value
-sealed class AccumuloAccessPath(
+sealed class BagAccessPath(
     /** distributed access path */
     dap: ImmutableList<Attribute<*>>,
     /** local access path */
@@ -183,8 +184,8 @@ sealed class AccumuloAccessPath(
     /** An int such that all [keyAttributes] whose index is less than sortedUpto are sorted.
      * 0 means nothing is sorted. Valid up to and including [dap].size+[lap].size. */
     val sortedUpto: Int,
-    /** Placeholder for union */
-    val sumRequired: Any? = null
+    /** Whether there are multiple tuples with the same key attribute values. */
+    val duplicates: Boolean
 ) : AccessPath(dap, lap, cap) {
   init {
     Preconditions.checkElementIndex(sortedUpto, dap.size+lap.size+1, "sortedUpto is an int such that all keyAttributes $keyAttributes " +
@@ -196,16 +197,16 @@ sealed class AccumuloAccessPath(
                lap: Collection<Attribute<*>>,
                cap: Collection<ColumnFamily>,
                sortedUpto: Int,
-               sumRequired: Any?): AccumuloAccessPath = AccumuloAccessPathImpl(dap,lap,cap,sortedUpto,sumRequired)
+               duplicates: Boolean): BagAccessPath = BagAccessPathImpl(dap,lap,cap,sortedUpto,duplicates)
   }
 
-  private class AccumuloAccessPathImpl(
+  private class BagAccessPathImpl(
       dap: Collection<Attribute<*>>,
       lap: Collection<Attribute<*>>,
       cap: Collection<ColumnFamily>,
       sortedUpto: Int,
-      sumRequired: Any?
-  ) : AccumuloAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap), sortedUpto, sumRequired)
+      duplicates: Boolean
+  ) : BagAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap), sortedUpto, duplicates)
 }
 
 
@@ -288,13 +289,155 @@ data class OrderByKeyKeyComparator(val schema: Schema) : Comparator<Tuple> {
   }
 }
 
+data class TupleComparatorByAttributes(val attrs: ImmutableList<Name>, val reverse: Boolean = false) : Comparator<Tuple> {
+
+  constructor(attrs: Collection<Name>): this(ImmutableList.copyOf(attrs))
+
+  override fun compare(t1: Tuple, t2: Tuple): Int {
+    attrs.forEach {
+      val b1 = t1[it]
+      val b2 = t2[it]
+      val c = WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
+          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
+      if (c != 0)
+        return@compare if (reverse) -c else c
+    }
+    return 0
+  }
+}
+
+data class TupleIteratorComparatorByAttributes(val attrs: ImmutableList<Name>, val reverse: Boolean = false) : Comparator<PeekingIterator<out Tuple>> {
+  val tcomp = nullsLast(TupleComparatorByAttributes(attrs, reverse)) // nulls always last
+
+  constructor(attrs: Collection<Name>): this(ImmutableList.copyOf(attrs))
+
+  override fun compare(t1: PeekingIterator<out Tuple>, t2: PeekingIterator<out Tuple>): Int =
+      tcomp.compare(t1.peek(), t2.peek())
+}
+
+
+/** Todo: revise this for the SKVI version of seek that takes a range, column families, inclusive */
+interface SeekableIterator<T> : Iterator<T> {
+  fun seek(seekKey: T)
+}
+
 
 // later this will need to be a full interface, so that subclasses can maintain state
 typealias MultiplyOp = (Array<Tuple>) -> Iterator<Tuple>
 
 interface Collider {
-  // TODO
+  fun schema(inputs: List<BagAccessPath>): BagAccessPath
+  /** Do NOT modify the contents of [actives]. */
+  fun collide(inputs: List<Iterator<Tuple>>, actives: BooleanArray): Iterator<Tuple>
 }
+
+/**
+ * This function assumes that the [commonKeys] are at the prefix of ever input.
+ * I assume no inputs are aliased, and the commonKeys do not contain duplicates.
+ *
+ * This iterator eagerly reads the input iterators in order to cache the first element.
+ */
+class Merger(
+    inputs: List<Iterator<Tuple>>,
+    commonKeys: List<Attribute<*>>,
+    val collider: Collider,
+    emitNoMatches: Set<Int>
+): Iterator<Tuple> {
+  val inputs: ImmutableList<PeekingIterator<Tuple>> = inputs.fold(ImmutableList.builder<PeekingIterator<Tuple>>()) { builder, input -> builder.add(Iterators.peekingIterator(input)) }.build()
+  val commonNames: ImmutableList<String> = commonKeys.fold(ImmutableList.builder<Name>()) { builder, input -> builder.add(input.name) }.build()
+  private val emitNoMatches = BooleanArray(inputs.size) //ImmutableSet.copyOf(emitNoMatches)
+
+  val inputComparator = TupleIteratorComparatorByAttributes(commonNames)
+  val inputIndexComparator: Comparator<Int> = java.util.Comparator.comparing(
+      Function({ it:Int -> this.inputs[it] }), inputComparator)
+  /** A priority queue of indexes, referencing [inputs] and [emitNoMatches] */
+  val pq: PriorityQueue<Int> = PriorityQueue(inputs.size, inputIndexComparator)
+  var topIter: Iterator<Tuple> = Iterators.emptyIterator()
+
+  init {
+    // check that emitNoMatches is a valid set - every index corresponds to an input
+    emitNoMatches.forEach {
+      Preconditions.checkElementIndex(it, inputs.size, "emitNoMatch index $it is out of range; provided ${inputs.size} inputs")
+      this.emitNoMatches[it] = true
+    }
+    pq.addAll(inputs.indices)
+    findTop()
+  }
+
+  private val _actives = BooleanArray(inputs.size)
+  private var _collision  = false
+  private var _allFinished = false
+  /** Todo: test that these indexes are the *least*. If not, reverse the comparator.
+   * Sets state variables [_actives] and [_collision] according to the active set of indices and whether they trigger a collision.
+   * */
+  private fun pollActives() {
+//    _actives.fill(false)
+    val top = pq.poll()
+    // return all falses if no iterators have any more elements left
+    if (!inputs[top].hasNext()) {
+      _allFinished = true
+      return
+    }
+    _actives[top] = true
+    _collision = _collision || this.emitNoMatches[top]
+    while (pq.isNotEmpty() && inputIndexComparator.compare(top, pq.peek()) == 0)
+      _actives[pq.poll()] = true
+    if (pq.isEmpty()) _collision = true
+    // all active inputs have hasNext() == true
+  }
+
+  /**
+   * Re-add the active indexes into the priority queue, after advancing them to at least the least element in the queue.
+   */
+  private fun advanceActivesIntoQueue() {
+    // all active inputs have hasNext() == true
+    val toAdvanceTo: PeekingIterator<Tuple>? = pq.poll()?.let { inputs[it] }
+    for ((idx, active) in _actives.withIndex()) {
+      if (!active) continue
+      // todo: this can be optimized further to account for the emitNoMatch criteria
+      if (toAdvanceTo == null)
+        inputs[idx].next()
+      else
+        advanceTo(inputs[idx], toAdvanceTo)
+      pq.add(idx)
+      _actives[idx] = false
+    }
+    _collision = false
+    // post-condition: actives is filled with false, no collision
+  }
+
+  /** Primitive version without seeking */
+  private fun advanceTo(input: PeekingIterator<Tuple>, toAdvanceTo: PeekingIterator<Tuple>) {
+    do {
+      input.next()
+    } while (input.hasNext() && inputComparator.compare(input, toAdvanceTo) < 0)
+  }
+
+  private fun findTop() {
+    do {
+      pollActives()
+      while (!_allFinished && !_collision) {
+        advanceActivesIntoQueue()
+        pollActives()
+      }
+      if (_allFinished)
+        return
+      topIter = collider.collide(inputs, _actives)
+    } while (!topIter.hasNext())
+  }
+
+  override fun hasNext(): Boolean = topIter.hasNext()
+
+  override fun next(): Tuple {
+    val next = topIter.next()
+    if (!topIter.hasNext())
+      findTop()
+    return next
+  }
+}
+
+
+
 
 /*
   0. check that common keys are in the front of every iterator *in the same order*
