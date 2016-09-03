@@ -2,9 +2,8 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
-import com.sun.org.apache.xpath.internal.operations.Bool
+import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.hadoop.io.WritableComparator
-import java.nio.ByteBuffer
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
@@ -225,42 +224,42 @@ interface RelaxedTuple {
 }
 
 interface Tuple : RelaxedTuple {
-  override operator fun get(name: Name): ByteBuffer
-  override operator fun get(idx: Int): ByteBuffer
-  @Deprecated("Use the ByteBuffer version", ReplaceWith("if (v is ByteBuffer) set(name, v) else throw IllegalArgumentException(\"\$v is not a ByteBuffer\")", "java.nio.ByteBuffer"), DeprecationLevel.ERROR)
+  override operator fun get(name: Name): ArrayByteSequence
+  override operator fun get(idx: Int): ArrayByteSequence
+  @Deprecated("Use the ArrayByteSequence version", ReplaceWith("if (v is ArrayByteSequence) set(name, v) else throw IllegalArgumentException(\"\$v is not a ArrayByteSequence\")", "org.apache.accumulo.core.data.ArrayByteSequence"), DeprecationLevel.ERROR)
   override fun set(name: String, v: Any?) {
-    if (v is ByteBuffer) set(name, v)
-    else throw IllegalArgumentException("$v is not a ByteBuffer")
+    if (v is ArrayByteSequence) set(name, v)
+    else throw IllegalArgumentException("$v is not a ArrayByteSequence")
   }
-  @Deprecated("Use the ByteBuffer version", ReplaceWith("if (v is ByteBuffer) set(idx, v) else throw IllegalArgumentException(\"\$v is not a ByteBuffer\")", "java.nio.ByteBuffer"), DeprecationLevel.ERROR)
+  @Deprecated("Use the ArrayByteSequence version", ReplaceWith("if (v is ArrayByteSequence) set(idx, v) else throw IllegalArgumentException(\"\$v is not a ArrayByteSequence\")", "org.apache.accumulo.core.data.ArrayByteSequence"), DeprecationLevel.ERROR)
   override fun set(idx: Int, v: Any?) {
-    if (v is ByteBuffer) set(idx, v)
-    else throw IllegalArgumentException("$v is not a ByteBuffer")
+    if (v is ArrayByteSequence) set(idx, v)
+    else throw IllegalArgumentException("$v is not a ArrayByteSequence")
   }
-  operator fun set(name: Name, v: ByteBuffer)
-  operator fun set(idx: Int, v: ByteBuffer)
+  operator fun set(name: Name, v: ArrayByteSequence)
+  operator fun set(idx: Int, v: ArrayByteSequence)
 }
 
 
 class MutableByteTuple(
     val ap: AccessPath,
     /** The order of the buffers must match the order of the attributes in [ap] */
-    private val buffers: MutableList<ByteBuffer>
+    private val buffers: MutableList<ArrayByteSequence>
 ): Tuple {
   init {
-    // there is a ByteBuffer for every attribute
+    // there is a ArrayByteSequence for every attribute
     Preconditions.checkArgument(buffers.size == ap.attributes.size,
         "expected %s data buffers but was given %s", ap.attributes.size, buffers.size)
   }
 
-  override operator fun get(idx: Int): ByteBuffer = buffers[idx]
-  override operator fun get(name: String): ByteBuffer = get(ap.columnNameToIndex(name))
-  override operator fun set(idx: Int, v: ByteBuffer) {
+  override operator fun get(idx: Int): ArrayByteSequence = buffers[idx]
+  override operator fun get(name: String): ArrayByteSequence = get(ap.columnNameToIndex(name))
+  override operator fun set(idx: Int, v: ArrayByteSequence) {
     buffers[idx] = v
   }
-  override operator fun set(name: String, v: ByteBuffer) = set(ap.columnNameToIndex(name), v)
+  override operator fun set(name: String, v: ArrayByteSequence) = set(ap.columnNameToIndex(name), v)
 
-  // could define a constructor that takes a map of names to ByteBuffers
+  // could define a constructor that takes a map of names to ArrayByteSequences
   // use the AP to put the buffers in the right order
 }
 
@@ -280,8 +279,9 @@ data class OrderByKeyKeyComparator(val schema: Schema) : Comparator<Tuple> {
     schema.keyAttributes.forEach {
       val b1 = t1[it.name]
       val b2 = t2[it.name]
-      val c = WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
-          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
+      val c = b1.compareTo(b2)
+      //WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
+        //  b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
       if (c != 0)
         return@compare c
     }
@@ -297,8 +297,9 @@ data class TupleComparatorByAttributes(val attrs: ImmutableList<Name>, val rever
     attrs.forEach {
       val b1 = t1[it]
       val b2 = t2[it]
-      val c = WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
-          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
+      val c = b1.compareTo(b2)
+//      WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
+//          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
       if (c != 0)
         return@compare if (reverse) -c else c
     }
@@ -474,8 +475,9 @@ fun mergeJoin(
     commonNames.forEach {
       val b1 = o1[it.third]
       val b2 = o2[it.third]
-      val c = WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
-          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
+      val c = b1.compareTo(b2)
+//      WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
+//          b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
       if (c != 0)
         return@Comparator c
     }
