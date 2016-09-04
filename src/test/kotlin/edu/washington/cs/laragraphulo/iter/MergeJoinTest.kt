@@ -41,9 +41,7 @@ class MergeJoinTest(
       val comparator: MergeJoin.SkipKeyComparator,
       val expected: List<List<SortedMap<Key, Value>>>
   ) {
-    override fun toString(): String {
-      return name
-    }
+    override fun toString(): String = name
   }
 
   private fun SortedMap<Key,Value>.toSkvi(): SortedKeyValueIterator<Key,Value> {

@@ -36,8 +36,8 @@ data class Attribute<T>(
 
   /** Compare Attributes based on their name. */
   object AttributeNameComparator : Comparator<Attribute<*>> {
-    override fun compare(o1: Attribute<*>?, o2: Attribute<*>?): Int {
-      return o1!!.name.compareTo(o2!!.name)
+    override fun compare(o1: Attribute<*>, o2: Attribute<*>): Int {
+      return o1.name.compareTo(o2.name)
     }
   }
 

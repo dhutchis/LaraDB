@@ -187,7 +187,7 @@ sealed class BagAccessPath(
     val duplicates: Boolean
 ) : AccessPath(dap, lap, cap) {
   init {
-    Preconditions.checkElementIndex(sortedUpto, dap.size+lap.size+1, "sortedUpto is an int such that all keyAttributes $keyAttributes " +
+    Preconditions.checkPositionIndex(sortedUpto, dap.size+lap.size, "sortedUpto is an int such that all keyAttributes $keyAttributes " +
         "whose index is less than sortedUpto are sorted. 0 means nothing is sorted. Valid up to and including ${dap.size+lap.size}. Given: $sortedUpto")
   }
 
@@ -344,7 +344,7 @@ class Merger(
     val collider: Collider,
     emitNoMatches: Set<Int>
 ): Iterator<Tuple> {
-  val inputs: ImmutableList<PeekingIterator<Tuple>> = inputs.fold(ImmutableList.builder<PeekingIterator<Tuple>>()) { builder, input -> builder.add(Iterators.peekingIterator(input)) }.build()
+  private val inputs: ImmutableList<PeekingIterator<Tuple>> = inputs.fold(ImmutableList.builder<PeekingIterator<Tuple>>()) { builder, input -> builder.add(Iterators.peekingIterator(input)) }.build()
   val commonNames: ImmutableList<String> = commonKeys.fold(ImmutableList.builder<Name>()) { builder, input -> builder.add(input.name) }.build()
   private val emitNoMatches = BooleanArray(inputs.size) //ImmutableSet.copyOf(emitNoMatches)
 
@@ -435,6 +435,21 @@ class Merger(
       findTop()
     return next
   }
+}
+
+fun commonKeyNames(schemas: List<Schema>): Set<Name> =
+    schemas.map { it.keyAttributes.map { it.name }.toSet() }.reduce { s1, s2 -> s1.intersect(s2) }
+
+fun ensureKeyNamesSortedAtPrefix(schemas: List<BagAccessPath>, names: Set<Name>): List<Name> {
+  if (schemas.isEmpty()) return names.toList()
+  val bag1 = schemas[0]
+  val nl: List<Name> = bag1.keyAttributes.subList(0, names.size).map { it.name }
+  Preconditions.checkArgument(nl.toSet() == names, "names %s must be in the prefix of each itherator, but the first iterator has a prefix of %s", names, nl)
+  schemas.forEach {
+    Preconditions.checkArgument(it.keyAttributes.subList(0, names.size).map { it.name } == nl, "all iterators must have the same prefix key attributes; expected %s but actual %s", nl, it.keyAttributes)
+    Preconditions.checkArgument(it.sortedUpto >= names.size, "all iterators must be sorted at least up to the names %s; this one is sorted on the first %s elements of %s", names, it.sortedUpto, it.keyAttributes)
+  }
+  return nl
 }
 
 
