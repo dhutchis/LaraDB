@@ -249,6 +249,8 @@ class MutableByteTuple(
     /** The order of the buffers must match the order of the attributes in [ap] */
     buffers: MutableList<ArrayByteSequence>
 ): Tuple by buffers {
+//  constructor(buffers: MutableCollection<ByteArray>): this(buffers.map { ArrayByteSequence(it) }.toMutableList())
+
 //  init {
 //    // there is a ArrayByteSequence for every attribute
 //    Preconditions.checkArgument(buffers.size == ap.attributes.size,
@@ -339,15 +341,14 @@ interface Collider {
  */
 class Merger(
     inputs: List<Iterator<Tuple>>,
-    commonKeys: List<Name>,
+    prefixSize: Int,
     val collider: Collider,
-    emitNoMatches: Set<Int>
+    emitNoMatches: Set<Int> // this could be a BooleanArray
 ): Iterator<Tuple> {
   private val inputs: ImmutableList<PeekingIterator<Tuple>> = inputs.fold(ImmutableList.builder<PeekingIterator<Tuple>>()) { builder, input -> builder.add(Iterators.peekingIterator(input)) }.build()
-  val commonNames: ImmutableList<String> = ImmutableList.copyOf(commonKeys)
   private val emitNoMatches = BooleanArray(inputs.size) //ImmutableSet.copyOf(emitNoMatches)
 
-  val inputComparator = TupleIteratorComparatorByPrefix(commonNames.size)
+  val inputComparator = TupleIteratorComparatorByPrefix(prefixSize)
   val inputIndexComparator: Comparator<Int> = java.util.Comparator.comparing(
       Function({ it:Int -> this.inputs[it] }), inputComparator)
   /** A priority queue of indexes, referencing [inputs] and [emitNoMatches] */
@@ -417,6 +418,7 @@ class Merger(
   }
 
   private fun findTopIter() {
+    if (inputs.isEmpty()) return
     do {
       pollActives()
       while (!_allFinished && !_collision) {
@@ -446,15 +448,26 @@ fun ensureKeyNamesSortedAtPrefix(schemas: List<BagAccessPath>, names: Set<Name>)
   if (schemas.isEmpty()) return names.toList()
   val bag1 = schemas[0]
   val nl: List<Name> = bag1.keyAttributes.subList(0, names.size)
-  Preconditions.checkArgument(nl.toSet() == names, "names %s must be in the prefix of each itherator, but the first iterator has a prefix of %s", names, nl)
+  require(nl.toSet() == names) {"names $names must be in the prefix of each iterator, but the first iterator has a prefix of $nl"}
   schemas.forEach {
-    Preconditions.checkArgument(it.keyAttributes.subList(0, names.size) == nl, "all iterators must have the same prefix key attributes; expected %s but actual %s", nl, it.keyAttributes)
-    Preconditions.checkArgument(it.sortedUpto >= names.size, "all iterators must be sorted at least up to the names %s; this one is sorted on the first %s elements of %s", names, it.sortedUpto, it.keyAttributes)
+    require(it.keyAttributes.subList(0, names.size) == nl) {"all iterators must have the same prefix key attributes; expected $nl but actual ${it.keyAttributes}"}
+    require(it.sortedUpto >= names.size) {"all iterators must be sorted at least up to the names $names; this one is sorted on the first ${it.sortedUpto} elements of ${it.keyAttributes}"}
   }
   return nl
 }
 
+fun ensureSamePrefix(schemas: List<RelationSchema>, prefixSize: Int) {
+  if (schemas.isEmpty()) return
+  for (i in 0..prefixSize-1) {
+    val s = schemas[0][i]
+    for (j in 1..schemas.size-1)
+      require(s == schemas[j][i]) {"The schemas differ in their first $prefixSize attributes: $schemas"}
+  }
+}
 
+fun ensureSortedUpto(schemas: List<BagAccessPath>, prefixSize: Int) {
+  schemas.forEach { require(it.sortedUpto >= prefixSize) }
+}
 
 
 /*
