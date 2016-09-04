@@ -3,7 +3,6 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
 import org.apache.accumulo.core.data.ArrayByteSequence
-import org.apache.hadoop.io.WritableComparator
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
@@ -13,11 +12,11 @@ import kotlin.comparisons.nullsLast
 // I am leaning toward storing attribute data separately (a list/array of names, a separate one for types, etc.)
 
 sealed class RelationSchema(
-    val attributes: ImmutableList<Attribute<*>>
+    val attributes: ImmutableList<Name>
 ) {
   init {
     // check for duplicate names
-    val names = attributes.map { it.name }.toSet()
+    val names = attributes.toSet()
     Preconditions.checkArgument(names.size == attributes.size, "There is a duplicate attribute name: ", names)
     // check for invalid names
     names.forEach { checkName(it) }
@@ -44,7 +43,7 @@ sealed class RelationSchema(
       return name
     }
 
-    fun build(attrs: Collection<Attribute<*>>): RelationSchema = RelationSchemaImpl(attrs)
+    fun build(attrs: Collection<Name>): RelationSchema = RelationSchemaImpl(attrs)
   }
 
 //  /**
@@ -58,7 +57,7 @@ sealed class RelationSchema(
 
 //  @Transient
   private val nameToIndex: Map<Name, Int> by lazy {
-    ImmutableMap.copyOf(attributes.mapIndexed { i, attribute -> attribute.name to i }.toMap())
+    ImmutableMap.copyOf(attributes.mapIndexed { i, attribute -> attribute to i }.toMap())
   }
 
   /**
@@ -102,25 +101,25 @@ sealed class RelationSchema(
 
 
 
-  private class RelationSchemaImpl(attrs: Collection<Attribute<*>>)
+  private class RelationSchemaImpl(attrs: Collection<Name>)
   : RelationSchema(ImmutableList.copyOf(attrs))
 }
 
 
 
 sealed class Schema(
-    val keyAttributes: ImmutableList<Attribute<*>>,
-    val valAttribtues: ImmutableList<Attribute<*>>
-) : RelationSchema(ImmutableList.builder<Attribute<*>>().addAll(keyAttributes).addAll(valAttribtues).build()) {
+    val keyAttributes: ImmutableList<Name>,
+    val valAttribtues: ImmutableList<Name>
+) : RelationSchema(ImmutableList.builder<Name>().addAll(keyAttributes).addAll(valAttribtues).build()) {
 
   companion object {
-    fun build( kas: Collection<Attribute<*>>,
-               vas: Collection<Attribute<*>>): Schema = SchemaImpl(kas, vas)
+    fun build( kas: Collection<Name>,
+               vas: Collection<Name>): Schema = SchemaImpl(kas, vas)
   }
 
   private class SchemaImpl(
-      kas: Collection<Attribute<*>>,
-      vas: Collection<Attribute<*>>
+      kas: Collection<Name>,
+      vas: Collection<Name>
   ) : Schema(ImmutableList.copyOf(kas), ImmutableList.copyOf(vas))
 
 }
@@ -129,9 +128,9 @@ sealed class Schema(
 
 sealed class AccessPath(
     /** distributed access path */
-    val dap: ImmutableList<Attribute<*>>,
+    val dap: ImmutableList<Name>,
     /** local access path */
-    val lap: ImmutableList<Attribute<*>>,
+    val lap: ImmutableList<Name>,
     /**
      * column access path
      * A list of the attribute groups. Each group is potentially stored in a different file.
@@ -139,11 +138,11 @@ sealed class AccessPath(
      */
     val cap: ImmutableList<ColumnFamily>
 ) : Schema(
-    ImmutableList.builder<Attribute<*>>()
+    ImmutableList.builder<Name>()
         .addAll(dap)
         .addAll(lap)
         .build(),
-    ImmutableList.builder<Attribute<*>>()
+    ImmutableList.builder<Name>()
         .addAll(cap.flatMap { it.attributes })
         .build()
 ) {
@@ -153,14 +152,14 @@ sealed class AccessPath(
   }
 
   companion object {
-    fun build( dap: Collection<Attribute<*>>,
-               lap: Collection<Attribute<*>>,
+    fun build( dap: Collection<Name>,
+               lap: Collection<Name>,
                cap: Collection<ColumnFamily>): AccessPath = AccessPathImpl(dap,lap,cap)
   }
 
   private class AccessPathImpl(
-      dap: Collection<Attribute<*>>,
-      lap: Collection<Attribute<*>>,
+      dap: Collection<Name>,
+      lap: Collection<Name>,
       cap: Collection<ColumnFamily>
   ) : AccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap))
 }
@@ -171,9 +170,9 @@ sealed class AccessPath(
 // need to subclass AccessPath because this tells us how to interpret each part of the Key/Value
 sealed class BagAccessPath(
     /** distributed access path */
-    dap: ImmutableList<Attribute<*>>,
+    dap: ImmutableList<Name>,
     /** local access path */
-    lap: ImmutableList<Attribute<*>>,
+    lap: ImmutableList<Name>,
     /**
      * column access path
      * A list of the attribute groups. Each group is potentially stored in a different file.
@@ -192,16 +191,16 @@ sealed class BagAccessPath(
   }
 
   companion object {
-    fun build( dap: Collection<Attribute<*>>,
-               lap: Collection<Attribute<*>>,
+    fun build( dap: Collection<Name>,
+               lap: Collection<Name>,
                cap: Collection<ColumnFamily>,
                sortedUpto: Int,
                duplicates: Boolean): BagAccessPath = BagAccessPathImpl(dap,lap,cap,sortedUpto,duplicates)
   }
 
   private class BagAccessPathImpl(
-      dap: Collection<Attribute<*>>,
-      lap: Collection<Attribute<*>>,
+      dap: Collection<Name>,
+      lap: Collection<Name>,
       cap: Collection<ColumnFamily>,
       sortedUpto: Int,
       duplicates: Boolean
@@ -277,8 +276,8 @@ fun Iterator<Tuple>.ext(f: ExtFun): Iterator<Tuple> {
 data class OrderByKeyKeyComparator(val schema: Schema) : Comparator<Tuple> {
   override fun compare(t1: Tuple, t2: Tuple): Int {
     schema.keyAttributes.forEach {
-      val b1 = t1[it.name]
-      val b2 = t2[it.name]
+      val b1 = t1[it]
+      val b2 = t2[it]
       val c = b1.compareTo(b2)
       //WritableComparator.compareBytes(b1.array(), b1.arrayOffset() + b1.position(), b1.remaining(),
         //  b2.array(), b2.arrayOffset() + b2.position(), b2.remaining())
@@ -340,12 +339,12 @@ interface Collider {
  */
 class Merger(
     inputs: List<Iterator<Tuple>>,
-    commonKeys: List<Attribute<*>>,
+    commonKeys: List<Name>,
     val collider: Collider,
     emitNoMatches: Set<Int>
 ): Iterator<Tuple> {
   private val inputs: ImmutableList<PeekingIterator<Tuple>> = inputs.fold(ImmutableList.builder<PeekingIterator<Tuple>>()) { builder, input -> builder.add(Iterators.peekingIterator(input)) }.build()
-  val commonNames: ImmutableList<String> = commonKeys.fold(ImmutableList.builder<Name>()) { builder, input -> builder.add(input.name) }.build()
+  val commonNames: ImmutableList<String> = commonKeys.fold(ImmutableList.builder<Name>()) { builder, input -> builder.add(input) }.build()
   private val emitNoMatches = BooleanArray(inputs.size) //ImmutableSet.copyOf(emitNoMatches)
 
   val inputComparator = TupleIteratorComparatorByAttributes(commonNames)
@@ -438,15 +437,15 @@ class Merger(
 }
 
 fun commonKeyNames(schemas: List<Schema>): Set<Name> =
-    schemas.map { it.keyAttributes.map { it.name }.toSet() }.reduce { s1, s2 -> s1.intersect(s2) }
+    schemas.map { it.keyAttributes.map { it }.toSet() }.reduce { s1, s2 -> s1.intersect(s2) }
 
 fun ensureKeyNamesSortedAtPrefix(schemas: List<BagAccessPath>, names: Set<Name>): List<Name> {
   if (schemas.isEmpty()) return names.toList()
   val bag1 = schemas[0]
-  val nl: List<Name> = bag1.keyAttributes.subList(0, names.size).map { it.name }
+  val nl: List<Name> = bag1.keyAttributes.subList(0, names.size).map { it }
   Preconditions.checkArgument(nl.toSet() == names, "names %s must be in the prefix of each itherator, but the first iterator has a prefix of %s", names, nl)
   schemas.forEach {
-    Preconditions.checkArgument(it.keyAttributes.subList(0, names.size).map { it.name } == nl, "all iterators must have the same prefix key attributes; expected %s but actual %s", nl, it.keyAttributes)
+    Preconditions.checkArgument(it.keyAttributes.subList(0, names.size).map { it } == nl, "all iterators must have the same prefix key attributes; expected %s but actual %s", nl, it.keyAttributes)
     Preconditions.checkArgument(it.sortedUpto >= names.size, "all iterators must be sorted at least up to the names %s; this one is sorted on the first %s elements of %s", names, it.sortedUpto, it.keyAttributes)
   }
   return nl
@@ -476,11 +475,11 @@ fun mergeJoin(
   // new keyAttributes = union of existing keyAttributes
   // equi-join on matching key attributes
   val schemas: List<Schema> = inputs.map { it.first }
-  val schemaNames: List<List<Triple<Int, Int, String>>> = schemas.mapIndexed { sidx, schema -> schema.keyAttributes.mapIndexed { idx, attr -> Triple(sidx, idx, attr.name) } }
+  val schemaNames: List<List<Triple<Int, Int, String>>> = schemas.mapIndexed { sidx, schema -> schema.keyAttributes.mapIndexed { idx, attr -> Triple(sidx, idx, attr) } }
   // todo: need helper method to make sure that attributes with the same name are compatible (same type, etc.)
   val commonNames: List<Triple<Int, Int, String>> = schemaNames.reduce { pa, pb -> pa.filter { ita -> pb.any { it.third == ita.third } } }
   val resultKeyNames: List<Triple<Int, Int, String>> = schemaNames.fold(commonNames) { acc, names -> acc + (names.filterNot { itn -> acc.any { it.third == itn.third } })}
-  val resultKeyAttributes: List<Attribute<*>> = resultKeyNames.map { schemas[it.first].keyAttributes[it.second] }
+  val resultKeyAttributes: List<Name> = resultKeyNames.map { schemas[it.first].keyAttributes[it.second] }
   val resultSchema: Schema = Schema.build(resultKeyAttributes, multiplyOpValSchema.attributes)
 
   // assert that the input Iterator<Tuple>s are sorted in the right way...

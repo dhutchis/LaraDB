@@ -58,9 +58,9 @@ data class Attribute<T>(
 
 data class ColumnFamily internal constructor(
     val name: Name,
-    val attributes: ImmutableList<Attribute<*>>
+    val attributes: ImmutableList<Name>
 ) {
-  constructor(name:Name, attrs: Collection<Attribute<*>>)
+  constructor(name:Name, attrs: Collection<Name>)
   : this(name, ImmutableList.copyOf(attrs))
 }
 
