@@ -43,6 +43,7 @@ class MergerTest(
 
     lateinit var tupleReferences: List<TupleRef>
     lateinit var ALL_ACTIVE: BooleanArray
+    var lastTuples: List<Tuple>? = null
 
     override fun schema(inputs: List<BagAccessPath>): BagAccessPath {
       if (inputs.isEmpty())
@@ -114,13 +115,16 @@ class MergerTest(
 
     override fun collide(inputs: List<PeekingIterator<Tuple>>, actives: BooleanArray): Iterator<Tuple> {
       assertArrayEquals("expect all iterators active for join", ALL_ACTIVE, actives)
+      // check that values given in sorted order
+      if (lastTuples != null)
+        inputs.zip(lastTuples!!).forEach {
+          assertTrue("iterators out of order; last value was ${it.second}; this value is ${it.first.peek()}",
+            it.second.compareTo(it.first.peek()) >= 0)
+        }
+      lastTuples = inputs.map { it.peek() }
 
-      // stream each iterator into a list until the iterators advance past their current prefix
-      // need the comparator from Merger to tell when that occurs
-      // then, do the Cartesian product in sorted order, in the order of the iterators, constructing new tuples from the product
-      // take inspiration from Graphulo
+
       // what does Union do differently? Element-wise union - no cartesian products
-      // TODO
 
       // advances all active inputs to after this row, as required by the Collider contract
       //.filterIndexed { i, iter -> actives[i] }
@@ -157,7 +161,7 @@ class MergerTest(
     }
 
     fun tuple(vararg vals: String): Tuple =
-        MutableByteTuple(vals.map { ArrayByteSequence(it.toByteArray()) }.toMutableList())
+        MutableByteTuple(vals.map { ArrayByteSequence(it.toByteArray()) })
 
     // todo - the code above does not do anything with string names in the schema
     val ti1 = listOf(tuple("1a", "2a"))

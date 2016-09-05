@@ -235,7 +235,16 @@ sealed class BagAccessPath(
 //  operator fun set(idx: Int, v: Any?): Any?
 //}
 
-typealias Tuple = List<ArrayByteSequence>
+open class Tuple(buffers: List<ArrayByteSequence>) : List<ArrayByteSequence> by buffers, Comparable<Tuple> {
+  /** Comparison on all attributes */
+  override fun compareTo(other: Tuple): Int {
+    for (p in 0..Math.min(this.size,other.size)-1) {
+      val c = this[p].compareTo(other[p])
+      if (c != 0) return c
+    }
+    return other.size - this.size
+  }
+}
 //{
 ////  override operator fun get(name: Name): ArrayByteSequence
 //  override operator fun get(idx: Int): ArrayByteSequence
@@ -257,9 +266,9 @@ typealias Tuple = List<ArrayByteSequence>
 class MutableByteTuple(
 //    val ap: AccessPath,
     /** The order of the buffers must match the order of the attributes in [ap] */
-    private val buffers: MutableList<ArrayByteSequence>
-): Tuple by buffers {
-//  constructor(buffers: MutableCollection<ByteArray>): this(buffers.map { ArrayByteSequence(it) }.toMutableList())
+    private val buffers: List<ArrayByteSequence>
+) : Tuple(buffers) {
+//  constructor(buffers: MutableCollection<ByteArray>): this(buffers.map { ArrayByteSequence(it) })
 
 //  init {
 //    // there is a ArrayByteSequence for every attribute
@@ -278,6 +287,8 @@ class MutableByteTuple(
 
   // could define a constructor that takes a map of names to ArrayByteSequences
   // use the AP to put the buffers in the right order
+
+
 
   override fun toString(): String = buffers.toString()
   override fun equals(other: Any?): Boolean{
