@@ -93,7 +93,7 @@ class MergeJoinTest(
         println("match set $i: ${sets[i]}")
       }
       println()
-      return Iterators.emptyIterator()
+      return Collections.emptyIterator()
     }
   }
 
@@ -113,7 +113,7 @@ class MergeJoinTest(
       collidecnt++
       val thisExp = iter.next()
       Assert.assertArrayEquals("problem on call $collidecnt to collide", thisExp.toTypedArray(), sets)
-      return Iterators.emptyIterator()
+      return Collections.emptyIterator()
     }
   }
 

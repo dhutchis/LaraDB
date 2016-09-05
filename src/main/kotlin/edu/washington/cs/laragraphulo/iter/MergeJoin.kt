@@ -76,7 +76,7 @@ class MergeJoin(
   val seekData: Array<SeekData>
 
   companion object {
-    private val EMPTY_ITER = Iterators.peekingIterator<Pair<Key,Value>>(Iterators.emptyIterator())
+    private val EMPTY_ITER = Iterators.peekingIterator<Pair<Key,Value>>(Collections.emptyIterator())
   }
 
   private var processed = EMPTY_ITER

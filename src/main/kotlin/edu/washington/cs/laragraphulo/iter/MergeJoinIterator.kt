@@ -26,7 +26,7 @@ class MergeJoinIterator(
   val skvis = skvis
   var start = 0
 
-  var processed = Iterators.peekingIterator<Pair<Key,Value>>(Iterators.emptyIterator())
+  var processed = Iterators.peekingIterator<Pair<Key,Value>>(Collections.emptyIterator())
 
 
   override fun seek(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) {

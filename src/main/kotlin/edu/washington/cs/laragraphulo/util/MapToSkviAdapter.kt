@@ -18,7 +18,7 @@ class MapToSkviAdapter(
   private val log = LogManager.getLogger(MapToSkviAdapter::class.java)
 
 //  companion object {
-//    private val EMPTY_ITER = Iterators.peekingIterator<Map.Entry<Key,Value>>(Iterators.emptyIterator())
+//    private val EMPTY_ITER = Iterators.peekingIterator<Map.Entry<Key,Value>>(Collections.emptyIterator())
 //  }
 
   private lateinit var inner: PeekingIterator<Map.Entry<Key, Value>>

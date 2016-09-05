@@ -3,6 +3,11 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
 import org.apache.accumulo.core.data.ArrayByteSequence
+import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.iterators.SortedKeyValueIterator
+import org.apache.hadoop.io.Text
+import java.io.IOException
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
@@ -12,12 +17,12 @@ import kotlin.comparisons.nullsLast
 // I am leaning toward storing attribute data separately (a list/array of names, a separate one for types, etc.)
 
 sealed class RelationSchema(
-    attributes: ImmutableList<Name>
+    private val attributes: ImmutableList<Name>
 ): List<Name> by attributes  {
   init {
     // check for duplicate names
     val names = attributes.toSet()
-    Preconditions.checkArgument(names.size == attributes.size, "There is a duplicate attribute name: ", names)
+    Preconditions.checkArgument(names.size == attributes.size, "There is a duplicate attribute name: ", attributes)
     // check for invalid names
     names.forEach { checkName(it) }
   }
@@ -82,26 +87,8 @@ sealed class RelationSchema(
   // consider overriding +, -
 
 
-//  override fun toString(): String{
-//    return "RelationSchema(attributes=$attributes)"
-//  }
 
-//  override fun equals(other: Any?): Boolean{
-//    if (this === other) return true
-//    if (other?.javaClass != javaClass) return false
-//
-//    other as RelationSchema
-//
-//    if (attributes != other.attributes) return false
-//
-//    return true
-//  }
-//
-//  override fun hashCode(): Int{
-//    return attributes.hashCode()
-//  }
-
-
+  override fun toString(): String = "RelationSchema${attributes}"
 
   private class RelationSchemaImpl(attrs: Collection<Name>)
   : RelationSchema(ImmutableList.copyOf(attrs))
@@ -123,6 +110,11 @@ sealed class Schema(
       kas: Collection<Name>,
       vas: Collection<Name>
   ) : Schema(ImmutableList.copyOf(kas), ImmutableList.copyOf(vas))
+
+  override fun toString(): String{
+    return "Schema(keyAttributes=$keyAttributes, valAttribtues=$valAttribtues)"
+  }
+
 
 }
 
@@ -164,6 +156,12 @@ sealed class AccessPath(
       lap: Collection<Name>,
       cap: Collection<ColumnFamily>
   ) : AccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap))
+
+  override fun toString(): String{
+    return "AccessPath(dap=$dap, lap=$lap, cap=$cap)"
+  }
+
+
 }
 
 
@@ -196,8 +194,9 @@ sealed class BagAccessPath(
     fun build( dap: Collection<Name>,
                lap: Collection<Name>,
                cap: Collection<ColumnFamily>,
-               sortedUpto: Int,
-               duplicates: Boolean): BagAccessPath = BagAccessPathImpl(dap,lap,cap,sortedUpto,duplicates)
+               sortedUpto: Int = -1,
+               duplicates: Boolean = false): BagAccessPath = BagAccessPathImpl(dap,lap,cap,
+        if (sortedUpto == -1) dap.size+lap.size else sortedUpto,duplicates)
   }
 
   private class BagAccessPathImpl(
@@ -207,6 +206,17 @@ sealed class BagAccessPath(
       sortedUpto: Int,
       duplicates: Boolean
   ) : BagAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap), sortedUpto, duplicates)
+
+  override fun toString(): String{
+    var s = "BagAccessPath(dap=$dap, lap=$lap, cap=$cap"
+    if (sortedUpto != dap.size+lap.size)
+      s += ", sortedUpto=$sortedUpto"
+    if (duplicates)
+      s += ", dups"
+    return s + ")"
+  }
+
+
 }
 
 
@@ -225,7 +235,7 @@ sealed class BagAccessPath(
 //  operator fun set(idx: Int, v: Any?): Any?
 //}
 
-typealias Tuple = MutableList<ArrayByteSequence>
+typealias Tuple = List<ArrayByteSequence>
 //{
 ////  override operator fun get(name: Name): ArrayByteSequence
 //  override operator fun get(idx: Int): ArrayByteSequence
@@ -243,11 +253,11 @@ typealias Tuple = MutableList<ArrayByteSequence>
 //  operator fun set(idx: Int, v: ArrayByteSequence): ArrayByteSequence
 //}
 
-
+// consider renaming to ByteTuple for the immutable version
 class MutableByteTuple(
 //    val ap: AccessPath,
     /** The order of the buffers must match the order of the attributes in [ap] */
-    buffers: MutableList<ArrayByteSequence>
+    private val buffers: MutableList<ArrayByteSequence>
 ): Tuple by buffers {
 //  constructor(buffers: MutableCollection<ByteArray>): this(buffers.map { ArrayByteSequence(it) }.toMutableList())
 
@@ -268,6 +278,24 @@ class MutableByteTuple(
 
   // could define a constructor that takes a map of names to ArrayByteSequences
   // use the AP to put the buffers in the right order
+
+  override fun toString(): String = buffers.toString()
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as MutableByteTuple
+
+    if (buffers != other.buffers) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int{
+    return buffers.hashCode()
+  }
+
+
 }
 
 
@@ -296,6 +324,7 @@ data class OrderByKeyKeyComparator(val schema: Schema) : Comparator<Tuple> {
   }
 }
 
+// todo - consider caching these objects
 data class TupleComparatorByPrefix(val size: Int) : Comparator<Tuple> {
   override fun compare(t1: Tuple, t2: Tuple): Int {
     for (i in 0..size-1) {
@@ -314,7 +343,7 @@ data class TupleComparatorByPrefix(val size: Int) : Comparator<Tuple> {
 data class TupleIteratorComparatorByPrefix(val size: Int) : Comparator<PeekingIterator<out Tuple>> {
   val tcomp = nullsLast(TupleComparatorByPrefix(size)) // nulls always last
   override fun compare(t1: PeekingIterator<out Tuple>, t2: PeekingIterator<out Tuple>): Int =
-      tcomp.compare(t1.peek(), t2.peek())
+      tcomp.compare(if (t1.hasNext()) t1.peek() else null, if (t2.hasNext()) t2.peek() else null)
 }
 
 
@@ -330,7 +359,7 @@ typealias MultiplyOp = (Array<Tuple>) -> Iterator<Tuple>
 interface Collider {
   fun schema(inputs: List<BagAccessPath>): BagAccessPath
   /** Do NOT modify the contents of [actives]. */
-  fun collide(inputs: List<Iterator<Tuple>>, actives: BooleanArray): Iterator<Tuple>
+  fun collide(inputs: List<PeekingIterator<Tuple>>, actives: BooleanArray): Iterator<Tuple>
 }
 
 /**
@@ -343,7 +372,7 @@ class Merger(
     inputs: List<Iterator<Tuple>>,
     prefixSize: Int,
     val collider: Collider,
-    emitNoMatches: Set<Int> // this could be a BooleanArray
+    emitNoMatches: Set<Int> = setOf() // this could be a BooleanArray
 ): Iterator<Tuple> {
   private val inputs: ImmutableList<PeekingIterator<Tuple>> = inputs.fold(ImmutableList.builder<PeekingIterator<Tuple>>()) { builder, input -> builder.add(Iterators.peekingIterator(input)) }.build()
   private val emitNoMatches = BooleanArray(inputs.size) //ImmutableSet.copyOf(emitNoMatches)
@@ -353,7 +382,11 @@ class Merger(
       Function({ it:Int -> this.inputs[it] }), inputComparator)
   /** A priority queue of indexes, referencing [inputs] and [emitNoMatches] */
   val pq: PriorityQueue<Int> = PriorityQueue(inputs.size, inputIndexComparator)
-  var topIter: Iterator<Tuple> = Iterators.emptyIterator()
+  var topIter: Iterator<Tuple> = Collections.emptyIterator()
+
+  private val _actives = BooleanArray(inputs.size)
+  private var _collision  = false
+  private var _allFinished = false
 
   init {
     // check that emitNoMatches is a valid set - every index corresponds to an input
@@ -365,15 +398,12 @@ class Merger(
     findTopIter()
   }
 
-  private val _actives = BooleanArray(inputs.size)
-  private var _collision  = false
-  private var _allFinished = false
   /** Todo: test that these indexes are the *least*. If not, reverse the comparator.
    * Sets state variables [_actives] and [_collision] according to the active set of indices and whether they trigger a collision.
    * */
   private fun pollActives() {
 //    _actives.fill(false)
-    val top = pq.poll()
+    val top = pq.poll()!!
     // return all false if no iterators have any more elements left
     if (!inputs[top].hasNext()) {
       _allFinished = true
@@ -393,7 +423,7 @@ class Merger(
   /**
    * Re-add the active indexes into the priority queue, after advancing them to at least the least element in the queue.
    */
-  private fun advanceActivesIntoQueue() {
+  private fun advanceActives() {
     // all active inputs have hasNext() == true
     val toAdvanceTo: PeekingIterator<Tuple>? = pq.poll()?.let { inputs[it] }
     for ((idx, active) in _actives.withIndex()) {
@@ -403,6 +433,12 @@ class Merger(
         inputs[idx].next()
       else
         advanceTo(inputs[idx], toAdvanceTo)
+    }
+  }
+
+  private fun addActivesIntoQueue() {
+    for ((idx, active) in _actives.withIndex()) {
+      if (!active) continue
       pq.add(idx)
       _actives[idx] = false
     }
@@ -422,12 +458,14 @@ class Merger(
     do {
       pollActives()
       while (!_allFinished && !_collision) {
-        advanceActivesIntoQueue()
+        advanceActives()
+        addActivesIntoQueue()
         pollActives()
       }
       if (_allFinished)
         return
       topIter = collider.collide(inputs, _actives) // collider must advance the active inputs
+      addActivesIntoQueue()
     } while (!topIter.hasNext())
   }
 
@@ -467,6 +505,23 @@ fun ensureSamePrefix(schemas: List<RelationSchema>, prefixSize: Int) {
 
 fun ensureSortedUpto(schemas: List<BagAccessPath>, prefixSize: Int) {
   schemas.forEach { require(it.sortedUpto >= prefixSize) }
+}
+
+/**
+ * @return List of tuples from [iter] up until iter is exhausted or the [rowComparator] indicates that [iter] as a different tuple
+ */
+fun readRow(
+    /** See [TupleComparatorByPrefix] */
+    rowComparator: Comparator<Tuple>,
+    iter: PeekingIterator<Tuple>
+): List<Tuple> {
+  check(iter.hasNext()) {"$iter should hasNext()"}
+  val first = iter.peek()
+  val list = LinkedList<Tuple>()
+  do {
+    list.add(iter.next())
+  } while (iter.hasNext() && rowComparator.compare(first, iter.peek()) == 0)
+  return list
 }
 
 
