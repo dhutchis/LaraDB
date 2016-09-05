@@ -104,7 +104,7 @@ class MergerTest(
 
     val assertingMergeMultiplyOp: MultiplyOp = { tuples ->
       for (i in tuples.indices)
-        assertEquals("tuples are not equal by rowComparator $rowComparator: $tuples", 0, rowComparator.compare(tuples[0], tuples[i]))
+        assertEquals("tuples are not equal by rowComparator $rowComparator: ${Arrays.toString(tuples)}", 0, rowComparator.compare(tuples[0], tuples[i]))
       val list = ArrayList<ArrayByteSequence>(tupleReferences.size+prefixSize)
       list.addAll(tuples[0].subList(0,prefixSize)) // the dap
       for ((tupleRef, attrRef) in tupleReferences) {
@@ -119,7 +119,7 @@ class MergerTest(
       if (lastTuples != null)
         inputs.zip(lastTuples!!).forEach {
           assertTrue("iterators out of order; last value was ${it.second}; this value is ${it.first.peek()}",
-            it.second.compareTo(it.first.peek()) >= 0)
+            it.first.peek().compareTo(it.second) >= 0)
         }
       lastTuples = inputs.map { it.peek() }
 
@@ -129,12 +129,20 @@ class MergerTest(
       // advances all active inputs to after this row, as required by the Collider contract
       //.filterIndexed { i, iter -> actives[i] }
       val inputTuplesAfterFirst = inputs.subList(1,inputs.size).map { readRow(rowComparator, it) }
-      return CartesianIterator(inputs[0], inputTuplesAfterFirst, assertingMergeMultiplyOp)
+      return CartesianIterator(OneRowIterator(rowComparator, inputs[0]),
+          inputTuplesAfterFirst, assertingMergeMultiplyOp)
     }
   }
 
   @Test
   fun test() {
+    // check that the inputs are sorted properly
+    params.inputs.forEach {
+      val sortedList = ArrayList(it.first.toList())
+      Collections.sort(sortedList, TupleComparatorByPrefix(it.second.sortedUpto))
+      assertIteratorsEqual(sortedList.iterator(), it.first.iterator())
+    }
+
     val collider = AssertingMergeCollider(params.prefixSize)
     val aps = params.inputs.map { it.second }
     val outAp = collider.schema(aps)
@@ -167,31 +175,70 @@ class MergerTest(
     val ti1 = listOf(tuple("1a", "2a"))
     val ti2 = listOf(tuple("1b", "2b"))
     val ti3 = listOf(tuple("1a", "2c"))
-
-    val t1 = Params(
-        name = "one tuple each; no match",
-        inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
-            ti2 to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
-        prefixSize = 1,
-        expected = listOf()
-    )
-    val t2 = Params(
-        name = "one tuple each; match",
-        inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
-            ti3 to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
-        prefixSize = 1,
-        expected = listOf(tuple("1a", "2a", "2c"))
-    )
-    val t3 = Params(
-        name = "one tuple each; cartesian product",
-        inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
-            ti2 to BagAccessPath.build(listOf("b1"), listOf("b2"), listOf())),
-        prefixSize = 0,
-        expected = listOf(tuple("1a", "2a", "1b", "2b"))
-    )
+    val tiEmpty = listOf<Tuple>()
+    val ti12 = listOf(tuple("1a","2b"), tuple("1a","2c"))
+    val ti13 = listOf(tuple("1a","2d"), tuple("1a","2e"), tuple("1a","2f"))
 
     val data: Array<Params> = arrayOf(
-        t1, t2, t3
+        Params(
+            name = "one tuple each; no match",
+            inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                ti2 to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
+            prefixSize = 1,
+            expected = listOf()
+        ),
+        Params(
+            name = "one tuple each; match",
+            inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                ti3 to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
+            prefixSize = 1,
+            expected = listOf(tuple("1a", "2a", "2c"))
+        ),
+        Params(
+            name = "one tuple each; cartesian product",
+            inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                ti2 to BagAccessPath.build(listOf("b1"), listOf("b2"), listOf())),
+            prefixSize = 0,
+            expected = listOf(tuple("1a", "2a", "1b", "2b"))
+        ),
+        Params(
+            name = "one iter empty; match",
+            inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                tiEmpty to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
+            prefixSize = 1,
+            expected = listOf()
+        ),
+        Params(
+            name = "one iter empty; cartesian product",
+            inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                tiEmpty to BagAccessPath.build(listOf("b1"), listOf("b2"), listOf())),
+            prefixSize = 0,
+            expected = listOf()
+        ),
+        Params(
+            name = "1x2 match",
+            inputs = listOf(ti1 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                ti12 to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
+            prefixSize = 1,
+            expected = listOf(tuple("1a", "2a", "2b"), tuple("1a","2a","2c"))
+        ),
+        Params(
+            name = "2x3 match",
+            inputs = listOf(ti12 to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                ti13 to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
+            prefixSize = 1,
+            expected = listOf(tuple("1a", "2b", "2d"), tuple("1a","2b","2e"), tuple("1a","2b","2f"),
+                tuple("1a", "2c", "2d"), tuple("1a","2c","2e"), tuple("1a","2c","2f"))
+        ),
+        Params(
+            name = "2x1 + 1x2 match",
+            inputs = listOf(
+                listOf(tuple("1a","2b"), tuple("1a","2c"), tuple("1b","2x")) to BagAccessPath.build(listOf("a1"), listOf("a2"), listOf()),
+                listOf(tuple("1a","2g"), tuple("1b","2y"), tuple("1b","2z")) to BagAccessPath.build(listOf("a1"), listOf("b2"), listOf())),
+            prefixSize = 1,
+            expected = listOf(tuple("1a", "2b", "2g"), tuple("1a","2c","2g"),
+                tuple("1b", "2x", "2y"), tuple("1b","2x","2z"))
+        )
     )
 
     @JvmStatic

@@ -3,11 +3,6 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
 import org.apache.accumulo.core.data.ArrayByteSequence
-import org.apache.accumulo.core.data.Key
-import org.apache.accumulo.core.data.Value
-import org.apache.accumulo.core.iterators.SortedKeyValueIterator
-import org.apache.hadoop.io.Text
-import java.io.IOException
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
@@ -208,17 +203,23 @@ sealed class BagAccessPath(
   ) : BagAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap), sortedUpto, duplicates)
 
   override fun toString(): String{
-    var s = "BagAccessPath(dap=$dap, lap=$lap, cap=$cap"
+    val s = StringBuilder("BagAccessPath(dap=$dap, lap=$lap")
+    if (cap.isNotEmpty())
+      s.append(", cap=$cap")
     if (sortedUpto != dap.size+lap.size)
-      s += ", sortedUpto=$sortedUpto"
+      s.append(", sortedUpto=$sortedUpto")
     if (duplicates)
-      s += ", dups"
-    return s + ")"
+      s.append(", dups")
+    s.append(")")
+    return s.toString()
   }
 
 
 }
 
+//operator fun StringBuilder.plusAssign(o: Any?) {
+//  this.append(o)
+//}
 
 
 
@@ -533,6 +534,16 @@ fun readRow(
     list.add(iter.next())
   } while (iter.hasNext() && rowComparator.compare(first, iter.peek()) == 0)
   return list
+}
+
+class OneRowIterator(val rowComparator: Comparator<Tuple>, private val iter: PeekingIterator<Tuple>) : PeekingIterator<Tuple> by iter {
+  val firstTuple: Tuple? = if (iter.hasNext()) iter.peek() else null
+
+  override fun next(): Tuple = if (hasNext()) iter.next() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
+
+  override fun hasNext(): Boolean = iter.hasNext() && rowComparator.compare(firstTuple, iter.peek()) == 0
+
+  override fun peek(): Tuple = if (hasNext()) iter.peek() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
 }
 
 
