@@ -49,7 +49,7 @@ class MergerTest(
       if (inputs.isEmpty())
         return BagAccessPath.build(setOf(), setOf(), setOf(), 0, false)
       val input0 = inputs[0]
-      assertTrue("Prefix $prefixSize exceeds key attributes ${input0.keyAttributes}", prefixSize <= input0.keyAttributes.size)
+      assertTrue("Prefix $prefixSize exceeds key attributes ${input0.keyNames}", prefixSize <= input0.keyNames.size)
       ensureSamePrefix(inputs, prefixSize)
       ensureSortedUpto(inputs, prefixSize)
       ALL_ACTIVE = BooleanArray(inputs.size, {true})

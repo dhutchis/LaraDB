@@ -8,18 +8,73 @@ import java.util.function.Function
 import java.util.regex.Pattern
 import kotlin.comparisons.nullsLast
 
+/**
+ * `>= 0` means fixed width.
+ * `-1` means variable width.
+ */
+typealias Width = Int
 
+/** Attribute/column position */
+typealias Position = Int
 
+/**
+ * Interpretation for missing values.
+ * Maybe include it in ByteArray format too?
+ * null means no default value.
+ */
+typealias Default = ArrayByteSequence
+
+/*
+These interfaces are capability interfaces.
+They do not enforce any error checking. That is left to implementing classes.
+ */
+
+interface NameSchema {
+  val names: List<Name>
+}
+interface WidthSchema {
+  val widths: List<Width>
+//    require(widths.size == names.size) {"widths and names sizes differ: $widths ; $names"}
+//    require(widths.all { it == -1 || it >= 0 }) {"There is a bad width: $widths"}
+}
+interface DefaultSchema {
+  val defaults: List<Default>
+//    require(defaults.size == names.size) {"defaults and names sizes differ: $defaults ; $names"}
+}
+interface KeySchema : NameSchema {
+  val keyNames: List<Name>
+  val valNames: List<Name>
+}
+interface SortedSchema /*: KeySchema*/ {
+  /** An int such that all [KeySchema.keyNames] whose index is less than sortedUpto are sorted.
+   * 0 means nothing is sorted. Valid up to and including [KeySchema.keyNames].size. */
+  val sortedUpto: Int
+  /** Whether there are multiple tuples with the same key attribute values. */
+  val duplicates: Boolean
+}
+interface APSchema : KeySchema {
+  /** distributed access path; the first portion of [keyNames] */
+  val dap: List<Name>
+  /** local access path; the second portion of [keyNames] */
+  val lap: List<Name>
+  /**
+   * column access path; defines the [valNames]
+   *
+   * A list of the attribute groups. Each group is potentially stored in a different file.
+   * The ordering of attributes within groups is lexicographic.
+   */
+  val cap: List<ColumnFamily>
+}
 
 sealed class RelationSchema(
-    private val attributes: ImmutableList<Name>
-): List<Name> by attributes  {
+    final override val names: ImmutableList<Name>
+): List<Name> by names, NameSchema {
   init {
     // check for duplicate names
-    val names = attributes.toSet()
-    require(names.size == attributes.size) {"There is a duplicate attribute name: $attributes"}
+    val set = names.toSet()
+    require(set.size == this.names.size) {"There is a duplicate attribute name: ${this.names}"}
     // check for invalid names
-    names.forEach { checkName(it) }
+    set.forEach { checkName(it) }
   }
 
   companion object {
@@ -27,34 +82,33 @@ sealed class RelationSchema(
     val VALID_NAME_REGEX = "^[a-zA-Z_]\\w*$"
     /** The regular expression matcher for [.VALID_NAME_REGEX].  */
     private val VALID_NAME_PATTERN = Pattern.compile(VALID_NAME_REGEX)
-
     /**
      * Validate a potential column name for use in a Schema. Valid names are given by [.VALID_NAME_REGEX].
      * @param name the candidate column name.
      * @return passes through the argument name
      * @throws IllegalArgumentException if the name does not match the regex [.VALID_NAME_REGEX].
      */
-    private fun checkName(name: String): String {
+    fun checkName(name: String): String {
       require(VALID_NAME_PATTERN.matcher(name).matches()) {"supplied column name $name does not match the valid name regex $VALID_NAME_REGEX"}
       return name
     }
 
-    fun build(attrs: Collection<Name>): RelationSchema = RelationSchemaImpl(attrs)
+    fun build(attrs: List<Name>): RelationSchema = RelationSchemaImpl(attrs)
   }
 
 //  /**
 //   * Return true if the two schema are "compatible": they have the same size and column types; column names are ignored.
 //   */
 //  fun compatible(a2: Attributes): Boolean {
-//    return attributes.size == a2.attributes.size &&
-//        attributes.zip(a2.attributes).all { it.first.encoder == it.second.encoder }
+//    return names.size == a2.names.size &&
+//        names.zip(a2.names).all { it.first.encoder == it.second.encoder }
 //  }
 
 
   // todo: test this to see if it improves performance
 ////  @Transient
 //  private val nameToIndex: Map<Name, Int> by lazy {
-//    ImmutableMap.copyOf(attributes.mapIndexed { i, attribute -> attribute to i }.toMap())
+//    ImmutableMap.copyOf(names.mapIndexed { i, attribute -> attribute to i }.toMap())
 //  }
 
 //  /**
@@ -65,45 +119,80 @@ sealed class RelationSchema(
 //      this.indexOf(name)
 //      nameToIndex[name] ?: throw NoSuchElementException("No column named $name found; names are ${nameToIndex.keys}")
 
-  /**
-   * Return a subset of the current schema.
-   * @param idxs indices to be selected.
-   */
+//  /**
+//   * Return a subset of the current schema.
+//   * @param idxs indices to be selected.
+//   */
 //  open fun getSubAttribtues(idxs: IntArray): RelationSchema =
-//      RelationSchemaImpl(attributes.slice(idxs.asIterable()))
+//      RelationSchemaImpl(names.slice(idxs.asIterable()))
 
 
 //  operator fun contains(name: Name): Boolean = name in nameToIndex
 
   // consider overriding +, -
 
+  override fun toString(): String = "RelationSchema$names"
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as RelationSchema
+
+    if (names != other.names) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int{
+    return names.hashCode()
+  }
 
 
-  override fun toString(): String = "RelationSchema${attributes}"
-
-  private class RelationSchemaImpl(attrs: Collection<Name>)
+  private class RelationSchemaImpl(attrs: List<Name>)
   : RelationSchema(ImmutableList.copyOf(attrs))
 }
 
 
 
 sealed class Schema(
-    val keyAttributes: ImmutableList<Name>,
-    val valAttribtues: ImmutableList<Name>
-) : RelationSchema(ImmutableList.builder<Name>().addAll(keyAttributes).addAll(valAttribtues).build()) {
+    final override val keyNames: ImmutableList<Name>,
+    final override val valNames: ImmutableList<Name>
+) : RelationSchema(
+    ImmutableList.builder<Name>().addAll(keyNames).addAll(valNames).build()
+), KeySchema {
 
   companion object {
-    fun build( kas: Collection<Name>,
-               vas: Collection<Name>): Schema = SchemaImpl(kas, vas)
+    fun build( kas: List<Name>,
+               vas: List<Name>): Schema = SchemaImpl(kas, vas)
   }
 
   private class SchemaImpl(
-      kas: Collection<Name>,
-      vas: Collection<Name>
+      kas: List<Name>,
+      vas: List<Name>
   ) : Schema(ImmutableList.copyOf(kas), ImmutableList.copyOf(vas))
 
   override fun toString(): String{
-    return "Schema(keyAttributes=$keyAttributes, valAttribtues=$valAttribtues)"
+    return "Schema(keyNames=$keyNames, valNames=$valNames)"
+  }
+
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+    if (!super.equals(other)) return false
+
+    other as Schema
+
+    if (keyNames != other.keyNames) return false
+    if (valNames != other.valNames) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int{
+    var result = super.hashCode()
+    result = 31 * result + keyNames.hashCode()
+    result = 31 * result + valNames.hashCode()
+    return result
   }
 
 
@@ -112,16 +201,9 @@ sealed class Schema(
 
 
 sealed class AccessPath(
-    /** distributed access path */
-    val dap: ImmutableList<Name>,
-    /** local access path */
-    val lap: ImmutableList<Name>,
-    /**
-     * column access path
-     * A list of the attribute groups. Each group is potentially stored in a different file.
-     * The ordering of attributes within groups is lexicographic.
-     */
-    val cap: ImmutableList<ColumnFamily>
+    final override val dap: ImmutableList<Name>,
+    final override val lap: ImmutableList<Name>,
+    final override val cap: ImmutableList<ColumnFamily>
 ) : Schema(
     ImmutableList.builder<Name>()
         .addAll(dap)
@@ -130,9 +212,9 @@ sealed class AccessPath(
     ImmutableList.builder<Name>()
         .addAll(cap.flatMap { it.attributes })
         .build()
-) {
+), APSchema {
   init {
-    require(cap.sumBy { it.attributes.count() } == valAttribtues.size) {
+    require(cap.sumBy { it.attributes.count() } == valNames.size) {
       "one of the attributes was mentioned twice in two separate column families $cap"
     }
   }
@@ -150,7 +232,32 @@ sealed class AccessPath(
   ) : AccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), ImmutableList.copyOf(cap))
 
   override fun toString(): String{
-    return "AccessPath(dap=$dap, lap=$lap, cap=$cap)"
+    var s = "AccessPath(dap=$dap, lap=$lap"
+    if (cap.isNotEmpty())
+      s += ", cap=$cap"
+    return s+")"
+  }
+
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+    if (!super.equals(other)) return false
+
+    other as AccessPath
+
+    if (dap != other.dap) return false
+    if (lap != other.lap) return false
+    if (cap != other.cap) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int{
+    var result = super.hashCode()
+    result = 31 * result + dap.hashCode()
+    result = 31 * result + lap.hashCode()
+    result = 31 * result + cap.hashCode()
+    return result
   }
 
 
@@ -161,24 +268,17 @@ sealed class AccessPath(
 
 // need to subclass AccessPath because this tells us how to interpret each part of the Key/Value
 sealed class BagAccessPath(
-    /** distributed access path */
+    /** @see [APSchema.dap] */
     dap: ImmutableList<Name>,
-    /** local access path */
+    /** @see [APSchema.lap] */
     lap: ImmutableList<Name>,
-    /**
-     * column access path
-     * A list of the attribute groups. Each group is potentially stored in a different file.
-     * The ordering of attributes within groups is lexicographic.
-     */
+    /** @see [APSchema.cap] */
     cap: ImmutableList<ColumnFamily>,
-    /** An int such that all [keyAttributes] whose index is less than sortedUpto are sorted.
-     * 0 means nothing is sorted. Valid up to and including [dap].size+[lap].size. */
-    val sortedUpto: Int,
-    /** Whether there are multiple tuples with the same key attribute values. */
-    val duplicates: Boolean
-) : AccessPath(dap, lap, cap) {
+    final override val sortedUpto: Int,
+    final override val duplicates: Boolean
+) : AccessPath(dap, lap, cap), SortedSchema {
   init {
-    Preconditions.checkPositionIndex(sortedUpto, dap.size+lap.size, "sortedUpto is an int such that all keyAttributes $keyAttributes " +
+    Preconditions.checkPositionIndex(sortedUpto, dap.size+lap.size, "sortedUpto is an int such that all keyNames $keyNames " +
         "whose index is less than sortedUpto are sorted. 0 means nothing is sorted. Valid up to and including ${dap.size+lap.size}. Given: $sortedUpto")
   }
 
@@ -209,6 +309,26 @@ sealed class BagAccessPath(
       s.append(", dups")
     s.append(")")
     return s.toString()
+  }
+
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+    if (!super.equals(other)) return false
+
+    other as BagAccessPath
+
+    if (sortedUpto != other.sortedUpto) return false
+    if (duplicates != other.duplicates) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int{
+    var result = super.hashCode()
+    result = 31 * result + sortedUpto
+    result = 31 * result + duplicates.hashCode()
+    return result
   }
 
 
@@ -320,7 +440,7 @@ fun Iterator<Tuple>.ext(f: ExtFun): Iterator<Tuple> {
 
 data class OrderByKeyKeyComparator(val schema: Schema) : Comparator<Tuple> {
   override fun compare(t1: Tuple, t2: Tuple): Int {
-    schema.keyAttributes.forEachIndexed { i, n ->
+    schema.keyNames.forEachIndexed { i, n ->
       val b1 = t1[i]
       val b2 = t2[i]
       val c = b1.compareTo(b2)
@@ -489,16 +609,16 @@ class Merger(
 }
 
 fun commonKeyNames(schemas: List<Schema>): Set<Name> =
-    schemas.map { it.keyAttributes.toSet() }.reduce { s1, s2 -> s1.intersect(s2) }
+    schemas.map { it.keyNames.toSet() }.reduce { s1, s2 -> s1.intersect(s2) }
 
 fun ensureKeyNamesSortedAtPrefix(schemas: List<BagAccessPath>, names: Set<Name>): List<Name> {
   if (schemas.isEmpty()) return names.toList()
   val bag1 = schemas[0]
-  val nl: List<Name> = bag1.keyAttributes.subList(0, names.size)
+  val nl: List<Name> = bag1.keyNames.subList(0, names.size)
   require(nl.toSet() == names) {"names $names must be in the prefix of each iterator, but the first iterator has a prefix of $nl"}
   schemas.forEach {
-    require(it.keyAttributes.subList(0, names.size) == nl) {"all iterators must have the same prefix key attributes; expected $nl but actual ${it.keyAttributes}"}
-    require(it.sortedUpto >= names.size) {"all iterators must be sorted at least up to the names $names; this one is sorted on the first ${it.sortedUpto} elements of ${it.keyAttributes}"}
+    require(it.keyNames.subList(0, names.size) == nl) {"all iterators must have the same prefix key attributes; expected $nl but actual ${it.keyNames}"}
+    require(it.sortedUpto >= names.size) {"all iterators must be sorted at least up to the names $names; this one is sorted on the first ${it.sortedUpto} elements of ${it.keyNames}"}
   }
   return nl
 }
@@ -563,15 +683,15 @@ fun mergeJoin(
     multiplyOpValSchema: RelationSchema,
     inputs: List<Pair<Schema, Iterator<Tuple>>>
 ): Pair<Schema, Iterator<Tuple>> {
-  // new keyAttributes = union of existing keyAttributes
+  // new keyNames = union of existing keyNames
   // equi-join on matching key attributes
   val schemas: List<Schema> = inputs.map { it.first }
-  val schemaNames: List<List<Triple<Int, Int, String>>> = schemas.mapIndexed { sidx, schema -> schema.keyAttributes.mapIndexed { idx, attr -> Triple(sidx, idx, attr) } }
+  val schemaNames: List<List<Triple<Int, Int, String>>> = schemas.mapIndexed { sidx, schema -> schema.keyNames.mapIndexed { idx, attr -> Triple(sidx, idx, attr) } }
   // todo: need helper method to make sure that attributes with the same name are compatible (same type, etc.)
   val commonNames: List<Triple<Int, Int, String>> = schemaNames.reduce { pa, pb -> pa.filter { ita -> pb.any { it.third == ita.third } } }
   val resultKeyNames: List<Triple<Int, Int, String>> = schemaNames.fold(commonNames) { acc, names -> acc + (names.filterNot { itn -> acc.any { it.third == itn.third } })}
-  val resultKeyAttributes: List<Name> = resultKeyNames.map { schemas[it.first].keyAttributes[it.second] }
-  val resultSchema: Schema = Schema.build(resultKeyAttributes, multiplyOpValSchema)
+  val resultkeyNames: List<Name> = resultKeyNames.map { schemas[it.first].keyNames[it.second] }
+  val resultSchema: Schema = Schema.build(resultkeyNames, multiplyOpValSchema)
 
   // assert that the input Iterator<Tuple>s are sorted in the right way...
 
