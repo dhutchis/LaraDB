@@ -1,6 +1,5 @@
 package edu.washington.cs.laragraphulo.parfile
 
-import com.google.common.base.Preconditions
 import java.io.File
 import java.util.*
 
@@ -34,8 +33,8 @@ class ParallelFileMapper(
       if (!lockDirectory.exists())
         lockDirectory.mkdirs()
     } else
-      Preconditions.checkArgument(lockDirectory.isDirectory && lockDirectory.canRead(),
-          "Problem with lockDirectory $lockDirectory")
+      require(lockDirectory.isDirectory && lockDirectory.canRead()){
+          "Problem with lockDirectory $lockDirectory"}
 
     inputFiles.forEach { f ->
           if (inputFiles.any { it.name.equals(f.name) && it !== f })

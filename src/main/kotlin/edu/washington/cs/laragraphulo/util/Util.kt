@@ -54,10 +54,10 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
   /**
    * Split a D4M String into each component. Does nothing special with ranges, i.e. the ':' character.
    */
-  fun splitD4mString(str: String?): Array<String> {
+  fun splitD4mString(str: String): Array<String> {
     // maybe optimize away since this is a lower-level function
-    Preconditions.checkArgument(str != null && !str.isEmpty(), "%s must be length at least 1", str)
-    return str!!.substring(0, str.length - 1).split(Character.toString(str[str.length - 1]).toRegex()).toTypedArray()
+    require(str.isNotEmpty()) {"$str must be length at least 1"}
+    return str.substring(0, str.length - 1).split(Character.toString(str[str.length - 1]).toRegex()).toTypedArray()
   }
 
   /**
@@ -697,7 +697,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
   fun numD4mStr(s: String?): Int {
     if (s == null || s.isEmpty())
       return 0
-    Preconditions.checkArgument(!s.contains(":"), "Cannot count number of terms in a D4M String with a range: ", s)
+    require(!s.contains(":")) {"Cannot count number of terms in a D4M String with a range: $s"}
     var cnt = -1
     val sep = s[s.length - 1]
     var pos = -1
@@ -733,9 +733,9 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
         pre + normalizeEndRow(rold)!!, true)
   }
 
-  fun d4mStringContainsEmptyString(str: String?): Boolean {
-    Preconditions.checkArgument(str != null && !str.isEmpty(), "%s is not a D4M String", str)
-    if (str!!.length == 1)
+  fun d4mStringContainsEmptyString(str: String): Boolean {
+    require(str.isNotEmpty()) {"$str is not a D4M String"}
+    if (str.length == 1)
       return true
     val sep = Character.toString(str[str.length - 1])
     val sepsep = sep + sep

@@ -1,10 +1,6 @@
 package edu.washington.cs.laragraphulo.opt
 
-import com.google.common.base.Preconditions
-import com.google.common.collect.ClassToInstanceMap
-import com.google.common.collect.MutableClassToInstanceMap
 import java.util.*
-import kotlin.reflect.KProperty
 
 /** Thrown if Drools concludes contradictory facts */
 class Contradiction(msg : String, vararg objs: Any) : RuntimeException(msg+"\n\t"+objs.joinToString(separator = "\n\t"))
@@ -385,7 +381,7 @@ class Obj<R>(val obj: R): Op<R>() {
 //    fun objProps(): Set<Property<R>> = emptySet()
 
   override operator fun invoke(vararg argobs: Any): R {
-    Preconditions.checkArgument(argobs.isEmpty(), "No arguments expected to an Obj. Given ", argobs)
+    require(argobs.isEmpty()) {"No arguments expected to an Obj. Given $argobs"}
     return obj
   }
 

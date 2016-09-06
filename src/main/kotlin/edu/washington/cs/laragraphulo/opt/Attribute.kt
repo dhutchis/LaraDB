@@ -1,8 +1,6 @@
 package edu.washington.cs.laragraphulo.opt
 
-import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
-import com.google.common.collect.ImmutableSortedMap
 import edu.washington.cs.laragraphulo.LexicoderPlus
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import java.io.Serializable
@@ -31,7 +29,7 @@ data class Attribute<T>(
     val default: T
 ) : Serializable {
   init {
-    Preconditions.checkArgument(width == -1 || width > 0, "bad width")
+    require(width == -1 || width > 0) {"bad width $width"}
   }
 
   /** Compare Attributes based on their name. */
@@ -60,7 +58,7 @@ data class ColumnFamily internal constructor(
     val name: Name,
     val attributes: ImmutableList<Name>
 ) {
-  constructor(name:Name, attrs: Collection<Name>)
+  constructor(name:Name, attrs: List<Name>)
   : this(name, ImmutableList.copyOf(attrs))
 }
 

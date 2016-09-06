@@ -1,6 +1,5 @@
 package edu.washington.cs.laragraphulo.iter
 
-import com.google.common.base.Preconditions
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
@@ -82,7 +81,7 @@ class MergeJoin(
   private var processed = EMPTY_ITER
 
   init {
-    Preconditions.checkArgument(skvisWithSeekData.size > 0, "Need at least one skvi")
+    require(skvisWithSeekData.size > 0) {"Need at least one skvi"}
     skvis = Array(skvisWithSeekData.size, { skvisWithSeekData[it].first })
     seekData = Array(skvisWithSeekData.size, { skvisWithSeekData[it].second })
     findTop()

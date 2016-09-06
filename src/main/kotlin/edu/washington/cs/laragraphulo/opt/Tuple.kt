@@ -9,7 +9,7 @@ import java.util.regex.Pattern
 import kotlin.comparisons.nullsLast
 
 
-// I am leaning toward storing attribute data separately (a list/array of names, a separate one for types, etc.)
+
 
 sealed class RelationSchema(
     private val attributes: ImmutableList<Name>
@@ -17,7 +17,7 @@ sealed class RelationSchema(
   init {
     // check for duplicate names
     val names = attributes.toSet()
-    Preconditions.checkArgument(names.size == attributes.size, "There is a duplicate attribute name: ", attributes)
+    require(names.size == attributes.size) {"There is a duplicate attribute name: $attributes"}
     // check for invalid names
     names.forEach { checkName(it) }
   }
@@ -35,11 +35,7 @@ sealed class RelationSchema(
      * @throws IllegalArgumentException if the name does not match the regex [.VALID_NAME_REGEX].
      */
     private fun checkName(name: String): String {
-      Preconditions.checkArgument(
-          VALID_NAME_PATTERN.matcher(name).matches(),
-          "supplied column name %s does not match the valid name regex %s",
-          name,
-          VALID_NAME_REGEX)
+      require(VALID_NAME_PATTERN.matcher(name).matches()) {"supplied column name $name does not match the valid name regex $VALID_NAME_REGEX"}
       return name
     }
 
@@ -136,8 +132,9 @@ sealed class AccessPath(
         .build()
 ) {
   init {
-    Preconditions.checkArgument(cap.sumBy { it.attributes.count() } == valAttribtues.size,
-        "one of the attributes was mentioned twice in two separate column families", cap)
+    require(cap.sumBy { it.attributes.count() } == valAttribtues.size) {
+      "one of the attributes was mentioned twice in two separate column families $cap"
+    }
   }
 
   companion object {
@@ -264,7 +261,7 @@ open class Tuple(buffers: List<ArrayByteSequence>) : List<ArrayByteSequence> by 
 //}
 
 // consider renaming to ByteTuple for the immutable version
-class MutableByteTuple(
+class ByteTuple(
 //    val ap: AccessPath,
     /** The order of the buffers must match the order of the attributes in [ap] */
     private val buffers: List<ArrayByteSequence>
@@ -296,7 +293,7 @@ class MutableByteTuple(
     if (this === other) return true
     if (other?.javaClass != javaClass) return false
 
-    other as MutableByteTuple
+    other as ByteTuple
 
     if (buffers != other.buffers) return false
 
@@ -536,7 +533,8 @@ fun readRow(
   return list
 }
 
-class OneRowIterator(val rowComparator: Comparator<Tuple>, private val iter: PeekingIterator<Tuple>) : PeekingIterator<Tuple> by iter {
+class OneRowIterator(val rowComparator: Comparator<Tuple>,
+                     private val iter: PeekingIterator<Tuple>) : PeekingIterator<Tuple> by iter {
   val firstTuple: Tuple? = if (iter.hasNext()) iter.peek() else null
 
   override fun next(): Tuple = if (hasNext()) iter.next() else throw NoSuchElementException("the iterator is past the original row $firstTuple")

@@ -110,7 +110,7 @@ class MergerTest(
       for ((tupleRef, attrRef) in tupleReferences) {
         list += tuples[tupleRef][attrRef]
       }
-      Iterators.singletonIterator(MutableByteTuple(list))
+      Iterators.singletonIterator(ByteTuple(list))
     }
 
     override fun collide(inputs: List<PeekingIterator<Tuple>>, actives: BooleanArray): Iterator<Tuple> {
@@ -158,6 +158,8 @@ class MergerTest(
 
 
   companion object {
+//    private val log = LogManager.getLogger(MergerTest::class.java)
+
     fun <T> assertIteratorsEqual(i1: Iterator<T>, i2: Iterator<T>) {
       while (i1.hasNext()) {
         assertTrue("it2 $i2 ran out before it1 $i1", i2.hasNext())
@@ -169,7 +171,7 @@ class MergerTest(
     }
 
     fun tuple(vararg vals: String): Tuple =
-        MutableByteTuple(vals.map { ArrayByteSequence(it.toByteArray()) })
+        ByteTuple(vals.map { ArrayByteSequence(it.toByteArray()) })
 
     // todo - the code above does not do anything with string names in the schema
     val ti1 = listOf(tuple("1a", "2a"))

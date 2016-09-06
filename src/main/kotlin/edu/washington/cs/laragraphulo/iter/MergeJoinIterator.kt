@@ -1,6 +1,5 @@
 package edu.washington.cs.laragraphulo.iter
 
-import com.google.common.base.Preconditions
 import com.google.common.collect.Iterators
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
@@ -20,7 +19,7 @@ class MergeJoinIterator(
     vararg skvis: SortedKeyValueIterator<Key,Value>)
 : SortedKeyValueIterator<Key,Value> {
   init {
-    Preconditions.checkArgument(skvis.size > 0, "Need at least one skvi")
+    require(skvis.size > 0) {"Need at least one skvi"}
   }
 
   val skvis = skvis
