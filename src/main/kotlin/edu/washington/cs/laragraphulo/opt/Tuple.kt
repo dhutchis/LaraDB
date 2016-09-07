@@ -2,11 +2,15 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
-import org.apache.accumulo.core.data.ArrayByteSequence
+import org.apache.accumulo.core.data.*
+import org.apache.hadoop.io.WritableComparator
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
+import kotlin.comparisons.compareBy
 import kotlin.comparisons.nullsLast
+
+typealias KeyValue = Pair<Key, Value>
 
 /**
  * `>= 0` means fixed width.
@@ -653,16 +657,135 @@ fun readRow(
   return list
 }
 
-class OneRowIterator(val rowComparator: Comparator<Tuple>,
-                     private val iter: PeekingIterator<Tuple>) : PeekingIterator<Tuple> by iter {
-  val firstTuple: Tuple? = if (iter.hasNext()) iter.peek() else null
+class OneRowIterator<T>(val rowComparator: Comparator<T>,
+                     private val iter: PeekingIterator<T>) : PeekingIterator<T> by iter {
+  val firstTuple: T? = if (iter.hasNext()) iter.peek() else null
 
-  override fun next(): Tuple = if (hasNext()) iter.next() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
+  override fun next(): T = if (hasNext()) iter.next() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
 
   override fun hasNext(): Boolean = iter.hasNext() && rowComparator.compare(firstTuple, iter.peek()) == 0
 
-  override fun peek(): Tuple = if (hasNext()) iter.peek() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
+  override fun peek(): T = if (hasNext()) iter.peek() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
 }
+
+class CompareKeyValueUptoColumnQualifierPrefix(val cqPrefix: Int): Comparator<Key> {
+  override fun compare(o1: Key, o2: Key): Int {
+    val c = o1.compareTo(o2, PartialKey.ROW_COLFAM)
+    if (c != 0) return c
+
+    val cq1 = o1.columnQualifierData
+    val cq2 = o2.columnQualifierData
+    return WritableComparator.compareBytes(
+        cq1.backingArray, cq1.offset(), Math.min(cq1.length(), cqPrefix),
+        cq2.backingArray, cq2.offset(), Math.min(cq2.length(), cqPrefix))
+  }
+}
+
+class KeyValueToTuple(
+    private val kvIter: PeekingIterator<KeyValue>,
+    val apSchema: APSchema,
+    val widthSchema: WidthSchema,
+    val defaultSchema: DefaultSchema
+): Iterator<Tuple> {
+  init {
+    require(widthSchema.widths.size >= apSchema.dap.size + apSchema.lap.size) {"bad widthSchema $widthSchema for schema $apSchema"}
+    if (widthSchema.widths.any() { it == -1 })
+      throw UnsupportedOperationException("not supporting variable-length key attributes yet")
+  }
+
+  val keyComparator =
+      compareBy<KeyValue,Key>(
+          CompareKeyValueUptoColumnQualifierPrefix(
+              widthSchema.widths.subList(apSchema.dap.size, apSchema.dap.size+apSchema.lap.size).map {
+                if (it == -1) throw UnsupportedOperationException("not supporting variable-length key attributes yet"); it }.sum()
+          )) { it.first }
+
+  override fun hasNext(): Boolean = kvIter.hasNext()
+
+  override fun next(): Tuple {
+    // the loop only repeats in the event of an error
+    while(hasNext()) {
+      val thisKeyIter = OneRowIterator(keyComparator, kvIter)
+      val firstKV = thisKeyIter.next()
+      val list = ArrayList<ArrayByteSequence>(apSchema.names.size)
+
+      /** @return the number of bytes remaining in bs that were not read */
+      fun addToList(bs: ByteSequence, off: Int, len: Int): Int {
+        assert(bs.isBackedByArray)
+        var p = 0
+        for (i in off..off+len -1) {
+          val width = widthSchema.widths[i]
+          if (p + width > bs.length()) {
+            println("Warning: Dropping Tuple: bad key ${firstKV.first} for schema $apSchema and widths ${widthSchema.widths}")
+            while (thisKeyIter.hasNext()) thisKeyIter.next() // drain tuple
+            continue
+          }
+          list.add(ArrayByteSequence(bs.backingArray, bs.offset() + p, width))
+          p += width
+        }
+        return bs.length() - p
+      }
+
+      // fill the dap from the row
+      val row = firstKV.first.rowData
+      addToList(row, 0, apSchema.dap.size) // don't care about the bytes remaining after reading the row
+
+      // fill the lap from the cq
+      val cq = firstKV.first.columnQualifierData
+      val cqRemain = addToList(cq, apSchema.dap.size, apSchema.lap.size)
+
+      break
+    }
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /*
