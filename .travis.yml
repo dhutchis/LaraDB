@@ -1,11 +1,11 @@
 language: java
 
-before_install:
-  #- git clone -b 1.8 --single-branch https://github.com/apache/accumulo.git accumulo
-  - wget https://github.com/apache/accumulo/archive/1.8.zip
-  - unzip 1.8.zip
-  - cd accumulo-1.8
-  #- test -f "$HOME/.mavenrc" && echo "Contents of ~/.mavenrc:" && cat $HOME/.mavenrc || echo "Does not exist: ~/.mavenrc"
-  - echo "MAVEN_OPTS='-Xmx1g -XX:MaxPermSize=512m'" > ~/.mavenrc
-  - mvn clean install -P assemble -P docs -DskipTests -Dfindbugs.skip -Drat.skip -Dcheckstyle.skip -Dhadoop.version=2.7.2
-  - cd ..
+#before_install:
+#  #- git clone -b 1.8 --single-branch https://github.com/apache/accumulo.git accumulo
+#  - wget https://github.com/apache/accumulo/archive/1.8.zip
+#  - unzip 1.8.zip
+#  - cd accumulo-1.8
+#  #- test -f "$HOME/.mavenrc" && echo "Contents of ~/.mavenrc:" && cat $HOME/.mavenrc || echo "Does not exist: ~/.mavenrc"
+#  - echo "MAVEN_OPTS='-Xmx1g -XX:MaxPermSize=512m'" > ~/.mavenrc
+#  - mvn clean install -P assemble -P docs -DskipTests -Dfindbugs.skip -Drat.skip -Dcheckstyle.skip -Dhadoop.version=2.7.2
+#  - cd ..
