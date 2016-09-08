@@ -10,6 +10,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import java.util.*
+import edu.washington.cs.laragraphulo.util.TestUtil.checkSorted
 
 /**
  *
@@ -25,11 +26,11 @@ class MergerTest(
       /**
        *
        */
-      val inputs: List< Pair<Iterable<Tuple>, ImmutableBagAccessPath> >,
+      val inputs: List< Pair<List<Tuple>, ImmutableBagAccessPath> >,
       val prefixSize: Int,
 //      val baps: List<ImmutableBagAccessPath>,
       val emitNoMatches: Set<Int> = setOf(),
-      val expected: Iterable<Tuple>
+      val expected: List<Tuple>
   ) {
     override fun toString(): String = name
   }
@@ -121,7 +122,7 @@ class MergerTest(
       if (lastTuples != null)
         inputs.zip(lastTuples!!).forEach {
           assertTrue("iterators out of order; last value was ${it.second}; this value is ${it.first.peek()}",
-              TupleComparatorOnKeys.compare(it.first.peek(), it.second) >= 0)
+              TupleComparatorByKeys.compare(it.first.peek(), it.second) >= 0)
         }
       lastTuples = inputs.map { it.peek() }
 
@@ -140,9 +141,7 @@ class MergerTest(
   fun test() {
     // check that the inputs are sorted properly
     params.inputs.forEach {
-      val sortedList = ArrayList(it.first.toList())
-      Collections.sort(sortedList, TupleComparatorByKeyPrefix(it.second.sortedUpto))
-      assertIteratorsEqual(sortedList.iterator(), it.first.iterator())
+      it.first.checkSorted(TupleComparatorByKeyPrefix(it.second.sortedUpto))
     }
 
     val collider = AssertingMergeCollider(params.prefixSize)

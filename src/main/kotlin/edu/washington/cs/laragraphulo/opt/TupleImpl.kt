@@ -3,14 +3,14 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
 import org.apache.accumulo.core.data.*
-import org.apache.hadoop.io.WritableComparator
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
 import kotlin.comparisons.compareBy
-import kotlin.comparisons.nullsLast
 
-data class KeyValue(val key: Key, val value: Value)
+data class KeyValue(val key: Key, val value: Value) {
+  constructor(kv: Pair<Key,Value>): this(kv.first, kv.second)
+}
 
 /**
  * `>= 0` means fixed width.
@@ -71,7 +71,7 @@ interface APSchema : KeySchema {
   val dapRange: IntRange
       get() = 0..dapLen-1
   val lapRange: IntRange
-      get() = dapLen..lap.size-1
+      get() = dapLen..dapLen+lap.size-1
 //  val lapOff: Int
 //      get() = dapLen
 //  val lapLen: Int
@@ -196,13 +196,13 @@ sealed class ImmutableAccessPath(
 //  }
 
   companion object {
-    fun of( dap: Collection<Name>,
-            lap: Collection<Name>): ImmutableAccessPath = ImmutableAccessPathImpl(dap,lap)
+    fun of( dap: List<Name>,
+            lap: List<Name>): ImmutableAccessPath = ImmutableAccessPathImpl(dap,lap)
   }
 
   private class ImmutableAccessPathImpl(
-      dap: Collection<Name>,
-      lap: Collection<Name>
+      dap: List<Name>,
+      lap: List<Name>
   ) : ImmutableAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap))
 
   override fun toString(): String = "ImmutableAccessPath(dap=$dap, lap=$lap)"
@@ -317,6 +317,8 @@ interface Tuple {
   val family: ArrayByteSequence
   /** At a minimum, this should contain a mapping from the empty string to a FullValue. */
   val vals: ListMultimap<ArrayByteSequence, FullValue>
+
+  fun toKeyValues(apSchema: APSchema): List<KeyValue>
 }
 
 class TupleImpl(
@@ -333,7 +335,7 @@ class TupleImpl(
    * Convert this Tuple to a list of KeyValues.
    * To guarantee sortedness, either change the implementation here or use Collections.sort afterward, with a key comparator
    */
-  fun toKeyValues(apSchema: APSchema): List<KeyValue> {
+  override fun toKeyValues(apSchema: APSchema): List<KeyValue> {
 
     /** Only when [IntRange.step] is 0 */
     fun IntRange.size(): Int = this.endInclusive - this.first + 1
@@ -370,7 +372,7 @@ class TupleImpl(
     for ((valName, fullValueList) in vals.asMap().entries) {
       val cqArr = ByteArray(lapLen + valName.length())
       System.arraycopy(lapArr, lapOff, cqArr, 0, lapLen)
-      System.arraycopy(valName.backingArray, valName.offset(), lapArr, lapLen, valName.length())
+      System.arraycopy(valName.backingArray, valName.offset(), cqArr, lapLen, valName.length())
 
       for ((valueArr, visibility, timestamp) in fullValueList) {
         val key =
@@ -427,18 +429,103 @@ fun ArrayByteSequence.isContiguousArray() = this.offset() == 0 && this.length() 
 object EMPTY : ArrayByteSequence(ByteArray(0),0,0)
 
 
-object TupleComparatorOnKeys : Comparator<Tuple> {
-  /** Comparison on all attributes */
-  override fun compare(o1: Tuple, o2: Tuple): Int {
-    val i1 = o1.keys.iterator()
-    val i2 = o2.keys.iterator()
-    while (i1.hasNext() && i2.hasNext()) {
-      val c = i1.next().compareTo(i2.next())
-      if (c != 0) return c
+
+
+
+class KeyValueToTuple(
+    private val kvIter: PeekingIterator<KeyValue>,
+    val apSchema: APSchema,
+    val widthSchema: WidthSchema
+): Iterator<Tuple> {
+  init {
+    require(widthSchema.widths.size >= apSchema.keyNames.size) {"bad widthSchema $widthSchema for schema $apSchema"}
+  }
+
+  val keyComparator = compareBy<KeyValue,Key>(
+      KeyValueComparatorToQualifierPrefix(
+          widthSchema.widths.subList(apSchema.dapLen, apSchema.dapLen+apSchema.lap.size).map {
+            if (it == -1) throw UnsupportedOperationException("not supporting variable-length key attributes yet"); it }.sum()
+      )) { it.key }
+
+
+  private lateinit var rowIter: OneRowIterator<KeyValue>
+  private lateinit var keyListBuilt: List<ArrayByteSequence>
+  private var valNamePos: Int = -1
+  private lateinit var family: ArrayByteSequence
+
+  private fun readKeysFromTop() {
+    while(kvIter.hasNext()) {
+      rowIter = OneRowIterator(keyComparator, kvIter)
+      val keyList = ImmutableList.builder<ArrayByteSequence>()
+      val firstKV = rowIter.peek()
+
+      /** @return the position of the first byte not read, or -1 if this is a bad tuple */
+      fun addToList(bs: ByteSequence, off: Int, len: Int, allowVariableLast: Boolean): Int {
+        assert(bs.isBackedByArray)
+        var p = 0
+        for (i in off..off + len - 1) {
+          var width = widthSchema.widths[i]
+          require(width != -1 || (allowVariableLast && i == off + len - 1)) { "Variable width not allowed here. Widths are ${widthSchema.widths}" }
+          if (width == -1) {
+            width = bs.length() - p
+          } else if (p + width > bs.length()) {
+            println("Warning: Dropping TupleImpl: bad key ${firstKV.key} for schema $apSchema and widths ${widthSchema.widths}")
+            while (rowIter.hasNext()) rowIter.next() // drain tuple
+            return -1
+          }
+          keyList.add(ArrayByteSequence(bs.backingArray, bs.offset() + p, width))
+          p += width
+        }
+        return p
+      }
+
+      // fill the dap from the row
+      val row = firstKV.key.rowData
+      val tmp = addToList(row, 0, apSchema.dap.size, true) // don't care about the bytes remaining after reading the row
+      if (tmp == -1) continue
+
+      // fill the lap from the cq
+      val cqFirst = firstKV.key.columnQualifierData
+      valNamePos = addToList(cqFirst, apSchema.dapLen, apSchema.lap.size, false)
+      if (valNamePos == -1) continue
+
+      assert(firstKV.key.columnFamilyData is ArrayByteSequence)
+      family = firstKV.key.columnFamilyData as ArrayByteSequence
+
+      keyListBuilt = keyList.build()
+      break
     }
-    return o1.keys.size - o2.keys.size
+  }
+
+  override fun hasNext(): Boolean {
+    if (valNamePos == -1)
+      readKeysFromTop()
+    return kvIter.hasNext()
+  }
+
+  override fun next(): Tuple {
+    if (!hasNext())
+      throw NoSuchElementException()
+
+    // vals
+    val vals = ImmutableListMultimap.builder<ArrayByteSequence, FullValue>()
+    do {
+      val kv = rowIter.next()
+      val cq = kv.key.columnQualifierData
+      val valName = ArrayByteSequence(cq.backingArray, valNamePos, cq.length() - valNamePos)
+      val tmp = kv.value.get()
+      assert(kv.key.columnVisibilityData is ArrayByteSequence)
+      val valValue = FullValue(ArrayByteSequence(tmp, 0, tmp.size),
+          kv.key.columnVisibilityData as ArrayByteSequence, kv.key.timestamp)
+      vals.put(valName, valValue)
+    } while (rowIter.hasNext())
+
+    valNamePos = -1
+
+    return TupleImpl(keyListBuilt, family, vals.build())
   }
 }
+
 
 
 ////  override operator fun get(name: Name): ArrayByteSequence
@@ -516,23 +603,7 @@ fun Iterator<TupleImpl>.ext(f: ExtFun): Iterator<TupleImpl> {
 }
 
 
-// todo - consider caching these objects
-data class TupleComparatorByKeyPrefix(val size: Int) : Comparator<Tuple> {
-  override fun compare(o1: Tuple, o2: Tuple): Int {
-    require(o1.keys.size >= size && o2.keys.size >= size) {"Tuples do not have enough keys to compare by $size keys: $o1; $o2"}
-    for (i in 0..size-1) {
-      val c = o1.keys[i].compareTo(o2.keys[i])
-      if (c != 0) return c
-    }
-    return 0
-  }
-}
 
-data class TupleIteratorComparatorByPrefix(val size: Int) : Comparator<PeekingIterator<out Tuple>> {
-  val tcomp = nullsLast(TupleComparatorByKeyPrefix(size)) // nulls always last
-  override fun compare(o1: PeekingIterator<out Tuple>, o2: PeekingIterator<out Tuple>): Int =
-      tcomp.compare(if (o1.hasNext()) o1.peek() else null, if (o2.hasNext()) o2.peek() else null)
-}
 
 
 /** Todo: revise this for the SKVI version of seek that takes a range, column families, inclusive */
@@ -724,109 +795,8 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
   override fun peek(): T = if (hasNext()) iter.peek() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
 }
 
-class CompareKeyValueUptoColumnQualifierPrefix(val cqPrefix: Int): Comparator<Key> {
-  override fun compare(o1: Key, o2: Key): Int {
-    val c = o1.compareTo(o2, PartialKey.ROW_COLFAM)
-    if (c != 0) return c
-
-    val cq1 = o1.columnQualifierData
-    val cq2 = o2.columnQualifierData
-    return WritableComparator.compareBytes(
-        cq1.backingArray, cq1.offset(), Math.min(cq1.length(), cqPrefix),
-        cq2.backingArray, cq2.offset(), Math.min(cq2.length(), cqPrefix))
-  }
-}
-
-class KeyValueToTuple(
-    private val kvIter: PeekingIterator<KeyValue>,
-    val apSchema: APSchema,
-    val widthSchema: WidthSchema
-): Iterator<Tuple> {
-  init {
-    require(widthSchema.widths.size >= apSchema.keyNames.size) {"bad widthSchema $widthSchema for schema $apSchema"}
-  }
-
-  val keyComparator = compareBy<KeyValue,Key>(
-      CompareKeyValueUptoColumnQualifierPrefix(
-          widthSchema.widths.subList(apSchema.dapLen, apSchema.dapLen+apSchema.lap.size).map {
-            if (it == -1) throw UnsupportedOperationException("not supporting variable-length key attributes yet"); it }.sum()
-      )) { it.key }
 
 
-  private lateinit var rowIter: OneRowIterator<KeyValue>
-  private lateinit var keyList: ImmutableList.Builder<ArrayByteSequence>
-  private var valNamePos: Int = -1
-  private lateinit var family: ArrayByteSequence
-
-  private fun readKeysFromTop() {
-    while(kvIter.hasNext()) {
-      rowIter = OneRowIterator(keyComparator, kvIter)
-      keyList = ImmutableList.builder<ArrayByteSequence>()
-      val firstKV = rowIter.peek()
-
-      /** @return the position of the first byte not read, or -1 if this is a bad tuple */
-      fun addToList(bs: ByteSequence, off: Int, len: Int, allowVariableLast: Boolean): Int {
-        assert(bs.isBackedByArray)
-        var p = 0
-        for (i in off..off + len - 1) {
-          var width = widthSchema.widths[i]
-          require(width != -1 || (allowVariableLast && i == off + len - 1)) { "Variable width not allowed here. Widths are ${widthSchema.widths}" }
-          if (width == -1) {
-            width = bs.length() - p
-          } else if (p + width > bs.length()) {
-            println("Warning: Dropping TupleImpl: bad key ${firstKV.key} for schema $apSchema and widths ${widthSchema.widths}")
-            while (rowIter.hasNext()) rowIter.next() // drain tuple
-            return -1
-          }
-          keyList.add(ArrayByteSequence(bs.backingArray, bs.offset() + p, width))
-          p += width
-        }
-        return p
-      }
-
-      // fill the dap from the row
-      val row = firstKV.key.rowData
-      val tmp = addToList(row, 0, apSchema.dap.size, true) // don't care about the bytes remaining after reading the row
-      if (tmp == -1) continue
-
-      // fill the lap from the cq
-      val cqFirst = firstKV.key.columnQualifierData
-      valNamePos = addToList(cqFirst, apSchema.dapLen, apSchema.lap.size, false)
-      if (valNamePos == -1) continue
-
-      assert(firstKV.key.columnFamilyData is ArrayByteSequence)
-      family = firstKV.key.columnFamilyData as ArrayByteSequence
-    }
-  }
-
-  override fun hasNext(): Boolean {
-    if (valNamePos == -1)
-      readKeysFromTop()
-    return kvIter.hasNext()
-  }
-
-  override fun next(): Tuple {
-    if (!hasNext())
-      throw NoSuchElementException()
-
-    // vals
-    val vals = ImmutableListMultimap.builder<ArrayByteSequence, FullValue>()
-    do {
-      val kv = rowIter.next()
-      val cq = kv.key.columnQualifierData
-      val valName = ArrayByteSequence(cq.backingArray, valNamePos, cq.length() - valNamePos)
-      val tmp = kv.value.get()
-      assert(kv.key.columnVisibilityData is ArrayByteSequence)
-      val valValue = FullValue(ArrayByteSequence(tmp, 0, tmp.size),
-          kv.key.columnVisibilityData as ArrayByteSequence, kv.key.timestamp)
-      vals.put(valName, valValue)
-    } while (rowIter.hasNext())
-
-    valNamePos = -1
-
-    return TupleImpl(keyList.build(), family, vals.build())
-  }
-}
 
 
 

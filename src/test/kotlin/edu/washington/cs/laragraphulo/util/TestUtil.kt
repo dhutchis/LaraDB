@@ -22,12 +22,18 @@ import java.nio.charset.StandardCharsets
 import java.util.*
 
 
+
 /**
  * Helper methods for testing.
  */
 object TestUtil {
   private val log = LogManager.getLogger(TestUtil::class.java)
 
+  fun <T> List<T>.checkSorted(comparator: Comparator<T>, msg: String = "The list is not sorted") {
+    val sl = ArrayList(this)
+    Collections.sort(this, comparator)
+    Assert.assertEquals(msg, this, sl)
+  }
 
   fun createTestTable(conn: Connector, tableName: String) {
     if (conn.tableOperations().exists(tableName))

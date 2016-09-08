@@ -1,5 +1,8 @@
 language: java
 
+jdk:
+  - oraclejdk8
+
 #before_install:
 #  #- git clone -b 1.8 --single-branch https://github.com/apache/accumulo.git accumulo
 #  - wget https://github.com/apache/accumulo/archive/1.8.zip
