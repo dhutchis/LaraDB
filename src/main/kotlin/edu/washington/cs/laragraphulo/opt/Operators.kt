@@ -18,7 +18,7 @@ typealias CfName = Name
 
 
 class CSVScan(val url: Op<URL>,
-              val accessPath: Op<AccessPath>,
+              val accessPath: Op<ImmutableAccessPath>,
               /**
                * For each csv column, define an attribute name and a conversion from String to byte[]
                */
@@ -32,7 +32,7 @@ class CSVScan(val url: Op<URL>,
 }
 
 private class CSVScan_impl(val url: URL,
-                           val accessPath: AccessPath,
+                           val accessPath: ImmutableAccessPath,
                            /**
                             * For each csv column, define an attribute name and a conversion from String to byte[]
                             */
@@ -40,51 +40,51 @@ private class CSVScan_impl(val url: URL,
                            val delimiter: Char = ','
 )
 
-private fun doit(csvScan: CSVScan_impl): Iterator<Pair<Key, Value>> {
-//  val encodeds = Array<ByteArray?>(csvScan.accessPath.allAttributes.size, {null})
-  val parser = CSVParser(BufferedReader(InputStreamReader(csvScan.url.openStream())),
-      CSVFormat.newFormat(csvScan.delimiter))
-  val dap: List<Int> = csvScan.accessPath.dap.map { attr -> csvScan.csvSchema.indexOfFirst { attr == it.first } }
-  val lap: List<Int> = csvScan.accessPath.lap.map { attr -> csvScan.csvSchema.indexOfFirst { attr == it.first } }
-  val cap: List<Pair<CfName, List<Pair<Name,Int>>>> = csvScan.accessPath.cap.map { cfpair -> cfpair.name to cfpair.attributes.map { name -> name to csvScan.csvSchema.indexOfFirst { name == it.first } }}
-
-  return object: Iterator<Pair<Key, Value>> {
-
-    val csviter = parser.iterator()
-    var toiter: Iterator<Pair<Key, Value>> = Collections.emptyIterator()
-
-    override fun hasNext(): Boolean {
-      return toiter.hasNext() || csviter.hasNext()
-    }
-
-    override fun next(): Pair<Key, Value> {
-      if (!toiter.hasNext()) {
-        val coll: MutableList<Pair<Key, Value>> = ArrayList()
-        val csvrec = csviter.next()
-        // does not handle the flexible case
-        val bdap = Array<ByteArray>(dap.size, { pos -> csvScan.csvSchema[dap[pos]].second.encode(csvrec[dap[pos]]) })
-        val brow = concatArrays(*bdap)
-        val blap = Array<ByteArray>(lap.size, { pos -> csvScan.csvSchema[lap[pos]].second.encode(csvrec[lap[pos]]) })
-        val bcolqPrefix = concatArrays(*blap)
-        for ((cf, uap) in cap) {
-          val bcf = cf.toByteArray()
-          for ((name, idx) in uap) {
-            val bname = name.toByteArray() // can optimize this and cf by storing the ByteArray in the beginning instead of a string
-            val bval = csvScan.csvSchema[idx].second.encode(csvrec[idx])
-            val bcolq = concatArrays(bcolqPrefix, bname)
-            val key = Key(brow, bcf, bcolq, byteArrayOf(), Long.MAX_VALUE, false, false) // no copy
-            val Val = Value(bval, false)
-            coll.add(key to Val)
-          }
-        }
-        toiter = coll.iterator()
-      }
-      return toiter.next()
-    }
-
-  }
-
-}
+//private fun doit(csvScan: CSVScan_impl): Iterator<Pair<Key, Value>> {
+////  val encodeds = Array<ByteArray?>(csvScan.accessPath.allAttributes.size, {null})
+//  val parser = CSVParser(BufferedReader(InputStreamReader(csvScan.url.openStream())),
+//      CSVFormat.newFormat(csvScan.delimiter))
+//  val dap: List<Int> = csvScan.accessPath.dap.map { attr -> csvScan.csvSchema.indexOfFirst { attr == it.first } }
+//  val lap: List<Int> = csvScan.accessPath.lap.map { attr -> csvScan.csvSchema.indexOfFirst { attr == it.first } }
+//  val cap: List<Pair<CfName, List<Pair<Name,Int>>>> = csvScan.accessPath.cap.map { cfpair -> cfpair.name to cfpair.attributes.map { name -> name to csvScan.csvSchema.indexOfFirst { name == it.first } }}
+//
+//  return object: Iterator<Pair<Key, Value>> {
+//
+//    val csviter = parser.iterator()
+//    var toiter: Iterator<Pair<Key, Value>> = Collections.emptyIterator()
+//
+//    override fun hasNext(): Boolean {
+//      return toiter.hasNext() || csviter.hasNext()
+//    }
+//
+//    override fun next(): Pair<Key, Value> {
+//      if (!toiter.hasNext()) {
+//        val coll: MutableList<Pair<Key, Value>> = ArrayList()
+//        val csvrec = csviter.next()
+//        // does not handle the flexible case
+//        val bdap = Array<ByteArray>(dap.size, { pos -> csvScan.csvSchema[dap[pos]].second.encode(csvrec[dap[pos]]) })
+//        val brow = concatArrays(*bdap)
+//        val blap = Array<ByteArray>(lap.size, { pos -> csvScan.csvSchema[lap[pos]].second.encode(csvrec[lap[pos]]) })
+//        val bcolqPrefix = concatArrays(*blap)
+//        for ((cf, uap) in cap) {
+//          val bcf = cf.toByteArray()
+//          for ((name, idx) in uap) {
+//            val bname = name.toByteArray() // can optimize this and cf by storing the ByteArray in the beginning instead of a string
+//            val bval = csvScan.csvSchema[idx].second.encode(csvrec[idx])
+//            val bcolq = concatArrays(bcolqPrefix, bname)
+//            val key = Key(brow, bcf, bcolq, byteArrayOf(), Long.MAX_VALUE, false, false) // no copy
+//            val Val = Value(bval, false)
+//            coll.add(key to Val)
+//          }
+//        }
+//        toiter = coll.iterator()
+//      }
+//      return toiter.next()
+//    }
+//
+//  }
+//
+//}
 
 //inline fun <reified T> concatArrays(arrs: Array<Array<T>>): Array<T> {
 //  val size = arrs.sumBy { it.size }

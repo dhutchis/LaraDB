@@ -4,6 +4,7 @@ import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.Connector
 import org.apache.accumulo.core.client.MutationsRejectedException
 import org.apache.accumulo.core.client.TableNotFoundException
+import org.apache.accumulo.core.client.sample.SamplerConfiguration
 import org.apache.accumulo.core.conf.AccumuloConfiguration
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Mutation
@@ -167,6 +168,18 @@ object TestUtil {
     }
 
     override fun getAuthorizations(): Authorizations? {
+      return null
+    }
+
+    override fun cloneWithSamplingEnabled(): IteratorEnvironment {
+      throw UnsupportedOperationException("no sampling")
+    }
+
+    override fun isSamplingEnabled(): Boolean {
+      return false
+    }
+
+    override fun getSamplerConfiguration(): SamplerConfiguration? {
       return null
     }
   }

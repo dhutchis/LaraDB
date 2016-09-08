@@ -31,7 +31,7 @@ import java.io.Serializable
  *
  *
  */
-//class AccessPath(
+//class ImmutableAccessPath(
 //    val distrIndex: List<Attribute<*>>,
 //    val localIndex: List<Attribute<*>>,
 //    /**
