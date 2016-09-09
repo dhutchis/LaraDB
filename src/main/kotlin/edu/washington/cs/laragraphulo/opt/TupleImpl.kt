@@ -469,7 +469,7 @@ class KeyValueToTuple(
           if (width == -1) {
             width = bs.length() - p
           } else if (p + width > bs.length()) {
-            println("Warning: Dropping TupleImpl: bad key ${firstKV.key} for schema $apSchema and widths ${widthSchema.widths}")
+            println("Warning: Dropping Tuple: bad key ${firstKV.key} for schema $apSchema and widths ${widthSchema.widths}")
             while (rowIter.hasNext()) rowIter.next() // drain tuple
             return -1
           }
@@ -549,7 +549,7 @@ class KeyValueToTuple(
 ////    val ap: ImmutableAccessPath,
 //    /** The order of the buffers must match the order of the attributes in [ap] */
 //    private val buffers: List<ArrayByteSequence>
-//) : TupleImpl(buffers) {
+//) : Tuple(buffers) {
 ////  constructor(buffers: MutableCollection<ByteArray>): this(buffers.map { ArrayByteSequence(it) })
 //
 ////  init {
@@ -592,14 +592,14 @@ class KeyValueToTuple(
 //}
 
 
-typealias ExtFun = (TupleImpl) -> Iterator<TupleImpl>
+typealias ExtFun = (Tuple) -> Iterator<Tuple>
 
 /**
  * Assumes that the iterator is in the order specified by a correct ImmutableAccessPath
  */
 @Suppress("UNCHECKED_CAST")
-fun Iterator<TupleImpl>.ext(f: ExtFun): Iterator<TupleImpl> {
-  return Iterators.concat(Iterators.transform(this, f as (TupleImpl?) -> Iterator<TupleImpl>))
+fun Iterator<Tuple>.ext(f: ExtFun): Iterator<Tuple> {
+  return Iterators.concat(Iterators.transform(this, f as (Tuple?) -> Iterator<Tuple>))
 }
 
 
@@ -851,7 +851,7 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
 //  0. check that common keys are in the front of every iterator *in the same order*
 //  1. align tuples on common key (the Aligner)
 //  2. Collider: with the postcondition to advance all iterators past the common keys
-//     Returns an Iterator<TupleImpl> - the tuples must conform to the colliderSchema -
+//     Returns an Iterator<Tuple> - the tuples must conform to the colliderSchema -
 //  2a. If holding all in memory, put all in memory and pass the maps to
 // */
 //
@@ -863,8 +863,8 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
 //    /** The Schema of value attributes as returned by the multiplyOp.
 //     * The [multiplyOp] should not include key attributes. */
 //    multiplyOpValSchema: ImmutableKeySchema,
-//    inputs: List<Pair<Schema, Iterator<TupleImpl>>>
-//): Pair<Schema, Iterator<TupleImpl>> {
+//    inputs: List<Pair<Schema, Iterator<Tuple>>>
+//): Pair<Schema, Iterator<Tuple>> {
 //  // new keyNames = union of existing keyNames
 //  // equi-join on matching key attributes
 //  val schemas: List<Schema> = inputs.map { it.first }
@@ -875,9 +875,9 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
 //  val resultkeyNames: List<Name> = resultKeyNames.map { schemas[it.first].keyNames[it.second] }
 //  val resultSchema: Schema = Schema.build(resultkeyNames, multiplyOpValSchema)
 //
-//  // assert that the input Iterator<TupleImpl>s are sorted in the right way...
+//  // assert that the input Iterator<Tuple>s are sorted in the right way...
 //
-//  val comp = Comparator<TupleImpl> { o1, o2 ->
+//  val comp = Comparator<Tuple> { o1, o2 ->
 //    // tuples must match on all common key attributes
 //    commonNames.forEach {
 //      val b1 = o1[it.second]

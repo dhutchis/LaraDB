@@ -45,10 +45,7 @@ class KeyValueToTupleTest(
     }
     Assert.assertEquals("The tuples converted from the KeyValues are different than expected", params.expected, actual)
 
-    val recoveredKeyValues = ArrayList<KeyValue>(params.inputs.size)
-    for (keyValue in actual.flatMap { it.toKeyValues(params.apSchema) }) {
-      recoveredKeyValues.add(keyValue)
-    }
+    val recoveredKeyValues = actual.flatMap { it.toKeyValues(params.apSchema) }
     Assert.assertEquals("Could not recover original KeyValues after converting to tuples and back", params.inputs, recoveredKeyValues)
   }
 
@@ -113,6 +110,16 @@ class KeyValueToTupleTest(
             expected = listOf(
                 TupleImpl(listOf("r".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
                 TupleImpl(listOf("r2".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
+            )
+        ),
+        Params(
+            name = "2-k colq-schema",
+            inputs = listOf(Key("","fam","abaaq") to Value(), Key("","fam","abbbq") to Value()).map { KeyValue(it) },
+            apSchema = ImmutableAccessPath.of(listOf(), listOf("cqPrePre","cqPre")),
+            widthSchema = WidthSchemaImpl(listOf(3, 1)),
+            expected = listOf(
+                TupleImpl(listOf("aba".toABS(), "a".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
+                TupleImpl(listOf("abb".toABS(), "b".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
         Params(
