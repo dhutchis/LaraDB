@@ -1,9 +1,10 @@
 package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.collect.ImmutableList
 import java.util.*
 
 /** Thrown if Drools concludes contradictory facts */
-class Contradiction(msg : String, vararg objs: Any) : RuntimeException(msg+"\n\t"+objs.joinToString(separator = "\n\t"))
+class Contradiction(vararg objs: Any) : RuntimeException(objs.joinToString(separator = "\n\t"))
 
 
 
@@ -280,9 +281,8 @@ open class EPropMap<L> {
   }
 
   fun <H, P: Property<H>, L:H> EPropMap<L>
-      .isEquiv(c: Class<P>, omap: EPropMap<out H>): Boolean {
-    return c in nodeMap && c in omap.nodeMap && nodeMap[c]!!.find() === omap.nodeMap[c]!!.find()
-  }
+      .isEquiv(c: Class<P>, omap: EPropMap<out H>): Boolean =
+      nodeMap[c]?.let { a -> omap.nodeMap[c]?.let { b -> a.find() === b.find() } } ?: false
 
   // The design of this class needs re-thinking if we want thread-safe access to EPropMap
   private class Node<L, P : Property<in L>>(vararg backers: EPropMap<out L>) {
@@ -328,9 +328,12 @@ open class EPropMap<L> {
  *
  * See [edu.washington.cs.laragraphulo.opt.viz.generateDot] to generate a visualization of the operator tree
  */
-abstract class Op<R>(vararg val args: Op<*>) : EPropMap<R>() {
+abstract class Op<R>(args: List<Op<*>> = emptyList()) : EPropMap<R>() {
+  val args: List<Op<*>> = ImmutableList.copyOf(args)
 
-  override fun toString() = this.javaClass.simpleName + Arrays.toString(args) + "+Props:" + super.toString()
+  constructor(vararg args: Op<*>): this(args.asList())
+
+  override fun toString() = this.javaClass.simpleName + args + "+Props:" + super.toString()
 
   /**
    * A short string describing this operator and not any of the children.
@@ -353,11 +356,11 @@ abstract class Op<R>(vararg val args: Op<*>) : EPropMap<R>() {
 
     other as Op<*>
 
-    if (!Arrays.equals(args, other.args)) return false
+    if (args != other.args) return false
 
     return true
   }
-  override fun hashCode(): Int = Arrays.hashCode(args)
+  override fun hashCode(): Int = args.hashCode()
 }
 
 /**

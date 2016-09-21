@@ -3,6 +3,7 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
 import org.apache.accumulo.core.data.*
+import org.apache.accumulo.core.iterators.IteratorEnvironment
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
@@ -896,3 +897,18 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
 //}
 //
 //// method to check that an iterator is sorted in the right way, on the fly
+
+
+
+interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
+  override fun remove() = throw UnsupportedOperationException("remove is not supported")
+  fun seek(kv: K)
+  fun deepCopy(env: IteratorEnvironment): AccumuloLikeIterator<K,T>
+  fun serializeState(): ByteArray?
+}
+
+interface AccumuloIterator : AccumuloLikeIterator<Key,KeyValue>
+
+interface TupleIterator : AccumuloLikeIterator<List<ArrayByteSequence>,Tuple>
+
+

@@ -10,6 +10,6 @@ interface IteratorFlow : AssociativeTable
 /**
  * @param[R] Return type of the expression
  */
-interface Expression<R>
+interface ExpressionOld<R>
 
 
