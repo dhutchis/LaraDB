@@ -11,7 +11,7 @@ import java.util.*
  */
 sealed class PTree {
   data class PNode(val name: String, val args: List<PTree>) : PTree()
-  data class PList(val args: List<PTree>) : PTree()
+  data class PList(val list: List<PTree>) : PTree()
   data class PPair(val left: PTree, val right: PTree) : PTree()
   data class PMap(val map: Map<String, PTree>) : PTree()
   data class PLong(val v: Long) : PTree()
@@ -19,6 +19,7 @@ sealed class PTree {
   data class PString(val str: String) : PTree()
 
   companion object {
+    class ParsePythonException(msg: String) : Exception(msg)
     /**
      * Parse a Python repr string into a [PTree]
      */
@@ -86,7 +87,7 @@ sealed class PTree {
       return sbname.toString()
     }
 
-    private fun Int.assertNoEOS() = if (this == -1) throw IllegalArgumentException("repr ended early") else this.toChar()
+    private fun Int.assertNoEOS() = if (this == -1) throw ParsePythonException("repr ended early") else this.toChar()
 
     private fun Reader.readNonWhitespace(): Char = this.discardWhitespace().assertNoEOS()
 
@@ -102,7 +103,7 @@ sealed class PTree {
     private fun Reader.readAssert(c: Char) {
       val r = this.discardWhitespace()
       if (r == -1 || r.toChar() != c)
-        throw IllegalArgumentException(if (r == -1) "stream ended early but expected $c" else "read ${r.toChar()} but expected $c")
+        throw ParsePythonException(if (r == -1) "stream ended early but expected $c" else "read ${r.toChar()} but expected $c")
     }
 
     /** // [ excluded
@@ -137,7 +138,7 @@ sealed class PTree {
           val name = parseRacoOne(repr, t1)
           t1 = null
           if (name !is PTree.PString)
-            throw IllegalArgumentException("expected a PString name in the map but got $name")
+            throw ParsePythonException("expected a PString name in the map but got $name")
           repr.readAssert(':')
           map.put(name.str, parseRacoOne(repr))
           val t = repr.readNonWhitespace() // additional mappings mean t is ','
