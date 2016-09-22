@@ -319,7 +319,23 @@ open class EPropMap<L> {
   nodeMap.keys.map { it: Class<out Property<in L>> ->
     @Suppress("UNCHECKED_CAST")
     get(it as Class<Property<Any?>>).toString()
-  }.reduce { p1, p2 -> p1+", "+p2 } + "}"
+  }.reduceWithDefault("") { p1, p2 -> p1+", "+p2 } + "}"
+}
+
+
+/**
+ * Accumulates value starting with the first element and applying [operation] from left to right to current accumulator value and each element.
+ *
+ * Use default value if there are no elements in the collection
+ */
+inline fun <S, T: S> Iterable<T>.reduceWithDefault(default: S, operation: (S, T) -> S): S {
+  val iterator = this.iterator()
+  if (!iterator.hasNext()) return default
+  var accumulator: S = iterator.next()
+  while (iterator.hasNext()) {
+    accumulator = operation(accumulator, iterator.next())
+  }
+  return accumulator
 }
 
 
