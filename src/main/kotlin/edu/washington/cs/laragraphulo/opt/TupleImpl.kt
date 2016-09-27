@@ -312,10 +312,89 @@ data class FullValue(
     val timestamp: Long
 )
 
-/** Be wary of mutating anything. Try to keep it immutable. */
-interface Tuple {
+interface TupleKey {
   val keys: List<ArrayByteSequence>
   val family: ArrayByteSequence
+
+  fun toKey(apSchema: APSchema): Key
+}
+
+open class TupleKeyImpl(
+    keys: List<ArrayByteSequence>,
+    override val family: ArrayByteSequence
+) : TupleKey {
+  override val keys: List<ArrayByteSequence> = ImmutableList.copyOf(keys)
+
+  /** Convert this TupleKey to a Key filled up to the CQ with the dap, family, and lap. */
+  override fun toKey(apSchema: APSchema): Key {
+    /** Only when [IntRange.step] is 0 */
+    fun IntRange.size(): Int = this.endInclusive - this.first + 1
+
+    /** @return Array, offset, length */
+    fun arrayFromParts(keyRange: IntRange): Triple<ByteArray,Int,Int> =
+        when {
+          keyRange.isEmpty() -> Triple(ByteArray(0),0,0)
+          keyRange.size() == 1 -> keys[keyRange.first].let { Triple(it.backingArray, it.offset(), it.length()) }
+        // general case: copy
+          else -> {
+            val dapList = keys.slice(keyRange)
+            val rowLen = dapList.sumBy { it.length() }
+            val rowArr = ByteArray(rowLen)
+            var p = 0
+            for (seq in dapList) {
+              val len = seq.length()
+              System.arraycopy(seq.backingArray, seq.offset(), rowArr, p, len)
+              p += len
+            }
+            Triple(rowArr, 0, rowLen)
+          }
+        }
+
+    // an optimization is possible whereby we check to see if the dapList's ArrayByteSequences
+    // all reference the same array and form a contiguous block of the array
+    val (rowArr, rowOff, rowLen) = arrayFromParts(apSchema.dapRange)
+
+    // column qualifier prefix
+    val (lapArr, lapOff, lapLen) = arrayFromParts(apSchema.lapRange)
+    // this could be optimized in the case of singleton vals
+
+    return if (rowOff == 0 && rowLen == rowArr.size &&
+        family.isContiguousArray() &&
+        lapOff == 0 && lapLen == lapArr.size)
+      Key(rowArr, family.backingArray, lapArr, EMPTY_B, Long.MAX_VALUE, false, false) // no copy
+    else
+      Key(rowArr, rowOff, rowLen,
+          family.backingArray, family.offset(), family.length(),
+          lapArr, lapOff, lapLen,
+          EMPTY_B, 0, 0, Long.MAX_VALUE)
+  }
+
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as TupleKeyImpl
+
+    if (family != other.family) return false
+    if (keys != other.keys) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int{
+    var result = family.hashCode()
+    result = 31 * result + keys.hashCode()
+    return result
+  }
+
+  override fun toString(): String = "TupleKeyImpl(keys=$keys, family=$family)"
+}
+
+
+/** Be wary of mutating anything. Try to keep it immutable. */
+interface Tuple : TupleKey {
+//  val keys: List<ArrayByteSequence>
+//  val family: ArrayByteSequence
   /** At a minimum, this should contain a mapping from the empty string to a FullValue. */
   val vals: ListMultimap<ArrayByteSequence, FullValue>
 
@@ -324,20 +403,16 @@ interface Tuple {
 
 class TupleImpl(
     keys: List<ArrayByteSequence>,
-    override val family: ArrayByteSequence,
+    family: ArrayByteSequence,
     vals: ListMultimap<ArrayByteSequence, FullValue>
-) : Tuple {
-  override val keys: List<ArrayByteSequence> = ImmutableList.copyOf(keys)
+) : TupleKeyImpl(keys, family), Tuple {
   override val vals: ImmutableListMultimap<ArrayByteSequence, FullValue> = ImmutableListMultimap.copyOf(vals)
-
-
 
   /**
    * Convert this Tuple to a list of KeyValues.
    * To guarantee sortedness, either change the implementation here or use Collections.sort afterward, with a key comparator
    */
   override fun toKeyValues(apSchema: APSchema): List<KeyValue> {
-
     /** Only when [IntRange.step] is 0 */
     fun IntRange.size(): Int = this.endInclusive - this.first + 1
 
@@ -397,38 +472,30 @@ class TupleImpl(
     return retList
   }
 
-  override fun toString(): String{
-    return "Tuple(keys=$keys, family=$family, vals=$vals)"
-  }
-
+  override fun toString(): String = "Tuple(keys=$keys, family=$family, vals=$vals)"
   override fun equals(other: Any?): Boolean{
     if (this === other) return true
     if (other?.javaClass != javaClass) return false
+    if (!super.equals(other)) return false
 
     other as TupleImpl
 
-    if (family != other.family) return false
-    if (keys != other.keys) return false
     if (vals != other.vals) return false
 
     return true
   }
-
   override fun hashCode(): Int{
-    var result = family.hashCode()
-    result = 31 * result + keys.hashCode()
+    var result = super.hashCode()
     result = 31 * result + vals.hashCode()
     return result
   }
-
-
 }
 
 
 fun ArrayByteSequence.isContiguousArray() = this.offset() == 0 && this.length() == this.backingArray.size
 
-object EMPTY : ArrayByteSequence(ByteArray(0),0,0)
-
+val EMPTY_B = byteArrayOf()
+val EMPTY = ArrayByteSequence(EMPTY_B,0,0)
 
 
 
@@ -527,6 +594,28 @@ class KeyValueToTuple(
   }
 }
 
+class KeyValueToTupleIterator(
+    val keyValueIterator: KeyValueIterator,
+    val apSchema: APSchema,
+    val widthSchema: WidthSchema
+) : TupleIterator {
+  var innerIterator: PeekingIterator<Tuple> = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apSchema, widthSchema))
+
+  override fun seek(sk: TupleSeekKey) {
+    val tk = sk.tupleKey
+    val k = tk.toKey(apSchema)
+    keyValueIterator.seek(SeekKey(k, sk.families, sk.inclusive))
+    innerIterator = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apSchema, widthSchema))
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): TupleIterator {
+    return KeyValueToTupleIterator(keyValueIterator.deepCopy(env), apSchema, widthSchema)
+  }
+  override fun hasNext(): Boolean = innerIterator.hasNext()
+  override fun serializeState(): ByteArray = EMPTY_B
+  override fun peek(): Tuple = innerIterator.peek()
+  override fun next(): Tuple = innerIterator.next()
+}
 
 
 ////  override operator fun get(name: Name): ArrayByteSequence
@@ -899,16 +988,29 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
 //// method to check that an iterator is sorted in the right way, on the fly
 
 
-
 interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
   override fun remove() = throw UnsupportedOperationException("remove is not supported")
-  fun seek(kv: K)
+  fun seek(sk: K)
   fun deepCopy(env: IteratorEnvironment): AccumuloLikeIterator<K,T>
   fun serializeState(): ByteArray?
 }
 
-interface AccumuloIterator : AccumuloLikeIterator<Key,KeyValue>
+interface KeyValueIterator : AccumuloLikeIterator<SeekKey,KeyValue> {
+  override fun deepCopy(env: IteratorEnvironment): KeyValueIterator
+}
 
-interface TupleIterator : AccumuloLikeIterator<List<ArrayByteSequence>,Tuple>
+interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,Tuple> {
+  override fun deepCopy(env: IteratorEnvironment): TupleIterator
+}
 
+data class SeekKey(
+    val key: Key,
+    val families: Collection<ArrayByteSequence>,
+    val inclusive: Boolean
+)
 
+data class TupleSeekKey(
+    val tupleKey: TupleKey,
+    val families: Collection<ArrayByteSequence>,
+    val inclusive: Boolean
+)
