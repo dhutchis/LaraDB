@@ -411,6 +411,8 @@ class TupleImpl(
   /**
    * Convert this Tuple to a list of KeyValues.
    * To guarantee sortedness, either change the implementation here or use Collections.sort afterward, with a key comparator
+   *
+   * Todo: this function could be re-formulated as a generator.
    */
   override fun toKeyValues(apSchema: APSchema): List<KeyValue> {
     /** Only when [IntRange.step] is 0 */
@@ -595,11 +597,11 @@ class KeyValueToTuple(
 }
 
 class KeyValueToTupleIterator(
-    val keyValueIterator: KeyValueIterator,
+    private val keyValueIterator: KeyValueIterator,
     val apSchema: APSchema,
     val widthSchema: WidthSchema
 ) : TupleIterator {
-  var innerIterator: PeekingIterator<Tuple> = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apSchema, widthSchema))
+  private var innerIterator: PeekingIterator<Tuple> = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apSchema, widthSchema))
 
   override fun seek(sk: TupleSeekKey) {
     val tk = sk.tupleKey
@@ -608,78 +610,155 @@ class KeyValueToTupleIterator(
     innerIterator = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apSchema, widthSchema))
   }
 
-  override fun deepCopy(env: IteratorEnvironment): TupleIterator {
+  override fun deepCopy(env: IteratorEnvironment): KeyValueToTupleIterator {
     return KeyValueToTupleIterator(keyValueIterator.deepCopy(env), apSchema, widthSchema)
   }
   override fun hasNext(): Boolean = innerIterator.hasNext()
-  override fun serializeState(): ByteArray = EMPTY_B
   override fun peek(): Tuple = innerIterator.peek()
   override fun next(): Tuple = innerIterator.next()
+  override fun serializeState(): ByteArray {
+    // todo: return the last tuple emitted, so that we can restore the state
+    // by seeking to the tuple immediately after the last one emitted
+    return EMPTY_B
+  }
+}
+
+class TupleToKeyValueIterator(
+    private val tupleIterator: TupleIterator,
+    val apSchema: APSchema,
+    val widthSchema: WidthSchema
+) : KeyValueIterator {
+  private var iterFromLastTuple = Iterators.peekingIterator(Collections.emptyIterator<KeyValue>())
+
+  override fun hasNext(): Boolean {
+    return iterFromLastTuple.hasNext() || tupleIterator.hasNext()
+  }
+
+  override fun next(): KeyValue {
+    while (!iterFromLastTuple.hasNext() && tupleIterator.hasNext()) {
+      iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apSchema).iterator())
+    }
+    if (iterFromLastTuple.hasNext())
+      return iterFromLastTuple.next()
+    throw NoSuchElementException()
+  }
+
+  override fun peek(): KeyValue {
+    while (!iterFromLastTuple.hasNext() && tupleIterator.hasNext()) {
+      iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apSchema).iterator())
+    }
+    if (iterFromLastTuple.hasNext())
+      return iterFromLastTuple.peek()
+    throw NoSuchElementException()
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): TupleToKeyValueIterator {
+    return TupleToKeyValueIterator(tupleIterator.deepCopy(env), apSchema, widthSchema)
+  }
+
+  override fun seek(sk: SeekKey) {
+    val k = sk.key
+
+    val keyList = ImmutableList.builder<ArrayByteSequence>()
+    /** @return the position of the first byte not read; throws an exception if there is a problem */
+    fun addToList(bs: ByteSequence, off: Int, len: Int, allowVariableLast: Boolean): Int {
+      assert(bs.isBackedByArray)
+      var p = 0
+      for (i in off..off + len - 1) {
+        var width = widthSchema.widths[i]
+        require(width != -1 || (allowVariableLast && i == off + len - 1)) { "Variable width not allowed here. Widths are ${widthSchema.widths}" }
+        if (width == -1) {
+          width = bs.length() - p
+        } else if (p + width > bs.length()) {
+          error("Warning: Cannot seek to seek key $k for schema $apSchema and widths ${widthSchema.widths}")
+        }
+        keyList.add(ArrayByteSequence(bs.backingArray, bs.offset() + p, width))
+        p += width
+      }
+      return p
+    }
+
+    // fill the dap from the row
+    val row = k.rowData
+    addToList(row, 0, apSchema.dap.size, true) // don't care about the bytes remaining after reading the row
+
+    // fill the lap from the cq
+    val cqFirst = k.columnQualifierData
+    addToList(cqFirst, apSchema.dapLen, apSchema.lap.size, false)
+
+    assert(k.columnFamilyData is ArrayByteSequence)
+    val family = k.columnFamilyData as ArrayByteSequence
+
+    val tk = TupleKeyImpl(keyList.build(), family)
+    val tsk = TupleSeekKey(tk, sk.families, sk.inclusive)
+    tupleIterator.seek(tsk)
+  }
+
+  override fun serializeState(): ByteArray? {
+    // todo: return the last emitted
+    return if (iterFromLastTuple.hasNext()) null else EMPTY_B
+  }
+}
+
+/** Mock version that does a fixed thing. */
+class ApplyIterator(
+    val parent: TupleIterator
+) : TupleIterator {
+  var topTuple: Tuple? = null
+
+  companion object {
+    val RESULT = ArrayByteSequence("result".toByteArray())
+    val SRC = ArrayByteSequence("src".toByteArray())
+    val DST = ArrayByteSequence("dst".toByteArray())
+    val UNDER = '_'.toByte()
+  }
+
+  override fun seek(sk: TupleSeekKey) {
+    parent.seek(sk)
+  }
+
+  private fun prepTop() {
+    if (topTuple != null && parent.hasNext()) {
+      val t = parent.peek()
+      // src_dst
+      val src = t.vals[SRC]!!.first().value
+      val dst = t.vals[DST]!!.first().value
+      val result = ByteArray(src.length()+dst.length()+1)
+      System.arraycopy(src.backingArray, src.offset(), result, 0, src.length())
+      result[src.length()] = UNDER
+      System.arraycopy(dst.backingArray, dst.offset(), result, src.length()+1, dst.length())
+      topTuple = TupleImpl(t.keys, t.family,
+          ImmutableListMultimap.of(RESULT, FullValue(ArrayByteSequence(result), EMPTY, Long.MAX_VALUE)))
+    }
+  }
+
+  override fun peek(): Tuple {
+    prepTop()
+    return topTuple!!
+  }
+
+  override fun next(): Tuple {
+    prepTop()
+    val t = topTuple!!
+    parent.next()
+    topTuple = null
+    return t
+  }
+
+  override fun hasNext(): Boolean {
+    return parent.hasNext()
+  }
+
+  override fun serializeState(): ByteArray {
+    throw UnsupportedOperationException("not implemented")
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): ApplyIterator {
+    return ApplyIterator(parent.deepCopy(env))
+  }
 }
 
 
-////  override operator fun get(name: Name): ArrayByteSequence
-//  override operator fun get(idx: Int): ArrayByteSequence
-////  @Deprecated("Use the ArrayByteSequence version", ReplaceWith("if (v is ArrayByteSequence) set(name, v) else throw IllegalArgumentException(\"\$v is not a ArrayByteSequence\")", "org.apache.accumulo.core.data.ArrayByteSequence"), DeprecationLevel.ERROR)
-////  override operator fun set(name: String, v: Any?) {
-////    if (v is ArrayByteSequence) set(name, v)
-////    else throw IllegalArgumentException("$v is not a ArrayByteSequence")
-////  }
-//  @Deprecated("Use the ArrayByteSequence version", ReplaceWith("if (v is ArrayByteSequence) set(idx, v) else throw IllegalArgumentException(\"\$v is not a ArrayByteSequence\")", "org.apache.accumulo.core.data.ArrayByteSequence"), DeprecationLevel.ERROR)
-//  override operator fun set(idx: Int, v: Any?): ArrayByteSequence {
-//    if (v is ArrayByteSequence) return set(idx, v)
-//    else throw IllegalArgumentException("$v is not a ArrayByteSequence")
-//  }
-////  operator fun set(name: Name, v: ArrayByteSequence)
-//  operator fun set(idx: Int, v: ArrayByteSequence): ArrayByteSequence
-//}
-
-// consider renaming to ByteTuple for the immutable version
-//class ByteTuple(
-////    val ap: ImmutableAccessPath,
-//    /** The order of the buffers must match the order of the attributes in [ap] */
-//    private val buffers: List<ArrayByteSequence>
-//) : Tuple(buffers) {
-////  constructor(buffers: MutableCollection<ByteArray>): this(buffers.map { ArrayByteSequence(it) })
-//
-////  init {
-////    // there is a ArrayByteSequence for every attribute
-////    Preconditions.checkArgument(buffers.size == ap.attributes.size,
-////        "expected %s data buffers but was given %s", ap.attributes.size, buffers.size)
-////  }
-//
-////  override operator fun get(idx: Int): ArrayByteSequence = buffers[idx]
-//////  override operator fun get(name: String): ArrayByteSequence = get(ap.indexOf(name))
-////  override operator fun set(idx: Int, v: ArrayByteSequence): ArrayByteSequence {
-////    val p = buffers[idx]
-////    buffers[idx] = v
-////    return p
-////  }
-//////  override operator fun set(name: String, v: ArrayByteSequence) = set(ap.indexOf(name), v)
-//
-//  // could define a constructor that takes a map of names to ArrayByteSequences
-//  // use the AP to put the buffers in the right order
-//
-//
-//
-//  override fun toString(): String = buffers.toString()
-//  override fun equals(other: Any?): Boolean{
-//    if (this === other) return true
-//    if (other?.javaClass != javaClass) return false
-//
-//    other as ByteTuple
-//
-//    if (buffers != other.buffers) return false
-//
-//    return true
-//  }
-//
-//  override fun hashCode(): Int{
-//    return buffers.hashCode()
-//  }
-//
-//
-//}
 
 
 typealias ExtFun = (Tuple) -> Iterator<Tuple>
@@ -693,13 +772,6 @@ fun Iterator<Tuple>.ext(f: ExtFun): Iterator<Tuple> {
 }
 
 
-
-
-
-/** Todo: revise this for the SKVI version of seek that takes a range, column families, inclusive */
-interface SeekableIterator<T> : Iterator<T> {
-  fun seek(seekKey: T)
-}
 
 
 // later this will need to be a full interface, so that subclasses can maintain state
@@ -989,10 +1061,21 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
 
 
 interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
+  @Suppress("DeprecatedCallableAddReplaceWith")
+  @Deprecated("unsupported", level = DeprecationLevel.ERROR)
   override fun remove() = throw UnsupportedOperationException("remove is not supported")
+
   fun seek(sk: K)
   fun deepCopy(env: IteratorEnvironment): AccumuloLikeIterator<K,T>
+  /** @return null if it is not safe to serialize state */
   fun serializeState(): ByteArray?
+  // an init() function?
+
+  /** Return the next value. This is the same value that [peek] returns prior to calling next. */
+  override fun next(): T
+
+  /** Peek at the next value; do not advance the iteration */
+  override fun peek(): T
 }
 
 interface KeyValueIterator : AccumuloLikeIterator<SeekKey,KeyValue> {
