@@ -349,7 +349,7 @@ abstract class Op<R>(args: List<Op<*>> = emptyList()) : EPropMap<R>() {
 
   constructor(vararg args: Op<*>): this(args.asList())
 
-  override fun toString(): String = super.toString().let { this.javaClass.simpleName + args + if (it.isEmpty()) "" else ("+Props:" + it) }
+  override fun toString(): String = super.toString().let { this.javaClass.simpleName + args + if (it == "{}") "" else ("+Props:" + it) }
 
   /**
    * A short string describing this operator and not any of the children.

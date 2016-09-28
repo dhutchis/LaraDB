@@ -1,10 +1,14 @@
 package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.collect.ImmutableListMultimap
 import edu.washington.cs.laragraphulo.LexicoderPlus
+import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
+import org.apache.commons.csv.CSVRecord
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.URL
@@ -39,6 +43,81 @@ private class CSVScan_impl(val url: URL,
                            val csvSchema: List<Pair<Name, LexicoderPlus<String>>>,
                            val delimiter: Char = ','
 )
+
+
+/**
+ * The output schema places all attributes into the key attributes, in the order of the encoders.
+ */
+class CSVSc(
+    val url: URL,
+    val encoders: List<LexicoderPlus<String>>,
+    val skip: Int = 0,
+    val delimiter: Char = ',',
+    val quote: Char = '"',
+    val escape: Char? = null
+) : TupleIterator {
+//  val parser: CSVParser
+  val iterator: Iterator<CSVRecord>
+  var linenumber: Int = 0
+
+  init {
+    val parser = CSVParser(
+        BufferedReader(InputStreamReader(url.openStream())),
+        CSVFormat.newFormat(delimiter).withQuote(quote).withEscape(escape))
+    iterator = parser.iterator()
+    for (i in 0..skip - 1) {
+      iterator.next()
+    }
+  }
+
+  var top: Tuple? = null
+
+  private fun findTop() {
+    if (top == null && iterator.hasNext()) {
+      val csvRecord = iterator.next()
+      if (csvRecord.size() != encoders.size) {
+        throw RuntimeException("error parsing line $linenumber: expected ${encoders.size} attributes: $csvRecord")
+      }
+      val attrs = csvRecord.zip(encoders).map { ArrayByteSequence(it.second.encode(it.first)) }
+      top = TupleImpl(attrs, EMPTY, ImmutableListMultimap.of())
+      linenumber++
+    }
+  }
+
+  override fun hasNext(): Boolean {
+    findTop()
+    return top != null
+  }
+
+  override fun next(): Tuple {
+    findTop()
+    val t = top ?: throw NoSuchElementException()
+    top = null
+    return t
+  }
+
+  override fun peek(): Tuple {
+    findTop()
+    return top ?: throw NoSuchElementException()
+  }
+
+  override fun seek(sk: TupleSeekKey) {
+    // recover from a saved state
+    throw UnsupportedOperationException("not implemented")
+  }
+
+  override fun serializeState(): ByteArray {
+    // write the line number to a bytearray
+    throw UnsupportedOperationException("not implemented")
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): CSVSc {
+    if (linenumber != 0)
+      throw UnsupportedOperationException("not implemented when iteration already began")
+    return CSVSc(url, encoders, skip, delimiter, quote, escape)
+  }
+}
+
 
 //private fun doit(csvScan: CSVScan_impl): Iterator<Pair<Key, Value>> {
 ////  val encodeds = Array<ByteArray?>(csvScan.accessPath.allAttributes.size, {null})

@@ -72,7 +72,7 @@ class RacoConvertTest(
         Params(
             query = "Dump(Apply([('src', NamedAttributeRef('src')), ('dst', NamedAttributeRef('dst'))], " +
                 "FileScan('mock.csv', 'CSV', Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), {})))",
-            catalog = mapOf("src" to Type.LONG, "dst" to Type.LONG),
+            catalog = listOf("src" to Type.LONG, "dst" to Type.LONG),
             data = listOf(
                 mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
             ),

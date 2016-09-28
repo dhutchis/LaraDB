@@ -11,7 +11,7 @@ import sun.awt.image.PNGImageDecoder
 enum class Type {
   LONG, BOOLEAN, DOUBLE, STRING, DATETIME, INT, FLOAT
 }
-typealias Scheme = Map<Name,Type>
+typealias Scheme = List<Pair<Name,Type>>
 
 typealias Tuple = Map<Name, ArrayByteSequence>
 typealias Relation = List<Tuple>
@@ -106,7 +106,7 @@ private fun PPT(ptree: PTree): Op<*> =
     is PTree.PString -> Obj(ptree.str)
   }
 
-private fun schemeToMap(pscheme: PTree.PNode): Map<String, Type> {
+private fun schemeToMap(pscheme: PTree.PNode): Scheme {
   if (pscheme.name != "Scheme")
     throw ParseRacoException("expected a Scheme in arg 2 of FileScan")
   if (pscheme.args.size != 1)
@@ -114,7 +114,7 @@ private fun schemeToMap(pscheme: PTree.PNode): Map<String, Type> {
   return schemeToMap0(pscheme.args[0] as PTree.PList)
 }
 
-private fun schemeToMap0(plist: PTree.PList): Map<String, Type> =
+private fun schemeToMap0(plist: PTree.PList): Scheme =
     plist.list.map {
       it as PTree.PPair
       it.left as PTree.PString
@@ -124,5 +124,5 @@ private fun schemeToMap0(plist: PTree.PList): Map<String, Type> =
         val type = Type.valueOf(t)
         type
       }
-    }.toMap()
+    }
 

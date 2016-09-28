@@ -4,6 +4,7 @@ import com.google.common.base.Preconditions
 import com.google.common.collect.*
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
+import java.io.Serializable
 import java.util.*
 import java.util.function.Function
 import java.util.regex.Pattern
@@ -1097,3 +1098,15 @@ data class TupleSeekKey(
     val families: Collection<ArrayByteSequence>,
     val inclusive: Boolean
 )
+
+abstract class AccumuloOp(args: List<AccumuloOp> = emptyList()) : Op<Tuple>(args), Serializable
+{
+  constructor(vararg args: AccumuloOp): this(args.asList())
+
+  /**
+   * @param parent The source iterator that one of the leaves will connect to.
+   * @param options Execution-time environmental parameters, passed from client
+   * @param env Execution-time Accumulo parameters
+   */
+  abstract fun construct(parent: AccumuloLikeIterator<*,*>, options: Map<String,String>, env: IteratorEnvironment)
+}
