@@ -3,8 +3,6 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.collect.ImmutableListMultimap
 import edu.washington.cs.laragraphulo.LexicoderPlus
 import org.apache.accumulo.core.data.ArrayByteSequence
-import org.apache.accumulo.core.data.Key
-import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
@@ -18,37 +16,26 @@ import java.util.*
  * An attribute name.
  */
 typealias Name = String
-typealias CfName = Name
 
 
-class CSVScan(val url: Op<URL>,
-              val accessPath: Op<ImmutableAccessPath>,
-              /**
-               * For each csv column, define an attribute name and a conversion from String to byte[]
-               */
-              val csvSchema: Op<List<Pair<Name, LexicoderPlus<String>>>>,
-              val delimiter: Op<Char> = Obj(',')
-) : Op<IteratorFlow>(url, accessPath) {
-  init {
-    // todo: initial properties
+class OpCSVScan(
+    val url: Obj<String>,
+    val encoders: Obj<List<LexicoderPlus<String>>>,
+    val skip: Obj<Int> = Obj(0),
+    val delimiter: Obj<Char> = Obj(','),
+    val quote: Obj<Char> = Obj('"'),
+    val escape: Obj<Char?> = Obj(null)
+) : AccumuloOp(url, encoders, skip, delimiter, quote, escape) {
+  override fun construct(parent: AccumuloLikeIterator<*, *>, options: Map<String, String>, env: IteratorEnvironment): CSVScan {
+    return CSVScan(URL(url.obj), encoders.obj, skip.obj, delimiter.obj, quote.obj, escape.obj)
   }
-  // todo: add invoke execution
 }
-
-private class CSVScan_impl(val url: URL,
-                           val accessPath: ImmutableAccessPath,
-                           /**
-                            * For each csv column, define an attribute name and a conversion from String to byte[]
-                            */
-                           val csvSchema: List<Pair<Name, LexicoderPlus<String>>>,
-                           val delimiter: Char = ','
-)
 
 
 /**
  * The output schema places all attributes into the key attributes, in the order of the encoders.
  */
-class CSVSc(
+class CSVScan(
     val url: URL,
     val encoders: List<LexicoderPlus<String>>,
     val skip: Int = 0,
@@ -57,8 +44,8 @@ class CSVSc(
     val escape: Char? = null
 ) : TupleIterator {
 //  val parser: CSVParser
-  val iterator: Iterator<CSVRecord>
-  var linenumber: Int = 0
+  private val iterator: Iterator<CSVRecord>
+  private var linenumber: Int = 0
 
   init {
     val parser = CSVParser(
@@ -70,7 +57,7 @@ class CSVSc(
     }
   }
 
-  var top: Tuple? = null
+  private var top: Tuple? = null
 
   private fun findTop() {
     if (top == null && iterator.hasNext()) {
@@ -111,10 +98,10 @@ class CSVSc(
     throw UnsupportedOperationException("not implemented")
   }
 
-  override fun deepCopy(env: IteratorEnvironment): CSVSc {
+  override fun deepCopy(env: IteratorEnvironment): CSVScan {
     if (linenumber != 0)
       throw UnsupportedOperationException("not implemented when iteration already began")
-    return CSVSc(url, encoders, skip, delimiter, quote, escape)
+    return CSVScan(url, encoders, skip, delimiter, quote, escape)
   }
 }
 

@@ -318,6 +318,11 @@ interface TupleKey {
   val family: ArrayByteSequence
 
   fun toKey(apSchema: APSchema): Key
+
+//  operator fun get(apSchema: APSchema, name: String): ArrayByteSequence? {
+//    val idx = apSchema.keyNames.indexOf(name)
+//    return if (idx == -1) null else this.keys[idx]
+//  }
 }
 
 open class TupleKeyImpl(
@@ -400,6 +405,11 @@ interface Tuple : TupleKey {
   val vals: ListMultimap<ArrayByteSequence, FullValue>
 
   fun toKeyValues(apSchema: APSchema): List<KeyValue>
+
+//  override operator fun get(apSchema: APSchema, name: String): ArrayByteSequence? {
+//    val res = super.get(apSchema, name)
+//    return if (res == null) vals[ArrayByteSequence(name.toByteArray())]. else res
+//  }
 }
 
 class TupleImpl(
@@ -1099,14 +1109,15 @@ data class TupleSeekKey(
     val inclusive: Boolean
 )
 
-abstract class AccumuloOp(args: List<AccumuloOp> = emptyList()) : Op<Tuple>(args), Serializable
+abstract class AccumuloOp(args: List<Op<*>> = emptyList()) : Op<Tuple>(args), Serializable
 {
-  constructor(vararg args: AccumuloOp): this(args.asList())
+  constructor(vararg args: Op<*>): this(args.asList())
 
   /**
    * @param parent The source iterator that one of the leaves will connect to.
    * @param options Execution-time environmental parameters, passed from client
    * @param env Execution-time Accumulo parameters
    */
-  abstract fun construct(parent: AccumuloLikeIterator<*,*>, options: Map<String,String>, env: IteratorEnvironment)
+  abstract fun construct(parent: AccumuloLikeIterator<*,*>, options: Map<String,String>, env: IteratorEnvironment): AccumuloLikeIterator<*,*>
 }
+
