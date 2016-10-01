@@ -1,7 +1,7 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.ImmutableListMultimap
-import edu.washington.cs.laragraphulo.LexicoderPlus
+import edu.washington.cs.laragraphulo.Encode
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.commons.csv.CSVFormat
@@ -9,26 +9,71 @@ import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVRecord
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.io.Serializable
 import java.net.URL
 import java.util.*
 
-/**
- * An attribute name.
- */
-typealias Name = String
+
+
+sealed class AccumuloOp(args: List<Op<*>> = emptyList()) : Op<Tuple>(args), Serializable
+{
+  constructor(vararg args: Op<*>): this(args.asList())
+
+  /**
+   * From the RACO types in the catalog for Scan; FileScan scheme.
+   */
+  abstract val encodingSchema: EncodingSchema
+  /**
+   * todo. Attach a prior iterator in place of this.
+   */
+  abstract val reducingSchema: ReducingSchema
+  /**
+   * From the order of the attributes in the catalog / FileScan scheme; with placeholders __DAP__ and __LAP__
+   */
+  abstract val keySchema: KeySchema
+  /**
+   * From the order of the attributes in the catalog / FileScan scheme; with placeholders __DAP__ and __LAP__
+   */
+  abstract val positionSchema: PositionSchema
+
+  /**
+   * @param parent The source iterator that one of the leaves will connect to.
+   * @param options Execution-time environmental parameters, passed from client
+   * @param env Execution-time Accumulo parameters
+   */
+  abstract fun construct(parent: AccumuloLikeIterator<*,*>, options: Map<String,String>, env: IteratorEnvironment): AccumuloLikeIterator<*,*>
+}
+
+
 
 
 class OpCSVScan(
     val url: Obj<String>,
-    val encoders: Obj<List<LexicoderPlus<String>>>,
+    /** Nulls in the list indicate fields to skip reading */
+    val encoders: Obj<List<Encode<String>?>>,
+    val names: Obj<List<Pair<Name,Type<*>>>>,
     val skip: Obj<Int> = Obj(0),
     val delimiter: Obj<Char> = Obj(','),
     val quote: Obj<Char> = Obj('"'),
     val escape: Obj<Char?> = Obj(null)
 ) : AccumuloOp(url, encoders, skip, delimiter, quote, escape) {
+  init {
+    require(encoders().filterNotNull().size == names().size) {"There must be a name/type for each (non-null) encoder. Names: $names. Encoders: $encoders"}
+  }
   override fun construct(parent: AccumuloLikeIterator<*, *>, options: Map<String, String>, env: IteratorEnvironment): CSVScan {
     return CSVScan(URL(url.obj), encoders.obj, skip.obj, delimiter.obj, quote.obj, escape.obj)
   }
+
+  override val encodingSchema = object : EncodingSchema {
+    override val encodings: Map<Name, Type<*>> = names().toMap()
+  }
+  override val reducingSchema = object : ReducingSchema {
+    override val reducers: Map<Name, (List<FullValue>) -> FullValue> = emptyMap()
+  }
+  override val keySchema = object : KeySchema {
+    override val keyNames: List<Name> = names().map { it.first }
+  }
+  override val positionSchema: List<Name> = names().map { it.first }
 }
 
 
@@ -37,7 +82,8 @@ class OpCSVScan(
  */
 class CSVScan(
     val url: URL,
-    val encoders: List<LexicoderPlus<String>>,
+    /** Nulls in the list indicate fields to skip reading */
+    val encoders: List<Encode<String>?>,
     val skip: Int = 0,
     val delimiter: Char = ',',
     val quote: Char = '"',
@@ -65,7 +111,7 @@ class CSVScan(
       if (csvRecord.size() != encoders.size) {
         throw RuntimeException("error parsing line $linenumber: expected ${encoders.size} attributes: $csvRecord")
       }
-      val attrs = csvRecord.zip(encoders).map { ArrayByteSequence(it.second.encode(it.first)) }
+      val attrs = csvRecord.zip(encoders).filter { it.second != null }.map { ArrayByteSequence(it.second!!.encode(it.first)) }
       top = TupleImpl(attrs, EMPTY, ImmutableListMultimap.of())
       linenumber++
     }
@@ -106,51 +152,115 @@ class CSVScan(
 }
 
 
-//private fun doit(csvScan: CSVScan_impl): Iterator<Pair<Key, Value>> {
-////  val encodeds = Array<ByteArray?>(csvScan.accessPath.allAttributes.size, {null})
-//  val parser = CSVParser(BufferedReader(InputStreamReader(csvScan.url.openStream())),
-//      CSVFormat.newFormat(csvScan.delimiter))
-//  val dap: List<Int> = csvScan.accessPath.dap.map { attr -> csvScan.csvSchema.indexOfFirst { attr == it.first } }
-//  val lap: List<Int> = csvScan.accessPath.lap.map { attr -> csvScan.csvSchema.indexOfFirst { attr == it.first } }
-//  val cap: List<Pair<CfName, List<Pair<Name,Int>>>> = csvScan.accessPath.cap.map { cfpair -> cfpair.name to cfpair.attributes.map { name -> name to csvScan.csvSchema.indexOfFirst { name == it.first } }}
-//
-//  return object: Iterator<Pair<Key, Value>> {
-//
-//    val csviter = parser.iterator()
-//    var toiter: Iterator<Pair<Key, Value>> = Collections.emptyIterator()
-//
-//    override fun hasNext(): Boolean {
-//      return toiter.hasNext() || csviter.hasNext()
-//    }
-//
-//    override fun next(): Pair<Key, Value> {
-//      if (!toiter.hasNext()) {
-//        val coll: MutableList<Pair<Key, Value>> = ArrayList()
-//        val csvrec = csviter.next()
-//        // does not handle the flexible case
-//        val bdap = Array<ByteArray>(dap.size, { pos -> csvScan.csvSchema[dap[pos]].second.encode(csvrec[dap[pos]]) })
-//        val brow = concatArrays(*bdap)
-//        val blap = Array<ByteArray>(lap.size, { pos -> csvScan.csvSchema[lap[pos]].second.encode(csvrec[lap[pos]]) })
-//        val bcolqPrefix = concatArrays(*blap)
-//        for ((cf, uap) in cap) {
-//          val bcf = cf.toByteArray()
-//          for ((name, idx) in uap) {
-//            val bname = name.toByteArray() // can optimize this and cf by storing the ByteArray in the beginning instead of a string
-//            val bval = csvScan.csvSchema[idx].second.encode(csvrec[idx])
-//            val bcolq = concatArrays(bcolqPrefix, bname)
-//            val key = Key(brow, bcf, bcolq, byteArrayOf(), Long.MAX_VALUE, false, false) // no copy
-//            val Val = Value(bval, false)
-//            coll.add(key to Val)
-//          }
-//        }
-//        toiter = coll.iterator()
-//      }
-//      return toiter.next()
-//    }
-//
-//  }
-//
-//}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/** Mock version that does a fixed thing. */
+class ApplyIterator(
+    val parent: TupleIterator
+) : TupleIterator {
+  var topTuple: Tuple? = null
+
+  companion object {
+    val RESULT = ArrayByteSequence("result".toByteArray())
+    val SRC = ArrayByteSequence("src".toByteArray())
+    val DST = ArrayByteSequence("dst".toByteArray())
+    val UNDER = '_'.toByte()
+  }
+
+  override fun seek(sk: TupleSeekKey) {
+    parent.seek(sk)
+  }
+
+  private fun prepTop() {
+    if (topTuple != null && parent.hasNext()) {
+      val t = parent.peek()
+      // src_dst
+      val src = t.vals[SRC]!!.first().value
+      val dst = t.vals[DST]!!.first().value
+      val result = ByteArray(src.length()+dst.length()+1)
+      System.arraycopy(src.backingArray, src.offset(), result, 0, src.length())
+      result[src.length()] = UNDER
+      System.arraycopy(dst.backingArray, dst.offset(), result, src.length()+1, dst.length())
+      topTuple = TupleImpl(t.keys, t.family,
+          ImmutableListMultimap.of(RESULT, FullValue(ArrayByteSequence(result), EMPTY, Long.MAX_VALUE)))
+    }
+  }
+
+  override fun peek(): Tuple {
+    prepTop()
+    return topTuple!!
+  }
+
+  override fun next(): Tuple {
+    prepTop()
+    val t = topTuple!!
+    parent.next()
+    topTuple = null
+    return t
+  }
+
+  override fun hasNext(): Boolean {
+    return parent.hasNext()
+  }
+
+  override fun serializeState(): ByteArray {
+    throw UnsupportedOperationException("not implemented")
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): ApplyIterator {
+    return ApplyIterator(parent.deepCopy(env))
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //inline fun <reified T> concatArrays(arrs: Array<Array<T>>): Array<T> {
 //  val size = arrs.sumBy { it.size }

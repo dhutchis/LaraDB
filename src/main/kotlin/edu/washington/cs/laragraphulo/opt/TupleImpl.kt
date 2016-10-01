@@ -13,63 +13,7 @@ import kotlin.comparisons.compareBy
 
 
 
-/** Mock version that does a fixed thing. */
-class ApplyIterator(
-    val parent: TupleIterator
-) : TupleIterator {
-  var topTuple: Tuple? = null
 
-  companion object {
-    val RESULT = ArrayByteSequence("result".toByteArray())
-    val SRC = ArrayByteSequence("src".toByteArray())
-    val DST = ArrayByteSequence("dst".toByteArray())
-    val UNDER = '_'.toByte()
-  }
-
-  override fun seek(sk: TupleSeekKey) {
-    parent.seek(sk)
-  }
-
-  private fun prepTop() {
-    if (topTuple != null && parent.hasNext()) {
-      val t = parent.peek()
-      // src_dst
-      val src = t.vals[SRC]!!.first().value
-      val dst = t.vals[DST]!!.first().value
-      val result = ByteArray(src.length()+dst.length()+1)
-      System.arraycopy(src.backingArray, src.offset(), result, 0, src.length())
-      result[src.length()] = UNDER
-      System.arraycopy(dst.backingArray, dst.offset(), result, src.length()+1, dst.length())
-      topTuple = TupleImpl(t.keys, t.family,
-          ImmutableListMultimap.of(RESULT, FullValue(ArrayByteSequence(result), EMPTY, Long.MAX_VALUE)))
-    }
-  }
-
-  override fun peek(): Tuple {
-    prepTop()
-    return topTuple!!
-  }
-
-  override fun next(): Tuple {
-    prepTop()
-    val t = topTuple!!
-    parent.next()
-    topTuple = null
-    return t
-  }
-
-  override fun hasNext(): Boolean {
-    return parent.hasNext()
-  }
-
-  override fun serializeState(): ByteArray {
-    throw UnsupportedOperationException("not implemented")
-  }
-
-  override fun deepCopy(env: IteratorEnvironment): ApplyIterator {
-    return ApplyIterator(parent.deepCopy(env))
-  }
-}
 
 
 
@@ -398,16 +342,4 @@ data class TupleSeekKey(
     val families: Collection<ArrayByteSequence>,
     val inclusive: Boolean
 )
-
-abstract class AccumuloOp(args: List<Op<*>> = emptyList()) : Op<Tuple>(args), Serializable
-{
-  constructor(vararg args: Op<*>): this(args.asList())
-
-  /**
-   * @param parent The source iterator that one of the leaves will connect to.
-   * @param options Execution-time environmental parameters, passed from client
-   * @param env Execution-time Accumulo parameters
-   */
-  abstract fun construct(parent: AccumuloLikeIterator<*,*>, options: Map<String,String>, env: IteratorEnvironment): AccumuloLikeIterator<*,*>
-}
 

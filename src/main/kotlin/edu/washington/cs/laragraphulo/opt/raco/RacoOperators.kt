@@ -19,44 +19,49 @@ typealias HashPartitioned = List<Name>
 sealed class RacoExpression<R>(args: List<Op<*>> = emptyList()): Op<R>(args) {
   constructor(vararg args: Op<*>): this(args.asList())
 
-  abstract fun getEncoder(props: ExpressionProperties): Type<R>
+  abstract fun getType(props: ExpressionProperties): Type<R>
 
   sealed class Literal<R>(open val obj: Obj<R>): RacoExpression<R>(obj) {
     abstract fun toABS(): ArrayByteSequence
     data class StringLiteral(override val obj: Obj<String>): Literal<String>(obj) {
       override fun toABS(): ArrayByteSequence = Type.STRING.encode(obj()).toABS()
-      override fun getEncoder(props: ExpressionProperties) = Type.STRING
+      override fun getType(props: ExpressionProperties) = Type.STRING
     }
     data class BooleanLiteral(override val obj: Obj<Boolean>): Literal<Boolean>(obj) {
       override fun toABS(): ArrayByteSequence = Type.BOOLEAN.encode(obj()).toABS()
-      override fun getEncoder(props: ExpressionProperties) = Type.BOOLEAN
+      override fun getType(props: ExpressionProperties) = Type.BOOLEAN
     }
 //    data class NumericLiteral(override val obj: Obj<Number>): Literal<Number>(obj)
     data class DoubleLiteral(override val obj: Obj<Double>): Literal<Double>(obj) {
       override fun toABS(): ArrayByteSequence = Type.DOUBLE.encode(obj()).toABS()
-      override fun getEncoder(props: ExpressionProperties) = Type.DOUBLE
+      override fun getType(props: ExpressionProperties) = Type.DOUBLE
     }
     data class LongLiteral(override val obj: Obj<Long>): Literal<Long>(obj) {
       override fun toABS(): ArrayByteSequence = Type.LONG.encode(obj()).toABS()
-      override fun getEncoder(props: ExpressionProperties) = Type.LONG
+      override fun getType(props: ExpressionProperties) = Type.LONG
     }
   }
 
   data class NamedAttributeRef(val attributename: Obj<Name>): RacoExpression<Any?>(attributename) {
-    override fun getEncoder(props: ExpressionProperties): Type<Any?> {
+    override fun getType(props: ExpressionProperties): Type<Any?> {
       val enc = props.encodingSchema.encodings[attributename()] ?: throw UnsupportedOperationException("no encoder / type information for attribute $attributename")
       return enc as Type<Any?>
     }
   }
   data class UnnamedAttributeRef(val position: Obj<Int>, val debug_info: Obj<Any?>): RacoExpression<Any?>(position, debug_info) {
-    override fun getEncoder(props: ExpressionProperties): Type<Any?> {
+    override fun getType(props: ExpressionProperties): Type<Any?> {
       val enc = props.encodingSchema.encodings[props.positionSchema[position()]] ?: throw UnsupportedOperationException("no encoder / type information for attribute #$position")
       return enc as Type<Any?>
     }
   }
 
-  data class PLUS<R>(val left: Op<RacoExpression<R>>, val right: Op<RacoExpression<R>>): RacoExpression<R>(left, right) {
-
+  data class PLUS<R>(val left: RacoExpression<R>, val right: RacoExpression<R>): RacoExpression<R>(left, right) {
+    override fun getType(props: ExpressionProperties): Type<R> {
+      val t = left.getType(props)
+      if (t != right.getType(props))
+        throw RuntimeException("types mismatch: $t and ${right.getType(props)}. This might be fixable by type upcasting")
+      return t
+    }
   }
 }
 

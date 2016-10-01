@@ -61,6 +61,22 @@ class RacoConvertTest(
     A = load("mock.csv", csv(schema(src:int,dst:int))); B = select src, dst from A; dump(B);
     Dump(Apply([('src', NamedAttributeRef('src')), ('dst', NamedAttributeRef('dst'))],
     FileScan('mock.csv', 'CSV', Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), {})))
+
+
+
+    This shows that Apply acts as Project. Look at the -L version.
+
+    dhutchis@denine99:~/GITdir/raco/examples$ echo "A = scan(smallGraph); B = selec
+t src, dst from A; C = select dst from B; dump(C);" > tmp.myl &&     c:/anacond
+a/python.exe "C:\Users\Class2014\GITdir\raco\scripts\myrial" tmp.myl -L
+Dump()[Apply(dst=$1)[Scan(public:adhoc:smallGraph)]]
+dhutchis@denine99:~/GITdir/raco/examples$ echo "A = scan(smallGraph); B = selec
+t src, dst from A; C = select dst from B; dump(C);" > tmp.myl &&     c:/anacond
+a/python.exe "C:\Users\Class2014\GITdir\raco\scripts\myrial" tmp.myl -l
+Sequence
+    Dump()[Apply(dst=dst)[Apply(src=src,dst=dst)[Scan(public:adhoc:smallGraph)]]
+]
+
      */
     val tests = arrayOf(
 //        Params(

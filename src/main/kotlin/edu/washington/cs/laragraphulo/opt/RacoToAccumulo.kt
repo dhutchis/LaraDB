@@ -1,9 +1,36 @@
 package edu.washington.cs.laragraphulo.opt
 
-import edu.washington.cs.laragraphulo.opt.raco.RacoExpression
-import edu.washington.cs.laragraphulo.opt.raco.RacoOperator
-import edu.washington.cs.laragraphulo.opt.raco.RacoType
+import edu.washington.cs.laragraphulo.Encode
+import edu.washington.cs.laragraphulo.opt.raco.*
 import org.apache.accumulo.core.data.ArrayByteSequence
+
+
+/**
+ * Map position to attribute name. Concurs with the KeySchema on key attributes.
+ * The purpose of this schema is to provide a position for value attributes.
+ */
+typealias PositionSchema = List<Name>
+
+data class ExpressionProperties(
+    val encodingSchema: EncodingSchema,
+    val reducingSchema: ReducingSchema,
+    val keySchema: KeySchema,
+    val positionSchema: PositionSchema
+)
+
+
+class AccumuloPipeline(
+    val baseTable: String,
+    val baseAPSchema: APSchema,
+    val op: AccumuloOp
+) {
+
+
+
+
+}
+
+
 
 
 fun racoTypeToType(racoType: RacoType): Type<*> = when(racoType) {
@@ -27,24 +54,15 @@ val defaultReducer = { list: List<FullValue> -> when (list.size) {
   else -> throw RuntimeException("did not expect > 1 values: $list")
 } }
 
-data class ExpressionProperties(
-    val encodingSchema: EncodingSchema,
-    val reducingSchema: ReducingSchema,
-    val keySchema: KeySchema,
-    val positionSchema: List<Name>
-)
 
 /**
  * @param positionSchema The positions associated with each attribute, in the lens of raco. keySchema only includes the keys.
  */
 fun racoExprToExpr(
     re: RacoExpression<*>,
-    encodingSchema: EncodingSchema,
-    reducingSchema: ReducingSchema,
-    keySchema: KeySchema,
-    positionSchema: List<Name>
-): Expr<*> {
-  val const: Expr<ArrayByteSequence> = when (re) {
+    ep: ExpressionProperties
+): Expr<ArrayByteSequence> {
+  return when (re) {
 //    is RacoExpression.Literal.StringLiteral -> Const(re.obj)
 //    is RacoExpression.Literal.BooleanLiteral -> Const(re.obj)
 //    is RacoExpression.Literal.DoubleLiteral -> Const(re.obj)
@@ -52,14 +70,43 @@ fun racoExprToExpr(
     is RacoExpression.Literal -> Const(Obj(re.toABS()))
 
     is RacoExpression.NamedAttributeRef -> {
-      convertAttributeRef(re.attributename(), encodingSchema, reducingSchema, keySchema)
+      convertAttributeRef(re.attributename(), ep)
     }
     is RacoExpression.UnnamedAttributeRef -> {
-      convertAttributeRef(positionSchema[re.position()], encodingSchema, reducingSchema, keySchema)
+      convertAttributeRef(ep.positionSchema[re.position()], ep)
     }
 
     is RacoExpression.PLUS<*> -> {
-
+      val t = re.getType(ep)
+      BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), Obj() { left: ArrayByteSequence, right: ArrayByteSequence ->
+        fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
+        when (t) {
+          Type.INT -> {
+            t as Type.INT // compiler ought to be able to infer this; report bug
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.BOOLEAN -> {
+            t as Type.BOOLEAN
+            t.encode(left.dec(t) || right.dec(t))
+          }
+          Type.LONG -> {
+            t as Type.LONG
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.DOUBLE -> {
+            t as Type.DOUBLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.FLOAT -> {
+            t as Type.FLOAT
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.STRING -> {
+            t as Type.STRING
+            t.encode(left.dec(t) + right.dec(t))
+          }
+        }.toABS()
+        })
     }
   }
 }
@@ -69,15 +116,15 @@ fun ByteArray.toABS() = ArrayByteSequence(this)
 /**
  * Decode <- eitherKeyOrFamilyOrFullValuePart
  */
-fun convertAttributeRef(name: String, encodingSchema: EncodingSchema, reducingSchema: ReducingSchema, keySchema: KeySchema): Expr<ArrayByteSequence> {
+fun convertAttributeRef(name: String, ep: ExpressionProperties): Expr<ArrayByteSequence> {
   // __VIS
   // __TS
   // __FAMILY__
-  val idx = keySchema.keyNames.indexOf(name)
-  val lexicoder = encodingSchema.encodings[name] ?: Type.STRING
+  val idx = ep.keySchema.keyNames.indexOf(name)
+  val lexicoder = ep.encodingSchema.encodings[name] ?: Type.STRING
   return if (idx == -1) {
     // value attribute
-    val reducer = reducingSchema.reducers[name] ?: defaultReducer
+    val reducer = ep.reducingSchema.reducers[name] ?: defaultReducer
     when {
       name == __FAMILY__ -> {
         TupleRef.RefFamily()
@@ -103,7 +150,27 @@ fun convertAttributeRef(name: String, encodingSchema: EncodingSchema, reducingSc
 }
 
 
-fun racoToAccumulo(racoOp: RacoOperator<*>) {
+fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): Op<*> {
+
+  val x = when (ro) {
+
+
+    is Apply -> {
+      // todo make an ApplyoOp
+    }
+
+    is FileScan -> {
+      // get the encoders; ensure we store properly; might need to implement the getExpressionProperties on other operators
+      val scheme: List<Pair<Name, RacoType>> = ro.scheme.obj
+      val encoders: Obj<List<Encode<String>?>> // because we force ArrayByteSequence, all are encoded according to the String encoder
+      val skip = Obj(ro.options["skip"] ?: 0)
+      OpCSVScan(ro.file, encoders, skip)
+    }
+
+
+  }
+
+
 
 }
 

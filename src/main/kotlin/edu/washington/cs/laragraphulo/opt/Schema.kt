@@ -8,6 +8,11 @@ import java.util.regex.Pattern
 
 
 /**
+ * An attribute name.
+ */
+typealias Name = String
+
+/**
  * `>= 0` means fixed width.
  * `-1` means variable width.
  */
@@ -59,10 +64,10 @@ interface APSchema : KeySchema {
   val dapLen: Int
   /** distributed access path; the first portion of [keyNames] */
   val dap: List<Name>
-    get() = lazy { keyNames.subList(0,dapLen) }.value
+    get() = keyNames.subList(0,dapLen)
   /** local access path; the second portion of [keyNames] */
   val lap: List<Name>
-    get() = lazy { keyNames.subList(dapLen, keyNames.size) }.value
+    get() = keyNames.subList(dapLen, keyNames.size)
   val dapRange: IntRange
     get() = 0..dapLen-1
   val lapRange: IntRange
