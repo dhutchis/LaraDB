@@ -3,37 +3,38 @@ package edu.washington.cs.laragraphulo.opt
 import org.apache.accumulo.core.data.ArrayByteSequence
 
 
-sealed class TupleRef<out R>(
-    open val tupleNum: Int = 0
-) : Expr<R> {
+sealed class TupleRef<R>(args: List<Op<*>> = emptyList()) : Expr<R>(args) {
+  constructor(vararg args: Op<*>): this(args.asList())
+  abstract val tupleNum: Obj<Int>
   override val inputs: Set<TupleRef<R>>
     get() = setOf(this)
 
   data class RefKey(
-      override val tupleNum: Int = 0,
-      val keyNum: Int
-  ) : TupleRef<ArrayByteSequence>(tupleNum) {
-    override operator fun invoke(tuples: List<Tuple>): ArrayByteSequence = tuples[tupleNum].keys[keyNum]
+      override val tupleNum: Obj<Int> = Obj(0),
+      val keyNum: Obj<Int>
+  ) : TupleRef<ArrayByteSequence>(tupleNum, keyNum) {
+    override operator fun invoke(tuples: List<Tuple>): ArrayByteSequence = tuples[tupleNum()].keys[keyNum()]
   }
 
   data class RefFamily(
-      override val tupleNum: Int = 0
+      override val tupleNum: Obj<Int> = Obj(0)
   ) : TupleRef<ArrayByteSequence>(tupleNum) {
-    override operator fun invoke(tuples: List<Tuple>): ArrayByteSequence = tuples[tupleNum].family
+    override operator fun invoke(tuples: List<Tuple>): ArrayByteSequence = tuples[tupleNum()].family
   }
 
   data class RefVal(
-      override val tupleNum: Int = 0,
-      val valName: ArrayByteSequence
-  ) : TupleRef<List<FullValue>>(tupleNum) {
-    override operator fun invoke(tuples: List<Tuple>): List<FullValue> = tuples[tupleNum].vals[valName]
+      override val tupleNum: Obj<Int> = Obj(0),
+      val valName: Obj<ArrayByteSequence>
+  ) : TupleRef<List<FullValue>>(tupleNum, valName) {
+    override operator fun invoke(tuples: List<Tuple>): List<FullValue> = tuples[tupleNum()].vals[valName()]
   }
 
 }
 
-interface Expr<out R> {
-  val inputs: Set<TupleRef<*>>
-  operator fun invoke(tuples: List<Tuple>): R
+sealed class Expr<R>(args: List<Op<*>> = emptyList()) : Op<R>(args) {
+  constructor(vararg args: Op<*>): this(args.asList())
+  abstract val inputs: Set<TupleRef<*>>
+  abstract operator fun invoke(tuples: List<Tuple>): R
 }
 
 /** Convert a list of [R]s to a single [R].
@@ -42,30 +43,37 @@ interface Expr<out R> {
  */
 class DefaultExpr<R>(
     val expr: Expr<List<R>>,
-    val default: R,
-    val reducer: (R, R) -> R = { a, b -> throw RuntimeException("did not expect > 1 values. The first two are $a and $b") }
-) : Expr<R> {
+    val default: Obj<R?> = Obj(null),
+    val reducer: Obj<(R, R) -> R> = Obj() { a, b -> throw RuntimeException("did not expect > 1 values. The first two are $a and $b") }
+) : Expr<R>(expr, default, reducer) {
   override val inputs: Set<TupleRef<*>> = expr.inputs
-  override fun invoke(tuples: List<Tuple>): R = expr.invoke(tuples).let { if (it.isEmpty()) default else it.reduce(reducer) }
+  override operator fun invoke(tuples: List<Tuple>): R = expr(tuples).let { if (it.isEmpty()) {default() ?: throw RuntimeException("no default value provided but the value is missing")} else it.reduce(reducer()) }
 }
 
-class CastExpr<S,out R>(
+class UnaryExpr<S, R>(
     val expr: Expr<S>,
-    val convert: (S) -> R
-) : Expr<R> {
+    val f: Obj<(S) -> R>
+) : Expr<R>(expr, f) {
   override val inputs: Set<TupleRef<*>> = expr.inputs
-  override fun invoke(tuples: List<Tuple>): R {
-    return convert(expr.invoke(tuples))
+  override operator fun invoke(tuples: List<Tuple>): R {
+    return f()(expr.invoke(tuples))
   }
 }
 
-class BinaryExpr<S1, S2, out R>(
+class BinaryExpr<S1, S2, R>(
     val e1: Expr<S1>,
     val e2: Expr<S2>,
-    val f: (S1, S2) -> R
-) : Expr<R> {
+    val f: Obj<(S1, S2) -> R>
+) : Expr<R>(e1, e2, f) {
   override val inputs: Set<TupleRef<*>> = e1.inputs + e2.inputs
-  override fun invoke(tuples: List<Tuple>): R {
-    return f(e1.invoke(tuples), e2.invoke(tuples))
+  override operator fun invoke(tuples: List<Tuple>): R {
+    return f()(e1.invoke(tuples), e2.invoke(tuples))
   }
+}
+
+class Const<R>(
+    val obj: Obj<R>
+) : Expr<R>(obj) {
+  override val inputs: Set<TupleRef<*>> = setOf()
+  override fun invoke(tuples: List<Tuple>): R = obj()
 }

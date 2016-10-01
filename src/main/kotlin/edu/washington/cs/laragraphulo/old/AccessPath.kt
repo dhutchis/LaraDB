@@ -1,7 +1,7 @@
 package edu.washington.cs.laragraphulo.old
 
 import com.google.common.base.Preconditions
-import edu.washington.cs.laragraphulo.opt.Attribute
+import edu.washington.cs.laragraphulo.old.Attribute
 import java.io.Serializable
 
 /**

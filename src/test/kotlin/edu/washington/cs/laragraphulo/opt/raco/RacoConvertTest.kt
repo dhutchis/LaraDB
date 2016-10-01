@@ -32,14 +32,14 @@ class RacoConvertTest(
     println("query: ${params.query}")
     val ptree = StringReader(params.query).use { PTree.parseRaco(it) }
     println("ptree: $ptree")
-    val racoOp = parsePTree(ptree)
+    val racoOp = RacoOperator.parsePTreeToRacoTree(ptree)
     println("racoOp: $racoOp")
   }
 
 
   companion object {
 
-    fun String.toABS() = this.toByteArray().let { ArrayByteSequence(it, 0, it.size) }
+
     fun Long.toABS() = ByteBuffer.allocate(8).putLong(this).array().let { ArrayByteSequence(it, 0, it.size) }
 
     // 'public:adhoc:smallGraph' : [('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')],
@@ -72,7 +72,7 @@ class RacoConvertTest(
         Params(
             query = "Dump(Apply([('src', NamedAttributeRef('src')), ('dst', NamedAttributeRef('dst'))], " +
                 "FileScan('mock.csv', 'CSV', Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), {})))",
-            catalog = listOf("src" to Type.LONG, "dst" to Type.LONG),
+            catalog = listOf("src" to RacoType.LONG, "dst" to RacoType.LONG),
             data = listOf(
                 mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
             ),
@@ -81,7 +81,7 @@ class RacoConvertTest(
 //        ,
 //        Params(
 //            query = "",
-//            catalog = mapOf("src" to Type.LONG, "dst" to Type.LONG),
+//            catalog = mapOf("src" to RacoType.LONG, "dst" to RacoType.LONG),
 //            data = listOf(
 //                mapOf("src" to 1L.toABS(), "dst" to 2L.toABS()),
 //                mapOf("src" to 1L.toABS(), "dst" to 3L.toABS()),

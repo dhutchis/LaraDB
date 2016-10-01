@@ -1,7 +1,8 @@
-package edu.washington.cs.laragraphulo.opt
+package edu.washington.cs.laragraphulo.old
 
 import com.google.common.collect.ImmutableList
 import edu.washington.cs.laragraphulo.LexicoderPlus
+import edu.washington.cs.laragraphulo.opt.Name
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import java.io.Serializable
 import java.util.*
@@ -58,7 +59,7 @@ data class ColumnFamily internal constructor(
     val name: Name,
     val attributes: ImmutableList<Name>
 ) {
-  constructor(name:Name, attrs: List<Name>)
+  constructor(name: Name, attrs: List<Name>)
   : this(name, ImmutableList.copyOf(attrs))
 }
 
