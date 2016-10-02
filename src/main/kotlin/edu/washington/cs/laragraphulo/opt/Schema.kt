@@ -86,13 +86,14 @@ interface APSchema : KeySchema {
 //   */
 //  val cap: List<ColumnFamily>
 }
-interface SortedSchema : APSchema {
+interface SortedSchema : KeySchema {
   /** An int such that all [KeySchema.keyNames] whose index is less than sortedUpto are sorted.
    * 0 means nothing is sorted. Valid up to and including [KeySchema.keyNames].size. */
   val sortedUpto: Int
   /** Whether there are multiple tuples with the same key attribute values. */
   val duplicates: Boolean
 }
+interface APSortedSchema : SortedSchema, APSchema
 interface EncodingSchema {
   val encodings: Map<Name, Type<*>>
 }
@@ -249,7 +250,7 @@ sealed class ImmutableBagAccessPath(
     lap: List<Name>,
     final override val sortedUpto: Int,
     final override val duplicates: Boolean
-) : ImmutableAccessPath(dap, lap), SortedSchema {
+) : ImmutableAccessPath(dap, lap), APSortedSchema {
   init {
     Preconditions.checkPositionIndex(sortedUpto, dap.size+lap.size, "sortedUpto is an int such that all keyNames $keyNames " +
         "whose index is less than sortedUpto are sorted. 0 means nothing is sorted. Valid up to and including ${dap.size+lap.size}. Given: $sortedUpto")

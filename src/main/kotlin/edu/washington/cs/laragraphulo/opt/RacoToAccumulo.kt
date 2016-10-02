@@ -150,16 +150,22 @@ fun convertAttributeRef(name: String, ep: ExpressionProperties): Expr<ArrayByteS
 }
 
 
-fun extract
+//fun extract
 
 
-fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): Op<*> {
+fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): AccumuloOp {
 
   val x = when (ro) {
 
 
     is Apply -> {
-      // todo make an ApplyoOp
+      // todo make an ApplyOp
+
+      val parent = racoToAccumulo(ro.input, ep)
+      val emitters: List<Pair<Name, RacoExpression<*>>> = ro.emitters()
+
+
+      OpApplyIterator(parent, keyExprs = , famExpr = , valExprs = , keySchema = )
 
       throw UnsupportedOperationException("nyi")
     }

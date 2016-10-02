@@ -47,7 +47,7 @@ class MergerTest(
     lateinit var ALL_ACTIVE: BooleanArray
     var lastTuples: List<Tuple>? = null
 
-    override fun schema(inputs: List<SortedSchema>): SortedSchema {
+    override fun schema(inputs: List<APSortedSchema>): APSortedSchema {
       if (inputs.isEmpty())
         return ImmutableBagAccessPath.of(listOf(), listOf(), 0, false)
       val input0 = inputs[0]

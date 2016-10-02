@@ -86,7 +86,7 @@ sealed class RacoOperator<R>(args: List<Op<*>> = emptyList()) : Op<R>(args) {
               "Dump" -> { AAL(1); Dump(PPT(pa[0]) as Op<Relation>) }
               "Apply" -> { AAL(2); Apply(
                   PPT(pa[0]) as Obj<List<Emitter>>,
-                  PPT(pa[1]) as Op<Relation>) }
+                  PPT(pa[1]) as RacoOperator<List<Map<Name, ArrayByteSequence>>>) }
               "FileScan" -> { AAL(4); FileScan(
                   file = Obj((pa[0] as PTree.PString).str),
                   format = Obj((pa[1] as PTree.PString).str),
@@ -140,7 +140,7 @@ typealias Emitter = Pair<Name, RacoExpression<*>>
 
 class Apply(
     val emitters: Obj<List<Emitter>>,
-    val input: Op<Relation>
+    val input: RacoOperator<Relation>
 ) : RacoOperator<Relation>(emitters, input)
 
 /*

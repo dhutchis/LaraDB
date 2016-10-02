@@ -23,7 +23,7 @@ import kotlin.comparisons.compareBy
 typealias MultiplyOp = (Array<Tuple>) -> Iterator<Tuple>
 
 interface Collider {
-  fun schema(inputs: List<SortedSchema>): SortedSchema
+  fun schema(inputs: List<APSortedSchema>): APSortedSchema
   /** Do NOT modify the contents of [actives]. */
   fun collide(inputs: List<PeekingIterator<Tuple>>, actives: BooleanArray): Iterator<Tuple>
 }
