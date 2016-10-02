@@ -10,6 +10,8 @@ import java.util.*
  * This is the first stage of converting a RACO plan to a Kotlin/Java representation
  */
 sealed class PTree {
+//  abstract fun toStringValue(): String
+
   data class PNode(val name: String, val args: List<PTree>) : PTree()
   data class PList(val list: List<PTree>) : PTree()
   data class PPair(val left: PTree, val right: PTree) : PTree()

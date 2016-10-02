@@ -91,7 +91,7 @@ sealed class RacoOperator<R>(args: List<Op<*>> = emptyList()) : Op<R>(args) {
                   file = Obj((pa[0] as PTree.PString).str),
                   format = Obj((pa[1] as PTree.PString).str),
                   scheme = Obj(schemeToMap(pa[2] as PTree.PNode)),
-                  options = Obj((pa[3] as PTree.PMap).map)) }
+                  options = Obj((pa[3] as PTree.PMap).map/*.mapValues { it.value }*/)) }
               "NamedAttributeRef" -> { AAL(1); RacoExpression.NamedAttributeRef(Obj((pa[0] as PTree.PString).str)) }
               else -> throw ParseRacoException("unexpected node: ${ptree.name}")
             }
@@ -158,6 +158,6 @@ class FileScan(
     val file: Obj<String>,
     val format: Obj<String>,
     val scheme: Obj<Scheme>,
-    val options: Obj<Map<String,Any>>
+    val options: Obj<Map<String,PTree>>
 ) : RacoOperator<Relation>(file, format, scheme, options)
 

@@ -2,7 +2,6 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
-import edu.washington.cs.laragraphulo.LexicoderPlus
 import org.apache.accumulo.core.data.ArrayByteSequence
 import java.util.regex.Pattern
 
@@ -11,6 +10,9 @@ import java.util.regex.Pattern
  * An attribute name.
  */
 typealias Name = String
+
+/** An alias for the ArrayByteSequence. This is the primary data holder. */
+typealias ABS = ArrayByteSequence
 
 /**
  * `>= 0` means fixed width.

@@ -150,6 +150,9 @@ fun convertAttributeRef(name: String, ep: ExpressionProperties): Expr<ArrayByteS
 }
 
 
+fun extract
+
+
 fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): Op<*> {
 
   val x = when (ro) {
@@ -157,14 +160,26 @@ fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): Op<*> {
 
     is Apply -> {
       // todo make an ApplyoOp
+
+      throw UnsupportedOperationException("nyi")
     }
 
     is FileScan -> {
       // get the encoders; ensure we store properly; might need to implement the getExpressionProperties on other operators
       val scheme: List<Pair<Name, RacoType>> = ro.scheme.obj
-      val encoders: Obj<List<Encode<String>?>> // because we force ArrayByteSequence, all are encoded according to the String encoder
-      val skip = Obj(ro.options["skip"] ?: 0)
-      OpCSVScan(ro.file, encoders, skip)
+      val types: List<Pair<Name, Type<*>>> = scheme.map { it.first to racoTypeToType(it.second) }
+      val encoders: Obj<List<Encode<String>?>> = Obj(types.map { it.second.encodeFromString }) // because we force ArrayByteSequence, all are encoded according to the String encoder
+      val names = Obj(types)
+
+      val sk = ro.options()["skip"]
+      val skip = Obj(when (sk) {
+        null -> null
+        is PTree.PLong -> sk.v.toInt()
+        is PTree.PString -> sk.str.toInt()
+        is PTree.PDouble -> sk.v.toInt()
+        else -> throw RacoOperator.Companion.ParseRacoException("expected an int skip but got $sk")
+      } ?: 0)
+      OpCSVScan(ro.file, encoders, names, skip = skip)
     }
 
 
