@@ -19,16 +19,6 @@ data class ExpressionProperties(
 )
 
 
-class AccumuloPipeline(
-    val baseTable: String,
-    val baseAPSchema: APSchema,
-    val op: AccumuloOp
-) {
-
-
-
-
-}
 
 
 
@@ -197,7 +187,7 @@ fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): AccumuloOp {
 
 
 
-
+sealed class APRequirement
 
 
 

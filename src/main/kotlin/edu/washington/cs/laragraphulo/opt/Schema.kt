@@ -101,7 +101,21 @@ interface ReducingSchema {
   val reducers: Map<Name, (List<FullValue>) -> FullValue>
 }
 
-
+//interface UberSchema : APSortedSchema {
+//  val all: List<Name>
+//  val types: List<Type<*>>
+////  val reducers:
+//  val lapLen: Int
+//
+//  override val dap: List<String>
+//    get() = keyNames.subList(0,dapLen)
+//  override val lap: List<String>
+//    get() = super.lap
+//  override val dapRange: IntRange
+//    get() = super.dapRange
+//  override val lapRange: IntRange
+//    get() = super.lapRange
+//}
 
 
 
