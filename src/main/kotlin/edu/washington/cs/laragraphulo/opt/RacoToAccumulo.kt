@@ -191,3 +191,21 @@ sealed class APRequirement
 
 
 
+
+
+
+
+
+
+
+// a RootRacoOp
+//fun racoSequenceToExecutorTasks(sequence: RacoSequence): ExecutorTaskTree<*> {
+//
+//}
+
+
+// inside a Sequence; probably a Store on top
+fun compileRacoFragment(ro: RacoOperator<*>)
+
+
+

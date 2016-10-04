@@ -28,7 +28,6 @@ import org.apache.accumulo.core.security.Authorizations
 import java.io.IOException
 import java.io.Serializable
 import java.util.*
-import kotlin.reflect.jvm.isAccessible
 
 /** see [StackOverflow](http://stackoverflow.com/questions/19138212/how-to-implement-a-dag-like-scheduler-in-java) */
 class ExecutorTaskTree<T> {
@@ -160,14 +159,15 @@ class CreateTableTask(
   }
 }
 
-interface StringSerializer<T> {
-  fun serializeToString(obj: T): String
-  fun deserializeFromString(str: String): T
+// parameterized so that we can serialize an IteratorSetting if need be
+interface Serializer<in I, out O> {
+  fun serializeToString(obj: I): String
+  fun deserializeFromString(str: String): O
 }
 
 data class AccumuloPipeline(
     val skvi: SKVI,
-    val serializer: StringSerializer<SKVI>,
+    val serializer: Serializer<SKVI,SKVI>,
     val tableName: String
 )
 
@@ -205,7 +205,7 @@ class DeserializeAndDelegateIterator : SKVI, OptionDescriber {
     const val OPT_SERIALIZED_SKVI = "serialized_skvi"
     const val OPT_SERIALIZER_CLASS = "serializer_class"
 
-    fun iteratorSetting(serializer: StringSerializer<SKVI>, skvi: SKVI, priority: Int = 10): IteratorSetting {
+    fun iteratorSetting(serializer: Serializer<SKVI,SKVI>, skvi: SKVI, priority: Int = 10): IteratorSetting {
       val serializer_class = skvi.javaClass
       val serialized_skvi = serializer.serializeToString(skvi)
       return IteratorSetting(priority, DeserializeAndDelegateIterator::class.java,
@@ -217,7 +217,7 @@ class DeserializeAndDelegateIterator : SKVI, OptionDescriber {
       val serializer_class = options[OPT_SERIALIZER_CLASS] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZER_CLASS")
       val serialized_skvi = options[OPT_SERIALIZED_SKVI] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZED_SKVI")
       @Suppress("UNCHECKED_CAST")
-      val serializer: StringSerializer<SKVI> = GraphuloUtil.subclassNewInstance(serializer_class, StringSerializer::class.java) as StringSerializer<SKVI>
+      val serializer = GraphuloUtil.subclassNewInstance(serializer_class, Serializer::class.java) as Serializer<*,SKVI>
       return serializer.deserializeFromString(serialized_skvi)
     }
   }
@@ -237,7 +237,7 @@ class DeserializeAndDelegateIterator : SKVI, OptionDescriber {
 
   override fun describeOptions(): OptionDescriber.IteratorOptions {
     return OptionDescriber.IteratorOptions("DeserializeAndDelegateIterator",
-        "de-serializes an StringSerializer<SKVI> and delegates all SKVI operations to it",
+        "de-serializes an Serializer<SKVI> and delegates all SKVI operations to it",
         mapOf(OPT_SERIALIZED_SKVI to "the serialized SKVI",
             OPT_SERIALIZER_CLASS to "the class that can deserialize the skvi; must have a no-args constructor"),
         null)

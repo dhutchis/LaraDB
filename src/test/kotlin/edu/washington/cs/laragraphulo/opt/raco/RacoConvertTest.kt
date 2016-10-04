@@ -70,6 +70,7 @@ class RacoConvertTest(
 t src, dst from A; C = select dst from B; dump(C);" > tmp.myl &&     c:/anacond
 a/python.exe "C:\Users\Class2014\GITdir\raco\scripts\myrial" tmp.myl -L
 Dump()[Apply(dst=$1)[Scan(public:adhoc:smallGraph)]]
+
 dhutchis@denine99:~/GITdir/raco/examples$ echo "A = scan(smallGraph); B = selec
 t src, dst from A; C = select dst from B; dump(C);" > tmp.myl &&     c:/anacond
 a/python.exe "C:\Users\Class2014\GITdir\raco\scripts\myrial" tmp.myl -l

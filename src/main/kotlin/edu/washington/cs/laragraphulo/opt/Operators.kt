@@ -281,6 +281,26 @@ class ApplyIterator(
 
 
 
+class OpStoreIterator(
+
+) : AccumuloOp {
+  override val encodingSchema: EncodingSchema
+    get() = throw UnsupportedOperationException()
+  override val reducingSchema: ReducingSchema
+    get() = throw UnsupportedOperationException()
+  override val keySchema: KeySchema
+    get() = throw UnsupportedOperationException()
+  override val positionSchema: List<String>
+    get() = throw UnsupportedOperationException()
+
+  override fun construct(parent: TupleIterator, options: Map<String, String>, env: IteratorEnvironment): AccumuloLikeIterator<*, *> {
+
+    TupleToKeyValueIterator(parent, )
+
+    throw UnsupportedOperationException("not implemented")
+  }
+}
+
 
 
 
