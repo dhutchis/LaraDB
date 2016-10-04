@@ -35,7 +35,7 @@ fun racoTypeToType(racoType: RacoType): Type<*> = when(racoType) {
 
 const val __VIS = "__VIS"
 const val __TS = "__TS"
-const val __FAMILY__ = "__FAMILY"
+const val __FAMILY__ = "__FAMILY__"
 fun String.toABS() = this.toByteArray().let { ArrayByteSequence(it, 0, it.size) }
 
 val defaultReducer = { list: List<FullValue> -> when (list.size) {

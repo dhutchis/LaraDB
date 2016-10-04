@@ -2,7 +2,9 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
+import edu.washington.cs.laragraphulo.opt.raco.RacoType
 import org.apache.accumulo.core.data.ArrayByteSequence
+import java.util.*
 import java.util.regex.Pattern
 
 
@@ -26,7 +28,7 @@ typealias Position = Int
 /**
  * Interpretation for missing values.
  */
-typealias Default = ArrayByteSequence
+typealias Default = ByteArray
 
 /*
 These interfaces are capability interfaces.
@@ -101,8 +103,8 @@ interface ReducingSchema {
   val reducers: Map<Name, (List<FullValue>) -> FullValue>
 }
 
-//interface UberSchema : APSortedSchema {
-//  val all: List<Name>
+//interface UberSchema {
+//  val allAtts: List<Name>
 //  val types: List<Type<*>>
 ////  val reducers:
 //  val lapLen: Int
@@ -116,6 +118,96 @@ interface ReducingSchema {
 //  override val lapRange: IntRange
 //    get() = super.lapRange
 //}
+
+fun defaultWidths(types: List<Type<*>>): List<Width> {
+  types.map { it.naturalWidth }
+}
+
+
+const val __DAP__ = "__DAP__"
+const val __LAP__ = "__LAP__"
+
+class ImmutableUberSchema(
+    allNames: List<Name>,
+    dapLen: Int,
+    lapLen: Int,
+    /** An int such that all [keyNames] whose index is less than sortedUpto are sorted.
+     * 0 means nothing is sorted. Valid up to and including [keyNames].size. */
+    val sortedUpto: Int,
+    types: List<Type<*>>,
+    /** Only for keys (dap and lap) */
+    widths: List<Width> = types.map { it.naturalWidth },
+    /** Only for values */
+    defaults: List<Default> = types.map { it.naturalDefaultEncoded },
+    // not sure if this should be here
+    family: ABS = EMPTY
+) {
+  val all: List<Name> = ImmutableList.copyOf(allNames)
+  val dap: List<Name> = all.subList(0,dapLen)
+  val lap: List<Name> = all.subList(dapLen,dapLen+lapLen)
+  val cap: List<Name> = all.subList(dapLen+lapLen,all.size)
+  val types: List<Type<*>> = ImmutableList.copyOf(types)
+  val widths: List<Width> = ImmutableList.copyOf(widths)
+  val defaults: List<Default> = ImmutableList.copyOf(defaults)
+  val fam: ByteArray = Arrays.copyOfRange(family.backingArray, family.offset(), family.offset()+family.length())
+
+  fun toRacoScheme(): List<Pair<Name,Type<*>>> {
+    return all.zip(types).foldIndexed(ImmutableList.builder<Pair<Name, Type<*>>>()) { i, builder, pair -> when (i) {
+      dap.size -> builder.add(__DAP__ to Type.STRING).apply { if (lap.size == dap.size) add(__LAP__ to Type.STRING) }
+      lap.size -> builder.add(__LAP__ to Type.STRING)
+      else -> builder
+    }.add(pair) }.build()
+//    val list: ArrayList<Pair<Name, Type<*>>> = all.zip(types).mapTo(ArrayList<Pair<Name, Type<*>>>(all.size + 2))
+//    list.add(dap.size+lap.size, __LAP__ to Type.STRING)
+//    list.add(dap.size, __DAP__ to Type.STRING)
+//    return list
+  }
+
+  companion object {
+    fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): ImmutableUberSchema {
+      val (names, types) = scheme.unzip()
+      val dapidx = names.indexOf(__DAP__)
+      val daplen: Int
+      val namesNoDap: List<Name>
+      val typesNoDap: List<Type<*>>
+      if (dapidx == -1) {
+        daplen = names.size
+        namesNoDap = names
+        typesNoDap = types
+      } else {
+        daplen = dapidx
+        namesNoDap = names.subList(0,dapidx) + if (dapidx+1 < names.size) names.subList(dapidx+1,names.size) else emptyList()
+        typesNoDap = types.subList(0,dapidx) + if (dapidx+1 < names.size) types.subList(dapidx+1,names.size) else emptyList()
+      }
+      val lapidx = namesNoDap.indexOf(__LAP__)
+      val laplen: Int
+      val namesNoDapNoLap: List<Name>
+      val typesNoDapNoLap: List<Type<*>>
+      if (lapidx == -1) {
+        laplen = names.size - daplen
+        namesNoDapNoLap = namesNoDap
+        typesNoDapNoLap = typesNoDap
+      } else {
+        require(lapidx >= daplen) { "$__DAP__ appears after $__LAP__ in $names" }
+        laplen = lapidx - daplen
+        namesNoDapNoLap = namesNoDap.subList(0,lapidx) + if (lapidx+1 < namesNoDap.size) namesNoDap.subList(lapidx+1,namesNoDap.size) else emptyList()
+        typesNoDapNoLap = typesNoDap.subList(0,lapidx) + if (lapidx+1 < typesNoDap.size) typesNoDap.subList(lapidx+1,typesNoDap.size) else emptyList()
+      }
+
+      return ImmutableUberSchema(
+          namesNoDapNoLap, daplen, laplen,
+          sortedUpto = 0, types = typesNoDapNoLap
+      )
+    }
+  }
+
+  override fun toString(): String{
+    return "USchema(dap=$dap, lap=$lap, cap=$cap)"
+    // sortedUpto=$sortedUpto, all=$all, dap=$dap, lap=$lap, cap=$cap, widths=$widths, defaults=$defaults, fam=${Arrays.toString(fam)}
+  }
+
+
+}
 
 
 
