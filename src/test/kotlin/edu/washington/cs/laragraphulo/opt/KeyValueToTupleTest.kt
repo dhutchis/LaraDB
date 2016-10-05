@@ -65,7 +65,7 @@ class KeyValueToTupleTest(
             expected = listOf()
         ),
         Params(
-            name = "1-kv no-schema",
+            name = "1-k no-schema",
             inputs = listOf(Key("","fam","q") to Value()).map { KeyValue(it) },
             apSchema = ImmutableAccessPath.of(listOf(), listOf()),
             widthSchema = WidthSchemaImpl(listOf()),

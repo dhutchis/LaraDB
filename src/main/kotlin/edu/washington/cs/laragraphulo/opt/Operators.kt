@@ -131,7 +131,7 @@ class CSVScan(
     findTop()
     return top ?: throw NoSuchElementException()
   }
-  override fun seek(sk: TupleSeekKey) {
+  override fun seek(seek: TupleSeekKey) {
     // recover from a saved state
     throw UnsupportedOperationException("not implemented")
   }
@@ -222,8 +222,8 @@ class ApplyIterator(
     val UNDER = '_'.toByte()
   }
 
-  override fun seek(sk: TupleSeekKey) {
-    parent.seek(sk)
+  override fun seek(seek: TupleSeekKey) {
+    parent.seek(seek)
   }
 
   private fun applyToTuple(pt: Tuple): Tuple {

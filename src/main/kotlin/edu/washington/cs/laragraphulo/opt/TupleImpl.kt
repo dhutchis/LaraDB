@@ -2,7 +2,9 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
 import com.google.common.collect.*
+import com.google.common.collect.Range
 import edu.washington.cs.laragraphulo.LexicoderPlus
+import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import java.io.Serializable
@@ -57,7 +59,7 @@ class Merger(
   init {
     // check that emitNoMatches is a valid set - every index corresponds to an input
     emitNoMatches.forEach {
-      Preconditions.checkElementIndex(it, inputs.size, "emitNoMatch index $it is out of range; provided ${inputs.size} inputs")
+      Preconditions.checkElementIndex(it, inputs.size, "emitNoMatch index $it is out of r; provided ${inputs.size} inputs")
       this.emitNoMatches[it] = true
     }
     pq.addAll(inputs.indices)
@@ -306,11 +308,10 @@ class OneRowIterator<T>(val rowComparator: Comparator<T>,
 
 
 interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
-  @Suppress("DeprecatedCallableAddReplaceWith")
-  @Deprecated("unsupported", level = DeprecationLevel.ERROR)
+  @Deprecated("unsupported", level = DeprecationLevel.ERROR, replaceWith = ReplaceWith("assert(false) {\"remove is not supported\"}"))
   override fun remove() = throw UnsupportedOperationException("remove is not supported")
 
-  fun seek(sk: K)
+  fun seek(seek: K)
   fun deepCopy(env: IteratorEnvironment): AccumuloLikeIterator<K,T>
   /** @return null if it is not safe to serialize state */
   fun serializeState(): ByteArray?
@@ -332,14 +333,25 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,Tuple> {
 }
 
 data class SeekKey(
-    val key: Key,
+    val range: com.google.common.collect.Range<Key>,
     val families: Collection<ArrayByteSequence>,
     val inclusive: Boolean
-)
+) {
+  fun toTupleSeekKey(apSchema: APSchema, widthSchema: WidthSchema): TupleSeekKey =
+      TupleSeekKey(
+          GraphuloUtil.transform(range) {KeyValueToTuple.readKeyFromTop(apSchema, widthSchema, it) ?: throw RuntimeException("bad key when trying to convert to tuplekey: $it")},
+          this.families, this.inclusive
+      )
+}
 
 data class TupleSeekKey(
-    val tupleKey: TupleKey,
+    val range: com.google.common.collect.Range<TupleKey>,
     val families: Collection<ArrayByteSequence>,
     val inclusive: Boolean
-)
-
+) {
+  fun toSeekKey(apSchema: APSchema): SeekKey =
+      SeekKey(
+          GraphuloUtil.transform(range) {it.toKey(apSchema)},
+          families, inclusive
+      )
+}

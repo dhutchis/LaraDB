@@ -39,7 +39,7 @@ class MapToSkviAdapter(
 
   override operator fun next() {
     inner.next()
-    // check if we passed the seek range
+    // check if we passed the seek r
     findTop()
   }
 
@@ -53,7 +53,7 @@ class MapToSkviAdapter(
   // incl=F  contains F T
   // incl=F !contains T F
 
-  /** check if we passed the seek range or if we need to worry about column families */
+  /** check if we passed the seek r or if we need to worry about column families */
   private fun findTop() {
     while (inner.hasNext() && !inner.peek().key.matchesFilter())
       inner.next()
@@ -62,7 +62,7 @@ class MapToSkviAdapter(
 
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
     seekData = SeekData(range, columnFamilies, inclusive)
-    // seek to first entry inside range
+    // seek to first entry inside r
     inner = Iterators.peekingIterator(when {
       range.isInfiniteStartKey -> origMap
       range.isStartKeyInclusive -> origMap.tailMap(range.startKey)

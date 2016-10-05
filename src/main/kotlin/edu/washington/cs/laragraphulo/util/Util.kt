@@ -1,6 +1,9 @@
 package edu.washington.cs.laragraphulo.util
 
 import com.google.common.base.Preconditions
+import com.google.common.collect.BoundType
+import com.google.common.collect.ImmutableRangeSet
+import com.google.common.collect.RangeSet
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.admin.TableOperations
 import org.apache.accumulo.core.data.*
@@ -112,134 +115,188 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 
 
 
-//  /**
-//   * Convert D4M string representation of rows to Ranges.
-//   * Last character in the string is an arbitrary separator char
-//   * that must not appear in the rows. The ':' cannot appear in rows either.
-//   * See UtilTest for more test cases.
-//   * Does not merge overlapping ranges.
-//
-//   * @param rowStr Ex: ':,r1,r3,r5,:,r7,r9,:,'
-//   * *
-//   * @return Ex: (-Inf,r1] [r3,r3) [r5,r7] [r9,+Inf)
-//   */
-//  /**
-//   * @see .d4mRowToRanges
-//   * @param singletonsArePrefix If true, then singleton entries in the D4M string are
-//   * *                            made into prefix ranges instead of single row ranges.
-//   */
-//  @JvmOverloads fun d4mRowToRanges(rowStr: String?, singletonsArePrefix: Boolean = false): SortedSet<Range> {
-//    if (rowStr == null || rowStr.isEmpty())
-//      return TreeSet()
-//    // could write my own version that does not do regex, but probably not worth optimizing
-//    val rowStrSplit = splitD4mString(rowStr)
-//    //if (rowStrSplit.length == 1)
-//    val rowStrList = Arrays.asList(*rowStrSplit)
-//    val pi = PeekingIterator3(rowStrList.iterator())
-//    val rngset = TreeSet<Range>()
-//
-//    if (pi.peekFirst().equals(":")) { // (-Inf,
-//      if (pi.peekSecond() == null) {
-//        return SETINFRNG // (-Inf,+Inf)
-//      } else {
-//        if (pi.peekSecond().equals(":") || pi.peekThird() != null && pi.peekThird().equals(":"))
-//          throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
-//        rngset.add(Range(null, false, pi.peekSecond(), true)) // (-Inf,2]
-//        pi.next()
-//        pi.next()
-//      }
-//    }
-//
-//    while (pi.hasNext()) {
-//      if (pi.peekSecond() == null) { // last singleton row [1,1~)
-//        if (singletonsArePrefix)
-//          rngset.add(Range.prefix(pi.peekFirst()))
-//        else
-//          rngset.add(Range.exact(pi.peekFirst()))
-//        return rngset
-//      } else if (pi.peekSecond().equals(":")) {
-//        if (pi.peekThird() == null) { // [1,+Inf)
-//          rngset.add(Range(pi.peekFirst(), true, null, false))
-//          return rngset
-//        } else { // [1,3]
-//          if (pi.peekThird().equals(":"))
-//            throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
-//          rngset.add(Range(pi.peekFirst(), true, pi.peekThird(), true))
-//          pi.next()
-//          pi.next()
-//          pi.next()
-//        }
-//      } else { // [1,1~)
-//        if (singletonsArePrefix)
-//          rngset.add(Range.prefix(pi.peekFirst()))
-//        else
-//          rngset.add(Range.exact(pi.peekFirst()))
-//        pi.next()
-//      }
-//    }
-//    return rngset
-//  }
+  /**
+   * Convert D4M string representation of rows to Ranges.
+   * Last character in the string is an arbitrary separator char
+   * that must not appear in the rows. The ':' cannot appear in rows either.
+   * See UtilTest for more test cases.
+   * Does not merge overlapping ranges.
 
-//  /**
-//   * @see .d4mRowToRanges
-//   * @param singletonsArePrefix If true, then singleton entries in the D4M string are
-//   * *                            made into prefix ranges instead of single row ranges.
-//   * *
-//   * @return [ImmutableRangeSet]
-//   */
-//  fun d4mRowToGuavaRangeSet(rowStr: String?, singletonsArePrefix: Boolean): RangeSet<ByteSequence> {
-//    if (rowStr == null || rowStr.isEmpty())
-//      return ImmutableRangeSet.of<ByteSequence>()
-//    // could write my own version that does not do regex, but probably not worth optimizing
-//    val rowStrSplit = splitD4mString(rowStr)
-//    //if (rowStrSplit.length == 1)
-//    val rowStrList = Arrays.asList(*rowStrSplit)
-//    val pi = PeekingIterator3(rowStrList.iterator())
-//    val rngset = ImmutableRangeSet.builder<ByteSequence>()
-//
-//    if (pi.peekFirst().equals(":")) { // (-Inf,
-//      if (pi.peekSecond() == null) {
-//        return ImmutableRangeSet.of(com.google.common.collect.Range.all<ByteSequence>()) // (-Inf,+Inf)
-//      } else {
-//        if (pi.peekSecond().equals(":") || pi.peekThird() != null && pi.peekThird().equals(":"))
-//          throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
-//        rngset.add(com.google.common.collect.Range.atMost(ArrayByteSequence(pi.peekSecond()))) // (-Inf,2]
-//        pi.next()
-//        pi.next()
-//      }
-//    }
-//
-//    while (pi.hasNext()) {
-//      if (pi.peekSecond() == null) { // last singleton row [1,1~)
-//        if (singletonsArePrefix)
-//          rngset.add(com.google.common.collect.Range.closedOpen(
-//              ArrayByteSequence(pi.peekFirst()), ArrayByteSequence(Range.followingPrefix(Text(pi.peekFirst())).toString())))
-//        else
-//          rngset.add(com.google.common.collect.Range.singleton(ArrayByteSequence(pi.peekFirst())))
-//        return rngset.build()
-//      } else if (pi.peekSecond().equals(":")) {
-//        if (pi.peekThird() == null) { // [1,+Inf)
-//          rngset.add(com.google.common.collect.Range.atLeast(ArrayByteSequence(pi.peekFirst())))
-//          return rngset.build()
-//        } else { // [1,3]
-//          if (pi.peekThird().equals(":"))
-//            throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
-//          rngset.add(com.google.common.collect.Range.closed(ArrayByteSequence(pi.peekFirst()), ArrayByteSequence(pi.peekThird())))
-//          pi.next()
-//          pi.next()
-//          pi.next()
-//        }
-//      } else { // [1,1~)
-//        if (singletonsArePrefix)
-//          rngset.add(com.google.common.collect.Range.closedOpen(
-//              ArrayByteSequence(pi.peekFirst()), ArrayByteSequence(Range.followingPrefix(Text(pi.peekFirst())).toString())))
-//        else
-//          rngset.add(com.google.common.collect.Range.singleton(ArrayByteSequence(pi.peekFirst())))
-//        pi.next()
-//      }
-//    }
-//    return rngset.build()
-//  }
+   * @param rowStr Ex: ':,r1,r3,r5,:,r7,r9,:,'
+   * *
+   * @return Ex: (-Inf,r1] [r3,r3) [r5,r7] [r9,+Inf)
+   */
+  /**
+   * @see .d4mRowToRanges
+   * @param singletonsArePrefix If true, then singleton entries in the D4M string are
+   * *                            made into prefix ranges instead of single row ranges.
+   */
+  @JvmOverloads fun d4mRowToRanges(rowStr: String?, singletonsArePrefix: Boolean = false): SortedSet<Range> {
+    if (rowStr == null || rowStr.isEmpty())
+      return TreeSet()
+    // could write my own version that does not do regex, but probably not worth optimizing
+    val rs = splitD4mString(rowStr)
+    val rngset = TreeSet<Range>()
+    fun hasOne(i: Int) = i < rs.size
+    fun hasTwo(i: Int) = i + 1 < rs.size
+    fun hasThree(i: Int) = i + 2 < rs.size
+
+    var i = 0
+    if (rs[i].equals(":")) { // (-Inf,
+      if (!hasTwo(i)) {
+        return SETINFRNG // (-Inf,+Inf)
+      } else {
+        if (rs[i+1].equals(":") || hasThree(i) && rs[i+2].equals(":"))
+          throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
+        rngset.add(Range(null, false, rs[i+1], true)) // (-Inf,2]
+        i += 2
+      }
+    }
+
+    while (hasOne(i)) {
+      if (!hasTwo(i)) { // last singleton row [1,1~)
+        if (singletonsArePrefix)
+          rngset.add(Range.prefix(rs[i]))
+        else
+          rngset.add(Range.exact(rs[i]))
+        return rngset
+      } else if (rs[i+1].equals(":")) {
+        if (!hasThree(i)) { // [1,+Inf)
+          rngset.add(Range(rs[i], true, null, false))
+          return rngset
+        } else { // [1,3]
+          if (rs[i+2].equals(":"))
+            throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
+          rngset.add(Range(rs[i], true, rs[i+2], true))
+          i += 3
+        }
+      } else { // [1,1~)
+        if (singletonsArePrefix)
+          rngset.add(Range.prefix(rs[i]))
+        else
+          rngset.add(Range.exact(rs[i]))
+        i++
+      }
+    }
+    return rngset
+  }
+
+  /**
+   * @see .d4mRowToRanges
+   * @param singletonsArePrefix If true, then singleton entries in the D4M string are
+   * *                            made into prefix ranges instead of single row ranges.
+   * *
+   * @return [ImmutableRangeSet]
+   */
+  fun d4mRowToGuavaRangeSet(rowStr: String?, singletonsArePrefix: Boolean): RangeSet<ByteSequence> {
+    if (rowStr == null || rowStr.isEmpty())
+      return ImmutableRangeSet.of<ByteSequence>()
+    // could write my own version that does not do regex, but probably not worth optimizing
+    val rs = splitD4mString(rowStr)
+    fun hasOne(i: Int) = i < rs.size
+    fun hasTwo(i: Int) = i + 1 < rs.size
+    fun hasThree(i: Int) = i + 2 < rs.size
+    val rngset = ImmutableRangeSet.builder<ByteSequence>()
+    var i = 0
+
+    if (rs[i].equals(":")) { // (-Inf,
+      if (!hasTwo(i)) {
+        return ImmutableRangeSet.of(com.google.common.collect.Range.all<ByteSequence>()) // (-Inf,+Inf)
+      } else {
+        if (rs[i+1].equals(":") || hasThree(i) && rs[i+2].equals(":"))
+          throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
+        rngset.add(com.google.common.collect.Range.atMost(ArrayByteSequence(rs[i+1]))) // (-Inf,2]
+        i += 2
+      }
+    }
+
+    while (hasOne(i)) {
+      if (!hasTwo(i)) { // last singleton row [1,1~)
+        if (singletonsArePrefix)
+          rngset.add(com.google.common.collect.Range.closedOpen(
+              ArrayByteSequence(rs[i]), ArrayByteSequence(Range.followingPrefix(Text(rs[i])).toString())))
+        else
+          rngset.add(com.google.common.collect.Range.singleton(ArrayByteSequence(rs[i])))
+        return rngset.build()
+      } else if (rs[i+1].equals(":")) {
+        if (!hasThree(i)) { // [1,+Inf)
+          rngset.add(com.google.common.collect.Range.atLeast(ArrayByteSequence(rs[i])))
+          return rngset.build()
+        } else { // [1,3]
+          if (rs[i+2].equals(":"))
+            throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
+          rngset.add(com.google.common.collect.Range.closed(ArrayByteSequence(rs[i]), ArrayByteSequence(rs[i+2])))
+          i += 3
+        }
+      } else { // [1,1~)
+        if (singletonsArePrefix)
+          rngset.add(com.google.common.collect.Range.closedOpen(
+              ArrayByteSequence(rs[i]), ArrayByteSequence(Range.followingPrefix(Text(rs[i])).toString())))
+        else
+          rngset.add(com.google.common.collect.Range.singleton(ArrayByteSequence(rs[i])))
+        i++
+      }
+    }
+    return rngset.build()
+  }
+
+  inline fun <I : Comparable<I>, R : Comparable<R>>transform(r: com.google.common.collect.Range<I>, f: (I) -> R): com.google.common.collect.Range<R> {
+    return when {
+      !r.hasLowerBound() && !r.hasUpperBound() -> com.google.common.collect.Range.all<R>()
+      !r.hasLowerBound() -> when (r.upperBoundType()!!) {
+        BoundType.CLOSED -> com.google.common.collect.Range.atMost(f(r.upperEndpoint()))
+        BoundType.OPEN -> com.google.common.collect.Range.lessThan(f(r.upperEndpoint()))
+      }
+      !r.hasUpperBound() -> when (r.lowerBoundType()!!) {
+        BoundType.CLOSED -> com.google.common.collect.Range.atLeast(f(r.lowerEndpoint()))
+        BoundType.OPEN -> com.google.common.collect.Range.greaterThan(f(r.lowerEndpoint()))
+      }
+      else -> when (r.lowerBoundType()!!) {
+        BoundType.CLOSED -> when (r.upperBoundType()!!) {
+          BoundType.CLOSED -> com.google.common.collect.Range.closed(f(r.lowerEndpoint()), f(r.upperEndpoint()))
+          BoundType.OPEN -> com.google.common.collect.Range.closedOpen(f(r.lowerEndpoint()), f(r.upperEndpoint()))
+        }
+        BoundType.OPEN -> when (r.upperBoundType()!!) {
+          BoundType.CLOSED -> com.google.common.collect.Range.openClosed(f(r.lowerEndpoint()), f(r.upperEndpoint()))
+          BoundType.OPEN -> com.google.common.collect.Range.open(f(r.lowerEndpoint()), f(r.upperEndpoint()))
+        }
+      }
+    }
+  }
+
+  fun rangeToGuavaRange(r: Range): com.google.common.collect.Range<Key> {
+    val startKey: Key? = r.startKey
+    val endKey: Key? = r.endKey
+    val si = r.isStartKeyInclusive
+    val ei = r.isEndKeyInclusive
+    return when {
+      startKey == null && endKey == null -> com.google.common.collect.Range.all<Key>()
+      startKey == null && ei -> com.google.common.collect.Range.atMost(endKey)
+      startKey == null -> com.google.common.collect.Range.lessThan(endKey)
+      endKey == null && si -> com.google.common.collect.Range.atLeast(startKey)
+      endKey == null -> com.google.common.collect.Range.greaterThan(startKey)
+      si && ei -> com.google.common.collect.Range.closed(startKey,endKey)
+      si -> com.google.common.collect.Range.closedOpen(startKey,endKey)
+      ei -> com.google.common.collect.Range.openClosed(startKey,endKey)
+      // possibly weird case if startKey == endKey; empty range; test this case
+      else -> com.google.common.collect.Range.open(startKey,endKey)
+    }
+  }
+
+  private fun BoundType.toBoolean() = when (this) {
+    BoundType.CLOSED -> true
+    BoundType.OPEN -> false
+  }
+
+  fun guavaRangeToRange(r: com.google.common.collect.Range<Key>) = when {
+      !r.hasLowerBound() && !r.hasUpperBound() -> Range()
+      !r.hasLowerBound() -> Range(null, false, r.upperEndpoint(), r.upperBoundType().toBoolean())
+      !r.hasUpperBound() -> Range(r.lowerEndpoint(), r.lowerBoundType().toBoolean(), null, false)
+      else -> Range(r.lowerEndpoint(), r.lowerBoundType().toBoolean(), r.upperEndpoint(), r.upperBoundType().toBoolean())
+    }
+
+
+
 
   @JvmOverloads fun rangesToD4MString(ranges: Collection<Range>?, sep: Char = DEFAULT_SEP_D4M_STRING): String {
     var ranges = ranges
@@ -433,8 +490,8 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //   * Four modes of operation:
 //   * 1. Null or blank ("") `colFilter`: do nothing.
 //   * 2. No ranges `colFilter`: use scanner.fetchColumn() which invokes an Accumulo system ColumnQualifierFilter.
-//   * 3. Singleton range `colFilter`: use Accumulo user ColumnSliceFilter.
-//   * 4. Multi-range `colFilter`: use Graphulo D4mRangeFilter.
+//   * 3. Singleton r `colFilter`: use Accumulo user ColumnSliceFilter.
+//   * 4. Multi-r `colFilter`: use Graphulo D4mRangeFilter.
 //   * @param colFilter column filter string
 //   * *
 //   * @param scanner to call fetchColumn() on, for case #2; and addScanIterator(), for cases #3 and #4
@@ -455,7 +512,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //        val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
 //        assert(ranges.size > 0)
 //        val s: IteratorSetting
-//        if (ranges.size == 1) { // single range - use ColumnSliceFilter
+//        if (ranges.size == 1) { // single r - use ColumnSliceFilter
 //          val r = ranges.first()
 //          if (r.isInfiniteStartKey && r.isInfiniteStopKey)
 //            return                // Infinite case: no filtering.
@@ -480,8 +537,8 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //   *
 //   *  1. 1. Null or blank ("") `colFilter`: do nothing.
 //   *  1. 2. No ranges `colFilter`: use scanner.fetchColumn() which invokes an Accumulo system [ColumnQualifierFilter].
-//   *  1. 3. Singleton range `colFilter`: use Accumulo user [ColumnSliceFilter].
-//   *  1. 4. Multi-range `colFilter`: use Graphulo [D4mRangeFilter].
+//   *  1. 3. Singleton r `colFilter`: use Accumulo user [ColumnSliceFilter].
+//   *  1. 4. Multi-r `colFilter`: use Graphulo [D4mRangeFilter].
 //   *
 //   * @param colFilter column filter string
 //   * *
@@ -504,7 +561,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //        val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
 //        assert(ranges.size > 0)
 //        val s: IteratorSetting
-//        if (ranges.size == 1) { // single range - use ColumnSliceFilter
+//        if (ranges.size == 1) { // single r - use ColumnSliceFilter
 //          val r = ranges.first()
 //          s = IteratorSetting(1, ColumnSliceFilter::class.java)
 //          //          System.err.println("start: "+(r.isInfiniteStartKey() ? null : r.getStartKey().getRow().toString())
@@ -530,8 +587,8 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //   * Four modes of operation:
 //   * 1. Null or blank ("") `colFilter`: do nothing.
 //   * 2. No ranges `colFilter`: use Accumulo system ColumnQualifierFilter.
-//   * 3. Singleton range `colFilter`: use Accumulo user ColumnSliceFilter.
-//   * 4. Multi-range `colFilter`: use Graphulo D4mRangeFilter.
+//   * 3. Singleton r `colFilter`: use Accumulo user ColumnSliceFilter.
+//   * 4. Multi-r `colFilter`: use Graphulo D4mRangeFilter.
 //   * @param colFilter column filter string
 //   * *
 //   * @param skvi Parent / source iterator
@@ -559,7 +616,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //      val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
 //      assert(ranges.size > 0)
 //
-//      if (ranges.size == 1) { // single range - use ColumnSliceFilter
+//      if (ranges.size == 1) { // single r - use ColumnSliceFilter
 //        val r = ranges.first()
 //        val map = HashMap<String, String>()
 //
@@ -641,8 +698,8 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //      val tmp = GraphuloUtil.d4mRowToRanges(str)
 //      val tmp2 = TreeSet<Range>()
 //      for (startPre in GraphuloUtil.splitD4mString(prefixes))
-//        for (range in tmp)
-//          tmp2.add(GraphuloUtil.prependPrefixToRange(startPre, range))
+//        for (r in tmp)
+//          tmp2.add(GraphuloUtil.prependPrefixToRange(startPre, r))
 //      str = GraphuloUtil.rangesToD4MString(tmp2, str[str.length - 1])
 //      prefixes = ","
 //    }
@@ -657,7 +714,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //  }
 
   /**
-   * Does the str contain the colon+separator, meaning it has a range?
+   * Does the str contain the colon+separator, meaning it has a r?
    */
   fun d4mStringContainsRange(str: String): Boolean {
     val cont = ":" + str[str.length - 1]
@@ -697,7 +754,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
   fun numD4mStr(s: String?): Int {
     if (s == null || s.isEmpty())
       return 0
-    require(!s.contains(":")) {"Cannot count number of terms in a D4M String with a range: $s"}
+    require(!s.contains(":")) {"Cannot count number of terms in a D4M String with a r: $s"}
     var cnt = -1
     val sep = s[s.length - 1]
     var pos = -1
@@ -710,8 +767,8 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 
 
   /**
-   * Pad a range with a prefix, so the new range points to entries
-   * that begin with the prefix and then satisfy the original range.
+   * Pad a r with a prefix, so the new r points to entries
+   * that begin with the prefix and then satisfy the original r.
    * Only uses the Row field of the original Range; discards the rest.
    * @param pre The prefix
    * *
@@ -744,7 +801,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
   }
 
 //  /**
-//   * Makes each input term into a prefix range.
+//   * Makes each input term into a prefix r.
 //   *
 //   * "v1,v5," => "v1|,:,v1},v5|,:,v5},"
 //   * "v1,:,v3,v5," => "v1,:,v3,v5|,:,v5},"
@@ -756,7 +813,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //    //    Preconditions.checkArgument(str.indexOf(':') != -1, "Cannot have the ':' character: "+str);
 //    val sep = str[str.length - 1]
 //    if (d4mStringContainsEmptyString(str))
-//    // empty prefix is full range.
+//    // empty prefix is full r.
 //      return ":" + sep
 //
 //    if (!d4mStringContainsRange(str)) {
@@ -772,7 +829,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //  }
 
   /**
-   * Makes each input term into a prefix range.
+   * Makes each input term into a prefix r.
    * "v1,v5," => "v1,:,v1\255,v5,:,v5\255,"
    */
   fun singletonsAsPrefix(vktexts: Collection<Text>, sep: Char): String {

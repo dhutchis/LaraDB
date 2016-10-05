@@ -119,9 +119,6 @@ interface ReducingSchema {
 //    get() = super.lapRange
 //}
 
-fun defaultWidths(types: List<Type<*>>): List<Width> {
-  types.map { it.naturalWidth }
-}
 
 
 const val __DAP__ = "__DAP__"
@@ -131,8 +128,8 @@ class ImmutableUberSchema(
     allNames: List<Name>,
     dapLen: Int,
     lapLen: Int,
-    /** An int such that all [keyNames] whose index is less than sortedUpto are sorted.
-     * 0 means nothing is sorted. Valid up to and including [keyNames].size. */
+    /** An int such that all [dap] and [lap] whose index is less than sortedUpto are sorted.
+     * 0 means nothing is sorted. Valid up to and including [dap].size + [lap].size. */
     val sortedUpto: Int,
     types: List<Type<*>>,
     /** Only for keys (dap and lap) */
@@ -147,7 +144,9 @@ class ImmutableUberSchema(
   val lap: List<Name> = all.subList(dapLen,dapLen+lapLen)
   val cap: List<Name> = all.subList(dapLen+lapLen,all.size)
   val types: List<Type<*>> = ImmutableList.copyOf(types)
+  /** Only for keys (dap and lap) */
   val widths: List<Width> = ImmutableList.copyOf(widths)
+  /** Only for values */
   val defaults: List<Default> = ImmutableList.copyOf(defaults)
   val fam: ByteArray = Arrays.copyOfRange(family.backingArray, family.offset(), family.offset()+family.length())
 
