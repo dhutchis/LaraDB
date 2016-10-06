@@ -19,7 +19,11 @@ abstract class Op<out R>(args: List<Op<*>> = emptyList()) : Serializable {
   constructor(vararg args: Op<*>): this(ImmutableList.copyOf(args))
   val args: List<Op<*>> = ImmutableList.copyOf(args)
 
-  open val reqArgs: List<ArgType<*>> = ImmutableList.of()
+  open val reqArgs: List<ArgType<*>> = EMPTYLIST
+
+  companion object {
+    val EMPTYLIST: List<ArgType<*>> = ImmutableList.of<ArgType<*>>()
+  }
 
   /** Call by name. Cannot do variable-argument construction, unless one of the arguments is a list. */
   operator fun invoke(argMap: Map<String,*>): R {
@@ -43,9 +47,7 @@ abstract class Op<out R>(args: List<Op<*>> = emptyList()) : Serializable {
   /** Call by position. Recommended to use [checkReqs] to check the arguments. */
   abstract operator fun invoke(reqs: List<*> = emptyList<Any>()): R
 
-  override fun toString(): String{
-    return "Op(args=$args)"
-  }
+  override fun toString(): String = "Op($args)"
 
   override fun equals(other: Any?): Boolean{
     if (this === other) return true
@@ -60,4 +62,32 @@ abstract class Op<out R>(args: List<Op<*>> = emptyList()) : Serializable {
   override fun hashCode(): Int = args.hashCode()
 }
 
+class Obj<out R>(val obj: R): Op<R>() {
+  override fun invoke(reqs: List<*>): R = obj
+  override fun toString() = obj.toString()
+
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as Obj<*>
+
+    if (obj != other.obj) return false
+
+    return true
+  }
+  override fun hashCode(): Int = (obj?.hashCode() ?: 0)
+}
+
+fun <R> R.toOp()= Obj(this)
+
+//fun <R> R.toOp(): Op<R> = object : Op<R>() {
+//  override fun invoke(reqs: List<*>): R = this@toOp
+//  override fun toString() = this@toOp.toString()
+//}
+
+//val b: KFunction<BigInteger> = BigInteger::class.constructors.first()
+//val c: BigInteger = b.call(5)
+
+//val d: Int = 55.toOp()()
 
