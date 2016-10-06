@@ -83,6 +83,7 @@ sealed class RacoOperator<R>(args: List<Op<*>> = emptyList()) : Op<R>(args) {
             fun AAL(elen: Int) { if (pa.size != elen) throw ParseRacoException("expected $elen arguments but got ${pa.size} arguments: $pa") }
 
             when (ptree.name) {
+              "Store" -> { AAL(2); Store(PPT(pa[0]) as RelationKey, PPT(pa[1]) as RacoOperator<Relation>) }
               "Dump" -> { AAL(1); Dump(PPT(pa[0]) as Op<Relation>) }
               "Apply" -> { AAL(2); Apply(
                   PPT(pa[0]) as Obj<List<Emitter>>,
@@ -93,6 +94,23 @@ sealed class RacoOperator<R>(args: List<Op<*>> = emptyList()) : Op<R>(args) {
                   scheme = Obj(schemeToMap(pa[2] as PTree.PNode)),
                   options = Obj((pa[3] as PTree.PMap).map/*.mapValues { it.value }*/)) }
               "NamedAttributeRef" -> { AAL(1); RacoExpression.NamedAttributeRef(Obj((pa[0] as PTree.PString).str)) }
+              "Scan" -> { AAL(4); Scan(
+                  relationKey = PPT(pa[0]) as RelationKey,
+                  scheme = Obj(schemeToMap(pa[1] as PTree.PNode)),
+                  cardinality = Obj((pa[2] as PTree.PLong).v),
+                  partitioning = PPT(pa[3]) as RepresentationProperties
+              ) }
+              "RelationKey" -> { AAL(3); RelationKey(
+                  user = Obj((pa[0] as PTree.PString).str),
+                  program = Obj((pa[1] as PTree.PString).str),
+                  relation = Obj((pa[2] as PTree.PString).str)
+              ) }
+              "RepresentationProperties" -> { AAL(3); RepresentationProperties(
+                  hashPartition = (PPT(pa[0]) as Obj<List<String>>),
+                  sorted = PPT(pa[1]) as Obj<List<String>>,
+                  grouped = PPT(pa[2]) as Obj<List<String>>
+              ) }
+              "frozenset" -> {AAL(1); (PPT(pa[0]) as Obj<List<Op<*>>>)().map { (it as Obj<String>)() }.let { Obj(it) } as Obj<List<String>> }
               else -> throw ParseRacoException("unexpected node: ${ptree.name}")
             }
           }
@@ -102,6 +120,7 @@ sealed class RacoOperator<R>(args: List<Op<*>> = emptyList()) : Op<R>(args) {
           is PTree.PLong -> Obj(ptree.v)
           is PTree.PDouble -> Obj(ptree.v)
           is PTree.PString -> Obj(ptree.str)
+          PTree.PNone -> Obj(listOf<String>())
         }
 
     private fun schemeToMap(pscheme: PTree.PNode): Scheme {
@@ -128,17 +147,25 @@ sealed class RacoOperator<R>(args: List<Op<*>> = emptyList()) : Op<R>(args) {
   }
 }
 
+sealed class RacoTopLevel(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
+  constructor(vararg args: Op<*>) : this(args.asList())
+
+  class Sequence(val input: RacoOperator<*>) : RacoTopLevel(input)
+}
+
+data class Store(val relationKey: RelationKey, val input: RacoOperator<Relation>) : RacoOperator<Relation>(relationKey, input)
+
 //open class Join(
 //    condition: Op<RacoExpression<Boolean>>,
 //    left: Op<Relation>,
 //    right: Op<Relation>
 //) : RacoOperator<Relation>(condition, left, right)
 
-class Dump(val input: Op<Relation>) : RacoOperator<Unit>(input)
+data class Dump(val input: Op<Relation>) : RacoOperator<Unit>(input)
 
 typealias Emitter = Pair<Name, RacoExpression<*>>
 
-class Apply(
+data class Apply(
     val emitters: Obj<List<Emitter>>,
     val input: RacoOperator<Relation>
 ) : RacoOperator<Relation>(emitters, input)
@@ -154,10 +181,30 @@ A = load("mock.csv", csv(schema(src:int,dst:int))); B = select src, dst from A; 
     FileScan('mock.csv', 'CSV', Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), {})))
  */
 
-class FileScan(
+data class FileScan(
     val file: Obj<String>,
     val format: Obj<String>,
     val scheme: Obj<Scheme>,
     val options: Obj<Map<String,PTree>>
 ) : RacoOperator<Relation>(file, format, scheme, options)
+
+data class RelationKey(
+    val user: Obj<String>,
+    val program: Obj<String>,
+    val relation: Obj<String>
+) : RacoOperator<Relation>(user, program, relation)
+
+data class RepresentationProperties(
+    val hashPartition: Obj<List<String>>,
+    val sorted: Obj<List<String>>,
+    val grouped: Obj<List<String>>
+) : RacoOperator<Relation>(hashPartition, sorted, grouped)
+
+data class Scan(
+    val relationKey: RelationKey,
+    val scheme: Obj<Scheme>,
+    val cardinality: Obj<Long>,
+    val partitioning: RepresentationProperties
+) : RacoOperator<Relation>(relationKey, scheme, cardinality, partitioning)
+
 

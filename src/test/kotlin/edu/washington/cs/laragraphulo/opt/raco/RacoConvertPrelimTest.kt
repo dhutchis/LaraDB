@@ -102,6 +102,26 @@ class RacoConvertPrelimTest(
                 PNode("Dump", listOf()),
                 PNode("Something", listOf(PLong(42)))
             ))
+        ),
+        Params(
+            name = "None",
+            repr = "None",
+            expected = PNone
+        ),
+        Params(
+            name = "frozenset(None)",
+            repr = "frozenset(None)",
+            expected = PNode("frozenset", listOf(PNone))
+        ),
+        Params(
+            name = "frozenset([])",
+            repr = "frozenset([])",
+            expected = PNode("frozenset", listOf(PList(listOf())))
+        ),
+        Params(
+            name = "frozenset(['a'])",
+            repr = "frozenset(['a'])",
+            expected = PNode("frozenset", listOf(PList(listOf(PString("a")))))
         )
     )
 

@@ -1,6 +1,5 @@
 package edu.washington.cs.laragraphulo.opt
 
-import edu.mit.ll.graphulo.skvi.RemoteWriteIterator
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment

@@ -64,15 +64,18 @@ class OpCSVScan(
     return CSVScan(URL(url.obj), encoders.obj, skip.obj, delimiter.obj, quote.obj, escape.obj)
   }
 
-  override val encodingSchema = object : EncodingSchema {
-    override val encodings: Map<Name, Type<*>> = names().toMap()
-  }
-  override val reducingSchema = object : ReducingSchema {
-    override val reducers: Map<Name, (List<FullValue>) -> FullValue> = emptyMap()
-  }
-  override val keySchema = object : KeySchema {
-    override val keyNames: List<Name> = names().map { it.first }
-  }
+  override val encodingSchema = throw UnsupportedOperationException("meh")
+//  object : EncodingSchema {
+//    override val encodings: Map<Name, Type<*>> = names().toMap()
+//  }
+  override val reducingSchema = throw UnsupportedOperationException("meh")
+//  object : ReducingSchema {
+//    override val reducers: Map<Name, (List<FullValue>) -> FullValue> = emptyMap()
+//  }
+  override val keySchema = throw UnsupportedOperationException("meh")
+//  object : KeySchema {
+//    override val keyNames: List<Name> = names().map { it.first }
+//  }
   override val positionSchema: List<Name> = names().map { it.first }
 }
 
@@ -282,8 +285,10 @@ class ApplyIterator(
 
 
 class OpStoreIterator(
-
-) : AccumuloOp {
+    val input: AccumuloOp,
+    val tableName: String,
+    val accumuloConfig: AccumuloConfig
+) : AccumuloOp(input, Obj(tableName), Obj(accumuloConfig)) {
   override val encodingSchema: EncodingSchema
     get() = throw UnsupportedOperationException()
   override val reducingSchema: ReducingSchema
@@ -295,7 +300,10 @@ class OpStoreIterator(
 
   override fun construct(parent: TupleIterator, options: Map<String, String>, env: IteratorEnvironment): AccumuloLikeIterator<*, *> {
 
-    TupleToKeyValueIterator(parent, )
+//    TupleToKeyValueIterator(parent, )
+
+    // RemoteWriteIterator from accumuloConfig
+    // pass in the input
 
     throw UnsupportedOperationException("not implemented")
   }

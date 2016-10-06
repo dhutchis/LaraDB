@@ -1,9 +1,10 @@
-package edu.washington.cs.laragraphulo.util
+package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.PeekingIterator
 import edu.washington.cs.laragraphulo.opt.KeyValue
 import edu.washington.cs.laragraphulo.opt.KeyValueIterator
 import edu.washington.cs.laragraphulo.opt.SeekKey
+import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
@@ -53,12 +54,12 @@ class SkviToKeyValueAdapter(
     throw UnsupportedOperationException("not implemented")
   }
 
-  override fun deepCopy(env: IteratorEnvironment): KeyValueIterator {
-    throw UnsupportedOperationException("not implemented")
+  override fun deepCopy(env: IteratorEnvironment): SkviToKeyValueAdapter {
+    return SkviToKeyValueAdapter(inner.deepCopy(env))
   }
 }
 
-class KeyValueToSkviAdapter(
-
-): SKVI
+//class KeyValueToSkviAdapter(
+//
+//): SortedKeyValueIterator<Key,Value>
 

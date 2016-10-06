@@ -19,6 +19,9 @@ sealed class PTree {
   data class PLong(val v: Long) : PTree()
   data class PDouble(val v: Double) : PTree()
   data class PString(val str: String) : PTree()
+  object PNone : PTree() {
+    override fun toString(): String = "PNone"
+  }
 
   companion object {
     class ParsePythonException(msg: String) : Exception(msg)
@@ -51,7 +54,8 @@ sealed class PTree {
         }
         '{' -> PTree.PMap(parseRacoMap(repr))
         else -> repr.readName('(', fc).let {
-          PTree.PNode(it, parseRacoArgs(repr, ')')) // read NAME(ARG1,ARG2,...,ARGN)
+          if (it == "None") PNone
+          else PTree.PNode(it, parseRacoArgs(repr, ')')) // read NAME(ARG1,ARG2,...,ARGN)
         }
       }
     }
@@ -85,6 +89,8 @@ sealed class PTree {
         val r = this.read().assertNoEOS()
         if (r == ec) break
         sbname.append(r)
+        if (sbname.length == 4 && sbname.toString() == "None")
+          return "None"
       }
       return sbname.toString()
     }

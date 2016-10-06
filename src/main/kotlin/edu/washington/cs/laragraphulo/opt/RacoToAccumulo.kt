@@ -3,6 +3,7 @@ package edu.washington.cs.laragraphulo.opt
 import edu.washington.cs.laragraphulo.Encode
 import edu.washington.cs.laragraphulo.opt.raco.*
 import org.apache.accumulo.core.data.ArrayByteSequence
+import java.util.concurrent.Callable
 
 
 /**
@@ -75,6 +76,10 @@ fun racoExprToExpr(
             t as Type.INT // compiler ought to be able to infer this; report bug
             t.encode(left.dec(t) + right.dec(t))
           }
+          Type.INT_VARIABLE -> {
+            t as Type.INT_VARIABLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
           Type.BOOLEAN -> {
             t as Type.BOOLEAN
             t.encode(left.dec(t) || right.dec(t))
@@ -83,11 +88,23 @@ fun racoExprToExpr(
             t as Type.LONG
             t.encode(left.dec(t) + right.dec(t))
           }
+          Type.LONG_VARIABLE -> {
+            t as Type.LONG_VARIABLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
           Type.DOUBLE -> {
             t as Type.DOUBLE
             t.encode(left.dec(t) + right.dec(t))
           }
+          Type.DOUBLE_VARIABLE -> {
+            t as Type.DOUBLE_VARIABLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
           Type.FLOAT -> {
+            t as Type.FLOAT
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.FLOAT_VARIABLE -> {
             t as Type.FLOAT
             t.encode(left.dec(t) + right.dec(t))
           }
@@ -155,7 +172,7 @@ fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): AccumuloOp {
       val emitters: List<Pair<Name, RacoExpression<*>>> = ro.emitters()
 
 
-      OpApplyIterator(parent, keyExprs = , famExpr = , valExprs = , keySchema = )
+//      OpApplyIterator(parent, keyExprs = , famExpr = , valExprs = , keySchema = )
 
       throw UnsupportedOperationException("nyi")
     }
@@ -178,16 +195,27 @@ fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): AccumuloOp {
       OpCSVScan(ro.file, encoders, names, skip = skip)
     }
 
-
+    else -> throw UnsupportedOperationException("nyi")
   }
 
 
-
+  throw UnsupportedOperationException("nyi")
 }
 
 
 
-sealed class APRequirement
+sealed class APReq {
+
+
+  class SortedPrefixReq(
+      val prefix: List<Name>
+  ) : APReq()
+
+  class SortedPrefixPermutationReq(
+      val prefix: List<Name>
+  ) : APReq()
+
+}
 
 
 
@@ -203,9 +231,33 @@ sealed class APRequirement
 //
 //}
 
+/** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
+fun sanitizeTableName(table: String): String = table.replace(':','_')
+/** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
+fun sanitizeTableName(rk: RelationKey): String = "${rk.user}_${rk.program}_${rk.relation}"
+
 
 // inside a Sequence; probably a Store on top
-fun compileRacoFragment(ro: RacoOperator<*>)
+fun compileRacoFragment(
+    ro: RacoOperator<*>,
+    apReq: APReq,
+    accumuloConfig: AccumuloConfig): Pair<List<Callable<*>>, AccumuloOp> {
+
+  when (ro) {
+
+    is Store -> {
+      val tableName = sanitizeTableName(ro.relationKey)
+      // need to create the table we want to store in
+      val createTask = CreateTableTask(tableName, accumuloConfig)
+
+      val (executionList, compiledInput) = compileRacoFragment(ro.input, apReq, accumuloConfig)
+      OpStoreIterator(compiledInput, tableName, accumuloConfig)
+    }
+
+  }
+
+  throw UnsupportedOperationException("nyi")
+}
 
 
 
