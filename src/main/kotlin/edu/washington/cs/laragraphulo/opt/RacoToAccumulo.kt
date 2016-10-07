@@ -241,16 +241,19 @@ fun racoToAccumulo(
       val pp = racoToAccumulo(ro.input, accumuloConfig, req)
       pp.op as Op<TupleIterator>
 
-      val emittersRaco0: List<Pair<Name, RacoExpression>> = ro.emitters
-      val exprInfos0: List<Triple<Name, Expr<ArrayByteSequence>, Type<*>>> = emittersRaco0.map {
-        Triple(it.first, racoExprToExpr(it.second, pp.sap), it.second.getType(pp.sap)) }
-      // take out family expression if it does not exist
-      val (exprInfos, famExpr) =  exprInfos0.find { it.first == __FAMILY__ }?.let {
-        (exprInfos0 - it) to it.second
-      } ?: exprInfos0 to TupleRef.RefFamily()
-      val emittersRaco = emittersRaco0.find { it.first == __FAMILY__ }?.let { emittersRaco0 - it } ?: emittersRaco0
-      val emittersType: List<Pair<Name, Type<*>>> = emittersRaco.map { it.first to it.second.getType(pp.sap) }
+      var emittersRaco: List<Pair<Name, RacoExpression>> = ro.emitters
+      // take out family expression if it is there
+      val famExpr: Expr<ABS> = emittersRaco.find { it.first == __FAMILY__ }?.let {
+        emittersRaco -= it
+        racoExprToExpr(it.second, pp.sap)
+      } ?: TupleRef.RefFamily()
 
+      // todo - build a map of attribute names to visibility expressions, and another one for timestamp expressions
+
+      val exprInfos: List<Triple<Name, Expr<ArrayByteSequence>, Type<*>>> = emittersRaco.map {
+        Triple(it.first, racoExprToExpr(it.second, pp.sap), it.second.getType(pp.sap)) }
+
+      val emittersType: List<Pair<Name, Type<*>>> = emittersRaco.map { it.first to it.second.getType(pp.sap) }
 
       var emittersScheme: AccessPath
       val keyExprs: List<Expr<ABS>>
@@ -303,6 +306,9 @@ fun racoToAccumulo(
 
       keyExprs = (dap+lap).map { it.second }
       valExprs = cap.map { it ->
+        // todo - if we have an expression for the visibility or timestamp, use it!
+
+
         // If parent had the same value attribute defined, then pull the visibility and ts from it.
         // Otherwise use the Empty visibility and Long.MAX_VALUE timestamp
         if (pp.sap.valNames.contains(it.first)) {
