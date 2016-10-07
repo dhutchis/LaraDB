@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.opt.raco
 
+import edu.washington.cs.laragraphulo.opt.*
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.junit.Assert
 import org.junit.Test
@@ -8,10 +9,7 @@ import org.junit.runners.Parameterized
 import java.io.StringReader
 import java.nio.ByteBuffer
 import edu.washington.cs.laragraphulo.opt.raco.PTree.*
-
-
-
-
+import org.junit.Assume
 
 
 @RunWith(Parameterized::class)
@@ -29,15 +27,41 @@ class RacoConvertTest(
   ) {
     override fun toString(): String = name
   }
-
   @Test
-  fun test1() {
+  fun test() {
     println("Test: ${params.name}")
     println("query: ${params.query}")
+    // testConvert()
     val ptree = StringReader(params.query).use { PTree.parseRaco(it) }
     println("ptree: $ptree")
     val racoOp = RacoOperator.parsePTreeToRacoTree(ptree)
     println("racoOp: $racoOp")
+
+    if (params.name == "dump apply filescan")
+      Assume.assumeFalse("Dump is not implemented; skipping the compile part of this test", true)
+
+    // testCompile()
+    val callables = executorsRacoOnAccumulo(racoOp, hardcodedAccumuloConfig)
+    println("Callables : $callables")
+
+    // testSerialize()
+    callables.forEachIndexed { i, callable ->
+      print("$i: ")
+      when (callable) {
+        is CreateTableTask -> {
+          println("CreateTableTask(${callable.tableName})")
+        }
+        is OpAccumuloPipelineTask -> {
+          println("AccumuloPipelineTask(${callable.accumuloPipeline.tableName}): ${callable.accumuloPipeline.op}")
+          val serialized = callable.accumuloPipeline.serializer.serializeToString(callable.accumuloPipeline.op)
+          val deserialized = callable.accumuloPipeline.serializer.deserializeFromString(serialized)
+//          Assert.assertEquals("Serialization should match original object", callable.accumuloPipeline.op, deserialized)
+        }
+        else -> {
+          println("???: $callable")
+        }
+      }
+    }
     println()
   }
 

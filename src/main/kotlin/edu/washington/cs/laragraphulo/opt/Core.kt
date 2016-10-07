@@ -13,7 +13,7 @@ data class Arg<T>(
     val type: Class<T>,
     /** If null, then this is a required argument. */
     val default: T? = null
-)
+) : Serializable
 
 class InvokeException(val op: Op<*>,
                       msg: String = "problem invoking $op",

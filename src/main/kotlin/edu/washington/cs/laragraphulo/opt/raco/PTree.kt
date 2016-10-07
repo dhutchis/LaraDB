@@ -28,7 +28,12 @@ sealed class PTree {
     /**
      * Parse a Python repr string into a [PTree]
      */
-    fun parseRaco(repr: Reader): PTree = parseRacoOne(PushbackReader(repr))
+    fun parseRaco(repr: Reader): PTree = PushbackReader(repr).use { parseRacoOne(it) }
+
+    /**
+     * Parse a Python repr string into a [PTree]
+     */
+    fun parseRaco(repr: String): PTree = PushbackReader(repr.reader()).use { parseRacoOne(it) }
 
     /**
      * NamedAttributeRef('dst')

@@ -3,6 +3,7 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
 import org.apache.accumulo.core.data.ArrayByteSequence
+import java.io.Serializable
 import java.util.regex.Pattern
 
 /*
@@ -11,14 +12,14 @@ They do not enforce any error checking. That is left to implementing classes.
  */
 
 /** An ordered list of attribute names. */
-interface NameSchema {
+interface NameSchema : Serializable {
   /** Attribute names in order. Whether these contain keys, values, both, or something else depends on context.
    * When it contains keys and values, the keys come first (first dapNames, then lapNames) and values come second. */
   val allNames: List<Name>
 }
 
 /** An ordered list of key attribute names. */
-interface KeySchema {
+interface KeySchema : Serializable {
   /** An ordered list of key attribute names. Does not include value attributes. */
   val keyNames: List<Name>
 }
@@ -69,7 +70,7 @@ interface SortedKeySchema : KeySchema {
 }
 
 /** [Type] of each attribute. */
-interface TypeSchema {
+interface TypeSchema : Serializable {
   val types: List<Type<*>>
 }
 
@@ -81,7 +82,7 @@ interface TypeSchema {
 //}
 
 /** [Width] of each attribute. */
-interface WidthSchema {
+interface WidthSchema : Serializable {
   /**
    * A width for each name
    *
@@ -194,7 +195,7 @@ data class NameTypeWidth(
     val name: Name,
     val type: Type<*>,
     val width: Width = type.naturalWidth
-) {
+) : Serializable {
   override fun toString(): String = "<$name@$type@$width>"
 }
 

@@ -673,6 +673,17 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
     }
   }
 
+  /**
+   * Create a new instance of a class whose name is given, as a descendent of a given subclass.
+   */
+  fun <E, Z : E> subclassNewInstance(c: Class<Z>, parentClass: Class<E>): E {
+    try {
+      return c.newInstance()
+    } catch (e: Exception) { // InstantiationException or IllegalAccessException
+      throw RuntimeException("can't instantiate new instance of " + c.name, e)
+    }
+  }
+
 
   /** If str begins with prefix, return a String containing the characters after the prefix. Otherwise return null.  */
   fun stringAfter(prefix: ByteArray, str: ByteArray): String? =

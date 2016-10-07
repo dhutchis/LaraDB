@@ -17,6 +17,7 @@ import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.ZooKeeperInstance
 import org.apache.accumulo.core.client.admin.NewTableConfiguration
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken
+import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Range
@@ -64,7 +65,10 @@ class ExecutorTaskTree<T> {
  * Lazily creates a [Connector] via the [connector] property.
  */
 class AccumuloConfig : Serializable {
-  val authenticationToken: AuthenticationToken
+  @Transient var authenticationToken: AuthenticationToken
+    private set
+  private val authenticationTokenClass: Class<AuthenticationToken>
+
   @Transient private var connectorLazy: Lazy<Connector>
   val connector: Connector
     get() = connectorLazy.value
@@ -77,6 +81,7 @@ class AccumuloConfig : Serializable {
               username: String,
               authenticationToken: AuthenticationToken) {
     this.authenticationToken = authenticationToken
+    this.authenticationTokenClass = authenticationToken.javaClass
     connectorLazy = lazy {
       val cc = ClientConfiguration.loadDefault().withInstance(instanceName).withZkHosts(zookeeperHosts)
       val instance = ZooKeeperInstance(cc)
@@ -90,15 +95,25 @@ class AccumuloConfig : Serializable {
   constructor(connector: Connector,
               authenticationToken: AuthenticationToken) {
     this.authenticationToken = authenticationToken
+    this.authenticationTokenClass = authenticationToken.javaClass
     connectorLazy = lazyOf(connector)
     instanceName = connector.instance.instanceName
     zookeeperHosts = connector.instance.zooKeepers
     username = connector.whoami()
   }
 
+  @Throws(IOException::class)
+  private fun writeObject(stream: java.io.ObjectOutputStream) {
+    stream.defaultWriteObject()
+    authenticationToken.write(stream)
+  }
+
   @Throws(IOException::class, ClassNotFoundException::class)
   private fun readObject(`in`: java.io.ObjectInputStream) {
     `in`.defaultReadObject()
+    val p = GraphuloUtil.subclassNewInstance(authenticationTokenClass, AuthenticationToken::class.java)
+    p.readFields(`in`)
+    authenticationToken = p
 
     // attempt to keep connectorLazy as a val, and set it by making it accessible
 //    val clProp = AccumuloConfig::connectorLazy
@@ -142,7 +157,7 @@ class AccumuloConfig : Serializable {
 }
 
 
-class CreateTableTask(
+data class CreateTableTask(
     val tableName: String,
     val accumuloConfig: AccumuloConfig,
     val ntc: NewTableConfiguration = NewTableConfiguration()
@@ -187,7 +202,7 @@ class AccumuloPipelineTask(
 
     val priority = 10
     // create a DynamicIterator
-    val itset = DeserializeAndDelegateIterator.iteratorSetting(accumuloPipeline.serializer, accumuloPipeline.skvi, priority)
+    val itset = DeserializeDelegateIterator.iteratorSetting(accumuloPipeline.serializer, accumuloPipeline.skvi, priority)
     bs.addScanIterator(itset)
 
     val results = LinkedHashMap<Key, Value>()
@@ -200,7 +215,7 @@ class AccumuloPipelineTask(
 
 typealias SKVI = SortedKeyValueIterator<Key,Value>
 
-class DeserializeAndDelegateIterator : SKVI, OptionDescriber {
+class DeserializeDelegateIterator : SKVI, OptionDescriber {
   companion object {
     const val OPT_SERIALIZED_SKVI = "serialized_skvi"
     const val OPT_SERIALIZER_CLASS = "serializer_class"
@@ -208,7 +223,7 @@ class DeserializeAndDelegateIterator : SKVI, OptionDescriber {
     fun iteratorSetting(serializer: Serializer<SKVI,SKVI>, skvi: SKVI, priority: Int = 10): IteratorSetting {
       val serializer_class = skvi.javaClass
       val serialized_skvi = serializer.serializeToString(skvi)
-      return IteratorSetting(priority, DeserializeAndDelegateIterator::class.java,
+      return IteratorSetting(priority, DeserializeDelegateIterator::class.java,
           mapOf(OPT_SERIALIZER_CLASS to serializer_class.name,
               OPT_SERIALIZED_SKVI to serialized_skvi))
     }
@@ -237,7 +252,7 @@ class DeserializeAndDelegateIterator : SKVI, OptionDescriber {
 
   override fun describeOptions(): OptionDescriber.IteratorOptions {
     return OptionDescriber.IteratorOptions("DeserializeAndDelegateIterator",
-        "de-serializes an Serializer<SKVI> and delegates all SKVI operations to it",
+        "de-serializes a Serializer<SKVI> and delegates all SKVI operations to it",
         mapOf(OPT_SERIALIZED_SKVI to "the serialized SKVI",
             OPT_SERIALIZER_CLASS to "the class that can deserialize the skvi; must have a no-args constructor"),
         null)
@@ -249,6 +264,90 @@ class DeserializeAndDelegateIterator : SKVI, OptionDescriber {
 }
 
 
+
+data class OpAccumuloPipeline(
+    val op: Op<SKVI>,
+    val serializer: Serializer<Op<SKVI>,Op<SKVI>>,
+    val tableName: String
+)
+
+data class OpAccumuloPipelineTask(
+    val accumuloPipeline: OpAccumuloPipeline,
+    val accumuloConfig: AccumuloConfig
+) : Callable<LinkedHashMap<Key, Value>> {
+
+  /**
+   * @return entries received from the server, gathered into memory
+   */
+  override fun call(): LinkedHashMap<Key, Value> {
+    val connector = accumuloConfig.connector
+    val bs = connector.createBatchScanner(accumuloPipeline.tableName, Authorizations.EMPTY, 15)
+    val ranges = listOf(Range())
+    bs.setRanges(ranges)
+
+    val priority = 10
+    // create a DynamicIterator
+    val itset = DeserializeInvokeIterator.iteratorSetting(accumuloPipeline.serializer, accumuloPipeline.op, priority)
+    bs.addScanIterator(itset)
+
+    val results = LinkedHashMap<Key, Value>()
+    for ((key, value) in bs) {
+      results.put(key, value)
+    }
+    return results
+  }
+}
+
+
+
+class DeserializeInvokeIterator : SKVI, OptionDescriber {
+  companion object {
+    const val OPT_SERIALIZED_OP = "serialized_op"
+    const val OPT_SERIALIZER_CLASS = "serializer_class"
+
+    fun iteratorSetting(serializer: Serializer<Op<SKVI>,Op<SKVI>>, op: Op<SKVI>, priority: Int = 10): IteratorSetting {
+      val serializer_class = op.javaClass
+      val serialized_skvi = serializer.serializeToString(op)
+      return IteratorSetting(priority, DeserializeInvokeIterator::class.java,
+          mapOf(OPT_SERIALIZER_CLASS to serializer_class.name,
+              OPT_SERIALIZED_OP to serialized_skvi))
+    }
+
+    fun deserializeFromOptions(options: Map<String,String>): Op<SKVI> {
+      val serializer_class = options[OPT_SERIALIZER_CLASS] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZER_CLASS")
+      val serialized_skvi = options[OPT_SERIALIZED_OP] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZED_OP")
+      @Suppress("UNCHECKED_CAST")
+      val serializer = GraphuloUtil.subclassNewInstance(serializer_class, Serializer::class.java) as Serializer<*,Op<SKVI>>
+      return serializer.deserializeFromString(serialized_skvi)
+    }
+  }
+
+  private lateinit var skvi: SKVI
+
+  override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment) {
+    val op = deserializeFromOptions(options)
+    skvi = op(listOf(source, options, env)) // !
+    skvi.init(source, options, env)
+  }
+  override fun getTopValue() = skvi.topValue
+  override fun next() = skvi.next()
+  override fun deepCopy(env: IteratorEnvironment?) = skvi.deepCopy(env)
+  override fun hasTop() = skvi.hasTop()
+  override fun seek(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) = skvi.seek(range, columnFamilies, inclusive)
+  override fun getTopKey() = skvi.topKey
+
+  override fun describeOptions(): OptionDescriber.IteratorOptions {
+    return OptionDescriber.IteratorOptions("DeserializeAndDelegateIterator",
+        "de-serializes a Serializer<Op<SKVI>>, invokes it, and delegates all SKVI operations to it",
+        mapOf(OPT_SERIALIZED_OP to "the serialized SKVI",
+            OPT_SERIALIZER_CLASS to "the class that can deserialize the skvi; must have a no-args constructor"),
+        null)
+  }
+  override fun validateOptions(options: Map<String, String>): Boolean {
+    deserializeFromOptions(options)
+    return true
+  }
+}
 
 
 
