@@ -27,7 +27,7 @@ class KeyValueToTupleTest(
        *
        */
       val inputs: List<KeyValue>,
-      val apSchema: APSchema,
+      val apKeySchema: APKeySchema,
       val widthSchema: WidthSchema,
       val expected: List<Tuple>
   ) {
@@ -40,12 +40,12 @@ class KeyValueToTupleTest(
     params.expected.checkSorted(TupleComparatorByKeys, "Expected Tuples are not sorted")
 
     val actual = ArrayList<Tuple>(params.inputs.size) // over-estimate
-    for (tuple in KeyValueToTuple(Iterators.peekingIterator(params.inputs.iterator()), params.apSchema, params.widthSchema)) {
+    for (tuple in KeyValueToTuple(Iterators.peekingIterator(params.inputs.iterator()), params.apKeySchema, params.widthSchema)) {
       actual.add(tuple)
     }
     Assert.assertEquals("The tuples converted from the KeyValues are different than expected", params.expected, actual)
 
-    val recoveredKeyValues = actual.flatMap { it.toKeyValues(params.apSchema) }
+    val recoveredKeyValues = actual.flatMap { it.toKeyValues(params.apKeySchema) }
     Assert.assertEquals("Could not recover original KeyValues after converting to tuples and back", params.inputs, recoveredKeyValues)
   }
 
@@ -56,18 +56,25 @@ class KeyValueToTupleTest(
 
     fun String.toABS() = this.toByteArray().let { ArrayByteSequence(it, 0, it.size) }
 
+    fun par(name: String, inputs: List<KeyValue>, uberSchema: ImmutableUberSchema, expected: List<Tuple>) =
+        Params(name, inputs, uberSchema, uberSchema, expected)
+
     val data = arrayOf(
         Params(
             name = "empty no-schema",
             inputs = listOf(),
-            apSchema = ImmutableAccessPath.of(listOf(), listOf()),
+            apKeySchema = ImmutableUberSchema(
+                listOf(), 0, 0, 
+                0, listOf(),
+                widths = listOf()
+            ),
             widthSchema = WidthSchemaImpl(listOf()),
             expected = listOf()
         ),
         Params(
             name = "1-k no-schema",
             inputs = listOf(Key("","fam","q") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf(), listOf()),
+            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
             widthSchema = WidthSchemaImpl(listOf()),
             expected = listOf(TupleImpl(
                 listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))))
@@ -75,7 +82,7 @@ class KeyValueToTupleTest(
         Params(
             name = "1-k duplicate v no-schema",
             inputs = listOf(Key("","fam","q") to Value(), Key("","fam","q") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf(), listOf()),
+            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
             widthSchema = WidthSchemaImpl(listOf()),
             expected = listOf(
                 TupleImpl(listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE),
@@ -85,7 +92,7 @@ class KeyValueToTupleTest(
         Params(
             name = "1-k 2-v no-schema",
             inputs = listOf(Key("","fam","q") to Value(), Key("","fam","q2") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf(), listOf()),
+            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
             widthSchema = WidthSchemaImpl(listOf()),
             expected = listOf(
                 TupleImpl(listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE),
@@ -95,7 +102,7 @@ class KeyValueToTupleTest(
         Params(
             name = "2-k no-schema",
             inputs = listOf(Key("","fam","q") to Value(), Key("","fam2","q") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf(), listOf()),
+            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
             widthSchema = WidthSchemaImpl(listOf()),
             expected = listOf(
                 TupleImpl(listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
@@ -105,7 +112,7 @@ class KeyValueToTupleTest(
         Params(
             name = "2-k 1-row-schema",
             inputs = listOf(Key("r","fam","q") to Value(), Key("r2","fam","q") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf("row"), listOf()),
+            apKeySchema = ImmutableAccessPath.of(listOf("row"), listOf()),
             widthSchema = WidthSchemaImpl(listOf(-1)),
             expected = listOf(
                 TupleImpl(listOf("r".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
@@ -115,7 +122,7 @@ class KeyValueToTupleTest(
         Params(
             name = "2-k colq-schema",
             inputs = listOf(Key("","fam","abaaq") to Value(), Key("","fam","abbbq") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf(), listOf("cqPrePre","cqPre")),
+            apKeySchema = ImmutableAccessPath.of(listOf(), listOf("cqPrePre","cqPre")),
             widthSchema = WidthSchemaImpl(listOf(3, 1)),
             expected = listOf(
                 TupleImpl(listOf("aba".toABS(), "a".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
@@ -125,7 +132,7 @@ class KeyValueToTupleTest(
         Params(
             name = "2-k all-schema",
             inputs = listOf(Key("r","fam","aq") to Value(), Key("r2","fam","bq") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf("row"), listOf("cqPre")),
+            apKeySchema = ImmutableAccessPath.of(listOf("row"), listOf("cqPre")),
             widthSchema = WidthSchemaImpl(listOf(-1, 1)),
             expected = listOf(
                 TupleImpl(listOf("r".toABS(), "a".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
@@ -136,7 +143,7 @@ class KeyValueToTupleTest(
             name = "big mess",
             inputs = listOf(Key("ar","fam","aaq") to Value("yes"), Key("ar","fam","aaq2") to Value("no"),
                 Key("ar2","fam","abq33") to Value()).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2")),
+            apKeySchema = ImmutableAccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2")),
             widthSchema = WidthSchemaImpl(listOf(1, -1, 1, 1)),
             expected = listOf(
                 TupleImpl(listOf("a","r","a","a").map { it.toABS() },"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue("yes".toABS(), EMPTY, Long.MAX_VALUE),
@@ -148,7 +155,7 @@ class KeyValueToTupleTest(
             name = "big mess with visibility and timestamps",
             inputs = listOf(Key("ar","fam","aaq","xxx",42) to Value("yes"), Key("ar","fam","aaq2") to Value("no"),
                 Key("ar2","fam","abq33", 33) to Value("bigo33")).map { KeyValue(it) },
-            apSchema = ImmutableAccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2")),
+            apKeySchema = ImmutableAccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2")),
             widthSchema = WidthSchemaImpl(listOf(1, -1, 1, 1)),
             expected = listOf(
                 TupleImpl(listOf("a","r","a","a").map { it.toABS() },"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue("yes".toABS(), "xxx".toABS(), 42),

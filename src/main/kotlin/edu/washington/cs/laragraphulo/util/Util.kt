@@ -4,14 +4,20 @@ import com.google.common.base.Preconditions
 import com.google.common.collect.BoundType
 import com.google.common.collect.ImmutableRangeSet
 import com.google.common.collect.RangeSet
+import edu.washington.cs.laragraphulo.opt.D4mRangeFilter
+import edu.washington.cs.laragraphulo.opt.DynamicIteratorSetting
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.admin.TableOperations
 import org.apache.accumulo.core.data.*
+import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.IteratorUtil
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
+import org.apache.accumulo.core.iterators.system.ColumnQualifierFilter
+import org.apache.accumulo.core.iterators.user.ColumnSliceFilter
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.WritableComparator
 import org.apache.log4j.LogManager
+import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.*
 
@@ -485,164 +491,164 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
         else -> throw AssertionError("unknown pk: " + pk)
       }
 
-//  /**
-//   * Apply an appropriate column filter based on the input string.
-//   * Four modes of operation:
-//   * 1. Null or blank ("") `colFilter`: do nothing.
-//   * 2. No ranges `colFilter`: use scanner.fetchColumn() which invokes an Accumulo system ColumnQualifierFilter.
-//   * 3. Singleton r `colFilter`: use Accumulo user ColumnSliceFilter.
-//   * 4. Multi-r `colFilter`: use Graphulo D4mRangeFilter.
-//   * @param colFilter column filter string
-//   * *
-//   * @param scanner to call fetchColumn() on, for case #2; and addScanIterator(), for cases #3 and #4
-//   * *
-//   * @param priority to use for scan iterator setting, for case #3 and #4
-//   */
-//  //  @Deprecated
-//  //   * @deprecated Use {@link #applyGeneralColumnFilter(String, ScannerBase, DynamicIteratorSetting)} for more robust filter setting.
-//  fun applyGeneralColumnFilter(colFilter: String?, scanner: ScannerBase, priority: Int) {
-//    //    System.err.println("colFilter: "+colFilter);
-//    if (colFilter != null && !colFilter.isEmpty()) {
-//      val pos1 = colFilter.indexOf(':')
-//      if (pos1 == -1) { // no ranges - collection of singleton texts
-//        for (text in GraphuloUtil.d4mRowToTexts(colFilter)) {
-//          scanner.fetchColumn(GraphuloUtil.EMPTY_TEXT, text)
-//        }
-//      } else {
-//        val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
-//        assert(ranges.size > 0)
-//        val s: IteratorSetting
-//        if (ranges.size == 1) { // single r - use ColumnSliceFilter
-//          val r = ranges.first()
-//          if (r.isInfiniteStartKey && r.isInfiniteStopKey)
-//            return                // Infinite case: no filtering.
-//          s = IteratorSetting(priority, ColumnSliceFilter::class.java)
-//          //          System.err.println("start: "+(r.isInfiniteStartKey() ? null : r.getStartKey().getRow().toString())
-//          //              +"end: "+(r.isInfiniteStopKey() ? null : r.getEndKey().getRow().toString()));
-//          ColumnSliceFilter.setSlice(s, if (r.isInfiniteStartKey) null else r.startKey.row.toString(),
-//              true, if (r.isInfiniteStopKey) null else r.endKey.row.toString(), true)
-//          //          System.err.println("!ok "+GraphuloUtil.d4mRowToRanges(colFilter));
-//        } else { // multiple ranges
-//          //          System.err.println("ok "+GraphuloUtil.d4mRowToRanges(colFilter));
-//          s = D4mRangeFilter.iteratorSetting(1, D4mRangeFilter.KeyPart.COLQ, colFilter)
-//        }
-//        scanner.addScanIterator(s)
-//      }
-//    }
-//  }
-//
-//  /**
-//   * Apply an appropriate column filter based on the input string.
-//   * Four modes of operation:
-//   *
-//   *  1. 1. Null or blank ("") `colFilter`: do nothing.
-//   *  1. 2. No ranges `colFilter`: use scanner.fetchColumn() which invokes an Accumulo system [ColumnQualifierFilter].
-//   *  1. 3. Singleton r `colFilter`: use Accumulo user [ColumnSliceFilter].
-//   *  1. 4. Multi-r `colFilter`: use Graphulo [D4mRangeFilter].
-//   *
-//   * @param colFilter column filter string
-//   * *
-//   * @param scanner to call fetchColumn() on, for case #2
-//   * *
-//   * @param dis to call append()/prepend() on, for cases #3 and #4
-//   * *
-//   * @param append True means call [DynamicIteratorSetting.append]. False means call [DynamicIteratorSetting.prepend]
-//   */
-//  fun applyGeneralColumnFilter(colFilter: String?, scanner: ScannerBase, dis: DynamicIteratorSetting, append: Boolean) {
-//    //    System.err.println("colFilter: "+colFilter);
-//    if (colFilter != null && !colFilter.isEmpty()) {
-//      val pos1 = colFilter.indexOf(':')
-//      if (pos1 == -1) { // no ranges - collection of singleton texts
-//        // todo - the order this filter applies is different. Ensure no logical bugs when we have case 2.
-//        for (text in GraphuloUtil.d4mRowToTexts(colFilter)) {
-//          scanner.fetchColumn(GraphuloUtil.EMPTY_TEXT, text)
-//        }
-//      } else {
-//        val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
-//        assert(ranges.size > 0)
-//        val s: IteratorSetting
-//        if (ranges.size == 1) { // single r - use ColumnSliceFilter
-//          val r = ranges.first()
-//          s = IteratorSetting(1, ColumnSliceFilter::class.java)
-//          //          System.err.println("start: "+(r.isInfiniteStartKey() ? null : r.getStartKey().getRow().toString())
-//          //              +"end: "+(r.isInfiniteStopKey() ? null : r.getEndKey().getRow().toString()));
-//          ColumnSliceFilter.setSlice(s, if (r.isInfiniteStartKey) null else r.startKey.row.toString(),
-//              true, if (r.isInfiniteStopKey) null else r.endKey.row.toString(), true)
-//          //          System.err.println("!ok "+GraphuloUtil.d4mRowToRanges(colFilter));
-//        } else { // multiple ranges
-//          //          System.err.println("ok "+GraphuloUtil.d4mRowToRanges(colFilter));
-//          s = D4mRangeFilter.iteratorSetting(1, D4mRangeFilter.KeyPart.COLQ, colFilter)
-//        }
-//        if (append)
-//          dis.append(s)
-//        else
-//          dis.prepend(s)
-//      }
-//    }
-//  }
-//
-//  /**
-//   * For use within an iterator stack.
-//   * Apply an appropriate column filter based on the input string.
-//   * Four modes of operation:
-//   * 1. Null or blank ("") `colFilter`: do nothing.
-//   * 2. No ranges `colFilter`: use Accumulo system ColumnQualifierFilter.
-//   * 3. Singleton r `colFilter`: use Accumulo user ColumnSliceFilter.
-//   * 4. Multi-r `colFilter`: use Graphulo D4mRangeFilter.
-//   * @param colFilter column filter string
-//   * *
-//   * @param skvi Parent / source iterator
-//   * *
-//   * @return SKVI with appropriate filter iterators placed in front of it.
-//   */
-//  @Throws(IOException::class)
-//  fun applyGeneralColumnFilter(
-//      colFilter: String?, skvi: SortedKeyValueIterator<Key, Value>, env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
-//    if (colFilter == null || colFilter.isEmpty())
-//      return skvi
-//
-//    val pos1 = colFilter.indexOf(':')
-//    if (pos1 == -1) { // no ranges - collection of singleton texts
-//      val colset = HashSet<Column>()
-//      for (text in GraphuloUtil.d4mRowToTexts(colFilter)) {
-//        val by = text.copyBytes()
-//        //        log.debug("Printing characters of string TEXT LIM: "+ Key.toPrintableString(by, 0, text.getLength(), 100));
-//        //        log.debug("Printing characters of string TEXT    : "+ Key.toPrintableString(by, 0, by.length, 100));
-//        colset.add(Column(EMPTY_BYTES, text.copyBytes(), EMPTY_BYTES))
-//      }
-//      return ColumnQualifierFilter(skvi, colset)
-//
-//    } else {
-//      val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
-//      assert(ranges.size > 0)
-//
-//      if (ranges.size == 1) { // single r - use ColumnSliceFilter
-//        val r = ranges.first()
-//        val map = HashMap<String, String>()
-//
-//        val start = if (r.isInfiniteStartKey) null else r.startKey.row.toString()
-//        val end = if (r.isInfiniteStopKey) null else r.endKey.row.toString()
-//        val startInclusive = true
-//        val endInclusive = true
-//
-//        if (start != null)
-//          map.put(ColumnSliceFilter.START_BOUND, start)
-//        if (end != null)
-//          map.put(ColumnSliceFilter.END_BOUND, end)
-//        map.put(ColumnSliceFilter.START_INCLUSIVE, startInclusive.toString())
-//        map.put(ColumnSliceFilter.END_INCLUSIVE, endInclusive.toString())
-//
-//        val filter = ColumnSliceFilter()
-//        filter.init(skvi, map, env)
-//        return filter
-//
-//      } else { // multiple ranges
-//        val filter = D4mRangeFilter()
-//        filter.init(skvi, D4mRangeFilter.iteratorSetting(1, D4mRangeFilter.KeyPart.COLQ, colFilter).getOptions(), env)
-//        return filter
-//      }
-//    }
-//  }
+  /**
+   * Apply an appropriate column filter based on the input string.
+   * Four modes of operation:
+   * 1. Null or blank ("") `colFilter`: do nothing.
+   * 2. No ranges `colFilter`: use scanner.fetchColumn() which invokes an Accumulo system ColumnQualifierFilter.
+   * 3. Singleton r `colFilter`: use Accumulo user ColumnSliceFilter.
+   * 4. Multi-r `colFilter`: use Graphulo D4mRangeFilter.
+   * @param colFilter column filter string
+   * *
+   * @param scanner to call fetchColumn() on, for case #2; and addScanIterator(), for cases #3 and #4
+   * *
+   * @param priority to use for scan iterator setting, for case #3 and #4
+   */
+  //  @Deprecated
+  //   * @deprecated Use {@link #applyGeneralColumnFilter(String, ScannerBase, DynamicIteratorSetting)} for more robust filter setting.
+  fun applyGeneralColumnFilter(colFilter: String?, scanner: ScannerBase, priority: Int) {
+    //    System.err.println("colFilter: "+colFilter);
+    if (colFilter != null && !colFilter.isEmpty()) {
+      val pos1 = colFilter.indexOf(':')
+      if (pos1 == -1) { // no ranges - collection of singleton texts
+        for (text in GraphuloUtil.d4mRowToTexts(colFilter)) {
+          scanner.fetchColumn(GraphuloUtil.EMPTY_TEXT, text)
+        }
+      } else {
+        val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
+        assert(ranges.size > 0)
+        val s: IteratorSetting
+        if (ranges.size == 1) { // single r - use ColumnSliceFilter
+          val r = ranges.first()
+          if (r.isInfiniteStartKey && r.isInfiniteStopKey)
+            return                // Infinite case: no filtering.
+          s = IteratorSetting(priority, ColumnSliceFilter::class.java)
+          //          System.err.println("start: "+(r.isInfiniteStartKey() ? null : r.getStartKey().getRow().toString())
+          //              +"end: "+(r.isInfiniteStopKey() ? null : r.getEndKey().getRow().toString()));
+          ColumnSliceFilter.setSlice(s, if (r.isInfiniteStartKey) null else r.startKey.row.toString(),
+              true, if (r.isInfiniteStopKey) null else r.endKey.row.toString(), true)
+          //          System.err.println("!ok "+GraphuloUtil.d4mRowToRanges(colFilter));
+        } else { // multiple ranges
+          //          System.err.println("ok "+GraphuloUtil.d4mRowToRanges(colFilter));
+          s = D4mRangeFilter.iteratorSetting(1, D4mRangeFilter.KeyPart.COLQ, colFilter)
+        }
+        scanner.addScanIterator(s)
+      }
+    }
+  }
+
+  /**
+   * Apply an appropriate column filter based on the input string.
+   * Four modes of operation:
+   *
+   *  1. 1. Null or blank ("") `colFilter`: do nothing.
+   *  1. 2. No ranges `colFilter`: use scanner.fetchColumn() which invokes an Accumulo system [ColumnQualifierFilter].
+   *  1. 3. Singleton r `colFilter`: use Accumulo user [ColumnSliceFilter].
+   *  1. 4. Multi-r `colFilter`: use Graphulo [D4mRangeFilter].
+   *
+   * @param colFilter column filter string
+   * *
+   * @param scanner to call fetchColumn() on, for case #2
+   * *
+   * @param dis to call append()/prepend() on, for cases #3 and #4
+   * *
+   * @param append True means call [DynamicIteratorSetting.append]. False means call [DynamicIteratorSetting.prepend]
+   */
+  fun applyGeneralColumnFilter(colFilter: String?, scanner: ScannerBase, dis: DynamicIteratorSetting, append: Boolean) {
+    //    System.err.println("colFilter: "+colFilter);
+    if (colFilter != null && !colFilter.isEmpty()) {
+      val pos1 = colFilter.indexOf(':')
+      if (pos1 == -1) { // no ranges - collection of singleton texts
+        // todo - the order this filter applies is different. Ensure no logical bugs when we have case 2.
+        for (text in GraphuloUtil.d4mRowToTexts(colFilter)) {
+          scanner.fetchColumn(GraphuloUtil.EMPTY_TEXT, text)
+        }
+      } else {
+        val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
+        assert(ranges.size > 0)
+        val s: IteratorSetting
+        if (ranges.size == 1) { // single r - use ColumnSliceFilter
+          val r = ranges.first()
+          s = IteratorSetting(1, ColumnSliceFilter::class.java)
+          //          System.err.println("start: "+(r.isInfiniteStartKey() ? null : r.getStartKey().getRow().toString())
+          //              +"end: "+(r.isInfiniteStopKey() ? null : r.getEndKey().getRow().toString()));
+          ColumnSliceFilter.setSlice(s, if (r.isInfiniteStartKey) null else r.startKey.row.toString(),
+              true, if (r.isInfiniteStopKey) null else r.endKey.row.toString(), true)
+          //          System.err.println("!ok "+GraphuloUtil.d4mRowToRanges(colFilter));
+        } else { // multiple ranges
+          //          System.err.println("ok "+GraphuloUtil.d4mRowToRanges(colFilter));
+          s = D4mRangeFilter.iteratorSetting(1, D4mRangeFilter.KeyPart.COLQ, colFilter)
+        }
+        if (append)
+          dis.append(s)
+        else
+          dis.prepend(s)
+      }
+    }
+  }
+
+  /**
+   * For use within an iterator stack.
+   * Apply an appropriate column filter based on the input string.
+   * Four modes of operation:
+   * 1. Null or blank ("") `colFilter`: do nothing.
+   * 2. No ranges `colFilter`: use Accumulo system ColumnQualifierFilter.
+   * 3. Singleton r `colFilter`: use Accumulo user ColumnSliceFilter.
+   * 4. Multi-r `colFilter`: use Graphulo D4mRangeFilter.
+   * @param colFilter column filter string
+   * *
+   * @param skvi Parent / source iterator
+   * *
+   * @return SKVI with appropriate filter iterators placed in front of it.
+   */
+  @Throws(IOException::class)
+  fun applyGeneralColumnFilter(
+      colFilter: String?, skvi: SortedKeyValueIterator<Key, Value>, env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
+    if (colFilter == null || colFilter.isEmpty())
+      return skvi
+
+    val pos1 = colFilter.indexOf(':')
+    if (pos1 == -1) { // no ranges - collection of singleton texts
+      val colset = HashSet<Column>()
+      for (text in GraphuloUtil.d4mRowToTexts(colFilter)) {
+        val by = text.copyBytes()
+        //        log.debug("Printing characters of string TEXT LIM: "+ Key.toPrintableString(by, 0, text.getLength(), 100));
+        //        log.debug("Printing characters of string TEXT    : "+ Key.toPrintableString(by, 0, by.length, 100));
+        colset.add(Column(EMPTY_BYTES, text.copyBytes(), EMPTY_BYTES))
+      }
+      return ColumnQualifierFilter(skvi, colset)
+
+    } else {
+      val ranges = GraphuloUtil.d4mRowToRanges(colFilter)
+      assert(ranges.size > 0)
+
+      if (ranges.size == 1) { // single r - use ColumnSliceFilter
+        val r = ranges.first()
+        val map = HashMap<String, String>()
+
+        val start = if (r.isInfiniteStartKey) null else r.startKey.row.toString()
+        val end = if (r.isInfiniteStopKey) null else r.endKey.row.toString()
+        val startInclusive = true
+        val endInclusive = true
+
+        if (start != null)
+          map.put(ColumnSliceFilter.START_BOUND, start)
+        if (end != null)
+          map.put(ColumnSliceFilter.END_BOUND, end)
+        map.put(ColumnSliceFilter.START_INCLUSIVE, startInclusive.toString())
+        map.put(ColumnSliceFilter.END_INCLUSIVE, endInclusive.toString())
+
+        val filter = ColumnSliceFilter()
+        filter.init(skvi, map, env)
+        return filter
+
+      } else { // multiple ranges
+        val filter = D4mRangeFilter()
+        filter.init(skvi, D4mRangeFilter.iteratorSetting(1, D4mRangeFilter.KeyPart.COLQ, colFilter).options, env)
+        return filter
+      }
+    }
+  }
 
   /**
    * Create a new instance of a class whose name is given, as a descendent of a given subclass.

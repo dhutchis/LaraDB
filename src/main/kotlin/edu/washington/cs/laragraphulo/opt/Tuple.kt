@@ -6,24 +6,28 @@ import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
+import java.io.Serializable
+import java.lang.reflect.Constructor
 import java.util.*
 import kotlin.comparisons.compareBy
+import kotlin.reflect.jvm.javaConstructor
 
-data class KeyValue(val key: Key, val value: Value) {
+data class KeyValue(val key: Key, val value: Value) : Serializable {
   constructor(kv: Pair<Key,Value>): this(kv.first, kv.second)
+  constructor(kv: Map.Entry<Key,Value>): this(kv.key, kv.value)
 }
 
 data class FullValue(
     val value: ArrayByteSequence,
     val visibility: ArrayByteSequence,
     val timestamp: Long
-)
+) : Serializable
 
-interface TupleKey : Comparable<TupleKey> {
+interface TupleKey : Comparable<TupleKey>, Serializable {
   val keys: List<ArrayByteSequence>
   val family: ArrayByteSequence
 
-  fun toKey(apSchema: APSchema): Key
+  fun toKey(apKeySchema: APKeySchema): Key
 
 //  operator fun get(apSchema: APSchema, name: String): ArrayByteSequence? {
 //    val idx = apSchema.keyNames.indexOf(name)
@@ -53,7 +57,7 @@ open class TupleKeyImpl(
   }
 
   /** Convert this TupleKey to a Key filled up to the CQ with the dap, family, and lap. */
-  override fun toKey(apSchema: APSchema): Key {
+  override fun toKey(apKeySchema: APKeySchema): Key {
     /** Only when [IntRange.step] is 0 */
     fun IntRange.size(): Int = this.endInclusive - this.first + 1
 
@@ -79,10 +83,10 @@ open class TupleKeyImpl(
 
     // an optimization is possible whereby we check to see if the dapList's ArrayByteSequences
     // all reference the same array and form a contiguous block of the array
-    val (rowArr, rowOff, rowLen) = arrayFromParts(apSchema.dapRange)
+    val (rowArr, rowOff, rowLen) = arrayFromParts(apKeySchema.dapRange)
 
     // column qualifier prefix
-    val (lapArr, lapOff, lapLen) = arrayFromParts(apSchema.lapRange)
+    val (lapArr, lapOff, lapLen) = arrayFromParts(apKeySchema.lapRange)
     // this could be optimized in the case of singleton vals
 
     return if (rowOff == 0 && rowLen == rowArr.size &&
@@ -125,7 +129,7 @@ interface Tuple : TupleKey {
   /** At a minimum, this should contain a mapping from the empty string to a FullValue. */
   val vals: ListMultimap<ArrayByteSequence, FullValue>
 
-  fun toKeyValues(apSchema: APSchema): List<KeyValue>
+  fun toKeyValues(apKeySchema: APKeySchema): List<KeyValue>
 
 //  override operator fun get(apSchema: APSchema, name: String): ArrayByteSequence? {
 //    val res = super.get(apSchema, name)
@@ -146,7 +150,7 @@ class TupleImpl(
    *
    * Todo: this function could be re-formulated as a generator.
    */
-  override fun toKeyValues(apSchema: APSchema): List<KeyValue> {
+  override fun toKeyValues(apKeySchema: APKeySchema): List<KeyValue> {
     /** Only when [IntRange.step] is 0 */
     fun IntRange.size(): Int = this.endInclusive - this.first + 1
 
@@ -172,10 +176,10 @@ class TupleImpl(
 
     // an optimization is possible whereby we check to see if the dapList's ArrayByteSequences
     // all reference the same array and form a contiguous block of the array
-    val (rowArr, rowOff, rowLen) = arrayFromParts(apSchema.dapRange)
+    val (rowArr, rowOff, rowLen) = arrayFromParts(apKeySchema.dapRange)
 
     // column qualifier prefix
-    val (lapArr, lapOff, lapLen) = arrayFromParts(apSchema.lapRange)
+    val (lapArr, lapOff, lapLen) = arrayFromParts(apKeySchema.lapRange)
     // this could be optimized in the case of singleton vals
 
     val retList = ArrayList<KeyValue>(vals.size())
@@ -236,16 +240,16 @@ val EMPTY = ArrayByteSequence(EMPTY_B,0,0)
 
 class KeyValueToTuple(
     private val kvIter: PeekingIterator<KeyValue>,
-    val apSchema: APSchema,
+    val apKeySchema: APKeySchema,
     val widthSchema: WidthSchema
 ): Iterator<Tuple> {
   init {
-    require(widthSchema.widths.size >= apSchema.keyNames.size) {"bad widthSchema $widthSchema for schema $apSchema"}
+    require(widthSchema.widths.size >= apKeySchema.keyNames.size) {"bad widthSchema $widthSchema for schema $apKeySchema"}
   }
 
   val keyComparator = compareBy<KeyValue, Key>(
       KeyValueComparatorToQualifierPrefix(
-          widthSchema.widths.subList(apSchema.dapLen, apSchema.dapLen+apSchema.lap.size).map {
+          widthSchema.widths.subList(apKeySchema.dapNames.size, apKeySchema.dapNames.size+ apKeySchema.lapNames.size).map {
             if (it == -1) throw UnsupportedOperationException("not supporting variable-length key attributes yet"); it }.sum()
       )) { it.key }
 
@@ -259,7 +263,7 @@ class KeyValueToTuple(
   companion object {
 
     /** @return null on failure to parse */
-    fun readKeyFromTop(apSchema: APSchema, widthSchema: WidthSchema, k: Key): TupleKey? {
+    fun readKeyFromTop(apKeySchema: APKeySchema, widthSchema: WidthSchema, k: Key): TupleKey? {
       val keyList = ImmutableList.builder<ArrayByteSequence>()
       /** @return the position of the first byte not read, or -1 if this is a bad tuple */
       fun addToList(bs: ByteSequence, off: Int, len: Int, allowVariableLast: Boolean): Int {
@@ -271,7 +275,7 @@ class KeyValueToTuple(
           if (width == -1) {
             width = bs.length() - p
           } else if (p + width > bs.length()) {
-            println("Warning: Dropping Tuple: bad key $k for schema $apSchema and widths ${widthSchema.widths}")
+            println("Warning: Dropping Tuple: bad key $k for schema $apKeySchema and widths ${widthSchema.widths}")
             return -1
           }
           keyList.add(ArrayByteSequence(bs.backingArray, bs.offset() + p, width))
@@ -282,12 +286,12 @@ class KeyValueToTuple(
 
       // fill the dap from the row
       val row = k.rowData
-      val tmp = addToList(row, 0, apSchema.dap.size, true) // don't care about the bytes remaining after reading the row
+      val tmp = addToList(row, 0, apKeySchema.dapNames.size, true) // don't care about the bytes remaining after reading the row
       if (tmp == -1) return null
 
       // fill the lap from the cq
       val cqFirst = k.columnQualifierData
-      val valNamePos = addToList(cqFirst, apSchema.dapLen, apSchema.lap.size, false)
+      val valNamePos = addToList(cqFirst, apKeySchema.dapNames.size, apKeySchema.lapNames.size, false)
       if (valNamePos == -1) return null
 
       assert(k.columnFamilyData is ArrayByteSequence)
@@ -315,7 +319,7 @@ class KeyValueToTuple(
           if (width == -1) {
             width = bs.length() - p
           } else if (p + width > bs.length()) {
-            println("Warning: Dropping Tuple: bad key ${firstKV.key} for schema $apSchema and widths ${widthSchema.widths}")
+            println("Warning: Dropping Tuple: bad key ${firstKV.key} for schema $apKeySchema and widths ${widthSchema.widths}")
             while (rowIter.hasNext()) rowIter.next() // drain tuple
             return -1
           }
@@ -327,12 +331,12 @@ class KeyValueToTuple(
 
       // fill the dap from the row
       val row = firstKV.key.rowData
-      val tmp = addToList(row, 0, apSchema.dap.size, true) // don't care about the bytes remaining after reading the row
+      val tmp = addToList(row, 0, apKeySchema.dapNames.size, true) // don't care about the bytes remaining after reading the row
       if (tmp == -1) continue
 
       // fill the lap from the cq
       val cqFirst = firstKV.key.columnQualifierData
-      valNamePos = addToList(cqFirst, apSchema.dapLen, apSchema.lap.size, false)
+      valNamePos = addToList(cqFirst, apKeySchema.dapNames.size, apKeySchema.lapNames.size, false)
       if (valNamePos == -1) continue
 
       assert(firstKV.key.columnFamilyData is ArrayByteSequence)
@@ -375,19 +379,19 @@ class KeyValueToTuple(
 
 class KeyValueToTupleIterator(
     private val keyValueIterator: KeyValueIterator,
-    val apSchema: APSchema,
+    val apKeySchema: APKeySchema,
     val widthSchema: WidthSchema
 ) : TupleIterator {
-  private var innerIterator: PeekingIterator<Tuple> = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apSchema, widthSchema))
+  private var innerIterator: PeekingIterator<Tuple> = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apKeySchema, widthSchema))
 
   override fun seek(seek: TupleSeekKey) {
-    val sk = seek.toSeekKey(apSchema)
+    val sk = seek.toSeekKey(apKeySchema)
     keyValueIterator.seek(sk)
-    innerIterator = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apSchema, widthSchema))
+    innerIterator = Iterators.peekingIterator(KeyValueToTuple(keyValueIterator, apKeySchema, widthSchema))
   }
 
   override fun deepCopy(env: IteratorEnvironment): KeyValueToTupleIterator {
-    return KeyValueToTupleIterator(keyValueIterator.deepCopy(env), apSchema, widthSchema)
+    return KeyValueToTupleIterator(keyValueIterator.deepCopy(env), apKeySchema, widthSchema)
   }
   override fun hasNext(): Boolean = innerIterator.hasNext()
   override fun peek(): Tuple = innerIterator.peek()
@@ -399,9 +403,11 @@ class KeyValueToTupleIterator(
   }
 }
 
+val con: Constructor<KeyValueToTupleIterator>? = ::KeyValueToTupleIterator.javaConstructor
+
 class TupleToKeyValueIterator(
     private val tupleIterator: TupleIterator,
-    val apSchema: APSchema,
+    val apKeySchema: APKeySchema,
     val widthSchema: WidthSchema
 ) : KeyValueIterator {
   private var iterFromLastTuple = Iterators.peekingIterator(Collections.emptyIterator<KeyValue>())
@@ -412,7 +418,7 @@ class TupleToKeyValueIterator(
 
   override fun next(): KeyValue {
     while (!iterFromLastTuple.hasNext() && tupleIterator.hasNext()) {
-      iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apSchema).iterator())
+      iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apKeySchema).iterator())
     }
     if (iterFromLastTuple.hasNext())
       return iterFromLastTuple.next()
@@ -421,7 +427,7 @@ class TupleToKeyValueIterator(
 
   override fun peek(): KeyValue {
     while (!iterFromLastTuple.hasNext() && tupleIterator.hasNext()) {
-      iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apSchema).iterator())
+      iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apKeySchema).iterator())
     }
     if (iterFromLastTuple.hasNext())
       return iterFromLastTuple.peek()
@@ -429,11 +435,11 @@ class TupleToKeyValueIterator(
   }
 
   override fun deepCopy(env: IteratorEnvironment): TupleToKeyValueIterator {
-    return TupleToKeyValueIterator(tupleIterator.deepCopy(env), apSchema, widthSchema)
+    return TupleToKeyValueIterator(tupleIterator.deepCopy(env), apKeySchema, widthSchema)
   }
 
   override fun seek(seek: SeekKey) {
-    val tsk = seek.toTupleSeekKey(apSchema, widthSchema)
+    val tsk = seek.toTupleSeekKey(apKeySchema, widthSchema)
     tupleIterator.seek(tsk)
   }
 

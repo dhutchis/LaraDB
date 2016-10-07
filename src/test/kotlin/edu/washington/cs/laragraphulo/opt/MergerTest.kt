@@ -47,7 +47,7 @@ class MergerTest(
     lateinit var ALL_ACTIVE: BooleanArray
     var lastTuples: List<Tuple>? = null
 
-    override fun schema(inputs: List<APSortedSchema>): APSortedSchema {
+    override fun schema(inputs: List<APSortedKeySchema>): APSortedKeySchema {
       if (inputs.isEmpty())
         return ImmutableBagAccessPath.of(listOf(), listOf(), 0, false)
       val input0 = inputs[0]
@@ -60,21 +60,21 @@ class MergerTest(
       // dap = the common prefix attributes
       // lap = the rest, in order of the iterators
 
-      val dapCopySize = Math.min(prefixSize, input0.dap.size)
-      val dap = ImmutableList.builder<Name>().addAll(input0.dap.subList(0, dapCopySize))
+      val dapCopySize = Math.min(prefixSize, input0.dapNames.size)
+      val dap = ImmutableList.builder<Name>().addAll(input0.dapNames.subList(0, dapCopySize))
       val prefixAfterDap = prefixSize - dapCopySize
 
-      val lapCopySize = Math.min(prefixAfterDap, input0.lap.size)
-      dap.addAll(input0.lap.subList(0, lapCopySize))
+      val lapCopySize = Math.min(prefixAfterDap, input0.lapNames.size)
+      dap.addAll(input0.lapNames.subList(0, lapCopySize))
       assertEquals(prefixSize, dapCopySize + lapCopySize)
 
       val lap = ImmutableList.builder<Name>()
       for ((index, input) in inputs.withIndex()) {
-        lap.addAll(input.dap.subList(dapCopySize, input.dap.size))
-        for (p in dapCopySize..input.dap.size-1)
+        lap.addAll(input.dapNames.subList(dapCopySize, input.dapNames.size))
+        for (p in dapCopySize..input.dapNames.size-1)
           tupleRefs.add(index to p)
-        lap.addAll(input.lap.subList(lapCopySize, input.lap.size))
-        for (p in input.dap.size+lapCopySize..input.dap.size+input.lap.size-1)
+        lap.addAll(input.lapNames.subList(lapCopySize, input.lapNames.size))
+        for (p in input.dapNames.size+lapCopySize..input.dapNames.size+input.lapNames.size-1)
           tupleRefs.add(index to p)
       }
 

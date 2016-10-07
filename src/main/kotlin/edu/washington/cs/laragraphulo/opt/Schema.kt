@@ -2,45 +2,70 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
-import edu.washington.cs.laragraphulo.opt.raco.RacoType
 import org.apache.accumulo.core.data.ArrayByteSequence
-import java.util.*
-import java.util.regex.Pattern
-
-
-/**
- * An attribute name.
- */
-typealias Name = String
-
-/** An alias for the ArrayByteSequence. This is the primary data holder. */
-typealias ABS = ArrayByteSequence
-
-/**
- * `>= 0` means fixed width.
- * `-1` means variable width.
- */
-typealias Width = Int
-
-/** Attribute/column position */
-typealias Position = Int
-
-/**
- * Interpretation for missing values.
- */
-typealias Default = ByteArray
 
 /*
 These interfaces are capability interfaces.
 They do not enforce any error checking. That is left to implementing classes.
  */
 
-//interface NameSchema {
-//  val names: List<Name>
+/** An ordered list of attribute names. */
+interface NameSchema {
+  /** attribute names in order */
+  val allNames: List<Name>
+}
+
+/** An ordered list of key attribute names. */
+interface KeySchema {
+  /** key attribute names in order */
+  val keyNames: List<Name>
+//  val keyRange: IntRange
+//    get() = 0..keyNames.size-1
+}
+/** An ordered list of value attribute names. */
+interface ValSchema {
+  /** value attribute names in order */
+  val valNames: List<Name>
+}
+
+/** A refinement of [KeySchema] that divides [keyNames] into [dapNames] and [lapNames]. */
+interface APKeySchema : KeySchema {
+  /** distributed access path; the first portion of [keyNames] */
+  val dapNames: List<Name>
+  /** local access path; the second portion of [keyNames] */
+  val lapNames: List<Name>
+
+  val dapRange: IntRange
+    get() = 0..dapNames.size-1
+  val lapRange: IntRange
+    get() = dapNames.size..dapNames.size+ lapNames.size-1
+}
+
+/** A refinement of [KeySchema] that specifies how large a prefix of the [keyNames] are sorted. */
+interface SortedKeySchema : KeySchema {
+  /** An int such that all [KeySchema.keyNames] whose index is less than sortedUpto are sorted.
+   * 0 means nothing is sorted. Valid up to and including [KeySchema.keyNames].size. */
+  val sortedUpto: Int
+//  /** Whether there are multiple tuples with the same key attribute values. */
+//  val duplicates: Boolean
+}
+
+/** Specifies the [Type] of each attribute. */
+interface TypeSchema : NameSchema {
+  val types: List<Type<*>>
+}
+
+//interface DefaultSchema : NameSchema {
+//  /**
+//   * Interpretation for missing values.
+//   */
+//  val defaults: List<Default>
 //}
-interface WidthSchema {
+
+/** Widths for each name in a [NameSchema]. */
+interface WidthSchema : NameSchema {
   /**
-   * A width for each key attribute.
+   * A width for each name
    *
    * `>= 0` means fixed width.
    * `-1` means variable width.
@@ -52,72 +77,6 @@ interface WidthSchema {
 //    require(widths.size == names.size) {"widths and names sizes differ: $widths ; $names"}
 //    require(widths.all { it == -1 || it >= 0 }) {"There is a bad width: $widths"}
 }
-interface DefaultSchema {
-  /**
-   * Interpretation for missing values.
-   */
-  val defaults: List<Default>
-//    require(defaults.size == names.size) {"defaults and names sizes differ: $defaults ; $names"}
-}
-interface KeySchema {
-  val keyNames: List<Name>
-//  val valNames: List<Name>
-}
-interface APSchema : KeySchema {
-  /** Length of the distributed access path. Partitions the key values into the dap and lap. */
-  val dapLen: Int
-  /** distributed access path; the first portion of [keyNames] */
-  val dap: List<Name>
-    get() = keyNames.subList(0,dapLen)
-  /** local access path; the second portion of [keyNames] */
-  val lap: List<Name>
-    get() = keyNames.subList(dapLen, keyNames.size)
-  val dapRange: IntRange
-    get() = 0..dapLen-1
-  val lapRange: IntRange
-    get() = dapLen..dapLen+lap.size-1
-//  val lapOff: Int
-//      get() = dapLen
-//  val lapLen: Int
-//      get() = keyNames.size - dapLen
-//  /**
-//   * column access path; defines the [valNames]
-//   *
-//   * A list of the attribute groups. Each group is potentially stored in a different file.
-//   * The ordering of attributes within groups is lexicographic.
-//   */
-//  val cap: List<ColumnFamily>
-}
-interface SortedSchema : KeySchema {
-  /** An int such that all [KeySchema.keyNames] whose index is less than sortedUpto are sorted.
-   * 0 means nothing is sorted. Valid up to and including [KeySchema.keyNames].size. */
-  val sortedUpto: Int
-  /** Whether there are multiple tuples with the same key attribute values. */
-  val duplicates: Boolean
-}
-interface APSortedSchema : SortedSchema, APSchema
-interface EncodingSchema {
-  val encodings: Map<Name, Type<*>>
-}
-interface ReducingSchema {
-  val reducers: Map<Name, (List<FullValue>) -> FullValue>
-}
-
-//interface UberSchema {
-//  val allAtts: List<Name>
-//  val types: List<Type<*>>
-////  val reducers:
-//  val lapLen: Int
-//
-//  override val dap: List<String>
-//    get() = keyNames.subList(0,dapLen)
-//  override val lap: List<String>
-//    get() = super.lap
-//  override val dapRange: IntRange
-//    get() = super.dapRange
-//  override val lapRange: IntRange
-//    get() = super.lapRange
-//}
 
 
 
@@ -128,32 +87,33 @@ class ImmutableUberSchema(
     allNames: List<Name>,
     dapLen: Int,
     lapLen: Int,
-    /** An int such that all [dap] and [lap] whose index is less than sortedUpto are sorted.
-     * 0 means nothing is sorted. Valid up to and including [dap].size + [lap].size. */
-    val sortedUpto: Int,
+    /** An int such that all [dapNames] and [lapNames] whose index is less than sortedUpto are sorted.
+     * 0 means nothing is sorted. Valid up to and including [dapNames].size + [lapNames].size. */
+    override val sortedUpto: Int,
     types: List<Type<*>>,
-    /** Only for keys (dap and lap) */
+    /** Only for keys (dap and lap); not used for value attributes */
     widths: List<Width> = types.map { it.naturalWidth },
     /** Only for values */
-    defaults: List<Default> = types.map { it.naturalDefaultEncoded },
+    defaults: List<Default> = types.map { it.naturalDefaultEncoded }
     // not sure if this should be here
-    family: ABS = EMPTY
-) {
-  val all: List<Name> = ImmutableList.copyOf(allNames)
-  val dap: List<Name> = all.subList(0,dapLen)
-  val lap: List<Name> = all.subList(dapLen,dapLen+lapLen)
-  val cap: List<Name> = all.subList(dapLen+lapLen,all.size)
-  val types: List<Type<*>> = ImmutableList.copyOf(types)
-  /** Only for keys (dap and lap) */
-  val widths: List<Width> = ImmutableList.copyOf(widths)
+//    family: ABS = EMPTY
+) : APKeySchema, SortedKeySchema, TypeSchema, ValSchema, WidthSchema {
+  override val allNames: List<Name> = ImmutableList.copyOf(allNames)
+  override val keyNames: List<Name> = this.allNames.subList(0,dapLen+lapLen)
+  override val dapNames: List<Name> = this.keyNames.subList(0,dapLen)
+  override val lapNames: List<Name> = this.keyNames.subList(dapLen,dapLen+lapLen)
+  override val valNames: List<Name> = this.allNames.subList(dapLen+lapLen, this.allNames.size)
+  override val types: List<Type<*>> = ImmutableList.copyOf(types)
+  /** Only for keys (dap and lap); not used for value attributes */
+  override val widths: List<Width> = ImmutableList.copyOf(widths)
   /** Only for values */
   val defaults: List<Default> = ImmutableList.copyOf(defaults)
-  val fam: ByteArray = Arrays.copyOfRange(family.backingArray, family.offset(), family.offset()+family.length())
+//  val fam: ByteArray = Arrays.copyOfRange(family.backingArray, family.offset(), family.offset()+family.length())
 
   fun toRacoScheme(): List<Pair<Name,Type<*>>> {
-    return all.zip(types).foldIndexed(ImmutableList.builder<Pair<Name, Type<*>>>()) { i, builder, pair -> when (i) {
-      dap.size -> builder.add(__DAP__ to Type.STRING).apply { if (lap.size == dap.size) add(__LAP__ to Type.STRING) }
-      lap.size -> builder.add(__LAP__ to Type.STRING)
+    return allNames.zip(types).foldIndexed(ImmutableList.builder<Pair<Name, Type<*>>>()) { i, builder, pair -> when (i) {
+      dapNames.size -> builder.add(__DAP__ to Type.STRING).apply { if (lapNames.size == dapNames.size) add(__LAP__ to Type.STRING) }
+      lapNames.size -> builder.add(__LAP__ to Type.STRING)
       else -> builder
     }.add(pair) }.build()
 //    val list: ArrayList<Pair<Name, Type<*>>> = all.zip(types).mapTo(ArrayList<Pair<Name, Type<*>>>(all.size + 2))
@@ -201,12 +161,24 @@ class ImmutableUberSchema(
   }
 
   override fun toString(): String{
-    return "USchema(dap=$dap, lap=$lap, cap=$cap)"
+    return "USchema(dap=${dapNames}, lap=${lapNames}, cap=${valNames})"
     // sortedUpto=$sortedUpto, all=$all, dap=$dap, lap=$lap, cap=$cap, widths=$widths, defaults=$defaults, fam=${Arrays.toString(fam)}
   }
 
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -299,14 +271,14 @@ sealed class ImmutableKeySchema(
 
 
 sealed class ImmutableAccessPath(
-    dap: List<Name>,
-    lap: List<Name>
+    dapNames: List<Name>,
+    lapNames: List<Name>
 ) : ImmutableKeySchema(
-    ImmutableList.builder<Name>().addAll(dap).addAll(lap).build()
-), APSchema {
-  final override val dapLen = dap.size
-  final override val dap = super.dap
-  final override val lap = super.lap
+    ImmutableList.builder<Name>().addAll(dapNames).addAll(lapNames).build()
+), APKeySchema {
+  override val dapNames = ImmutableList.copyOf(dapNames)
+  override val lapNames = ImmutableList.copyOf(lapNames)
+
 //  init {
 //    require(cap.sumBy { it.attributes.count() } == valNames.size) {
 //      "one of the attributes was mentioned twice in two separate column families $cap"
@@ -323,7 +295,7 @@ sealed class ImmutableAccessPath(
       lap: List<Name>
   ) : ImmutableAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap))
 
-  override fun toString(): String = "ImmutableAccessPath(dap=$dap, lap=$lap)"
+  override fun toString(): String = "ImmutableAccessPath(dap=$dapNames, lap=$lapNames)"
 
   override fun equals(other: Any?): Boolean{
     if (this === other) return true
@@ -331,15 +303,15 @@ sealed class ImmutableAccessPath(
 
     other as ImmutableAccessPath
 
-    if (dap != other.dap) return false
-    if (lap != other.lap) return false
+    if (dapNames != other.dapNames) return false
+    if (lapNames != other.lapNames) return false
 
     return true
   }
 
   override fun hashCode(): Int{
-    var result = dap.hashCode()
-    result = 31 * result + lap.hashCode()
+    var result = dapNames.hashCode()
+    result = 31 * result + lapNames.hashCode()
     return result
   }
 
@@ -349,13 +321,13 @@ sealed class ImmutableAccessPath(
 
 // need to subclass ImmutableAccessPath because this tells us how to interpret each part of the Key/Value
 sealed class ImmutableBagAccessPath(
-    /** @see [APSchema.dap] */
+    /** @see [APKeySchema.dapNames] */
     dap: List<Name>,
-    /** @see [APSchema.lap] */
+    /** @see [APKeySchema.lapNames] */
     lap: List<Name>,
     final override val sortedUpto: Int,
     final override val duplicates: Boolean
-) : ImmutableAccessPath(dap, lap), APSortedSchema {
+) : ImmutableAccessPath(dap, lap), SortedKeySchema, APKeySchema {
   init {
     Preconditions.checkPositionIndex(sortedUpto, dap.size+lap.size, "sortedUpto is an int such that all keyNames $keyNames " +
         "whose index is less than sortedUpto are sorted. 0 means nothing is sorted. Valid up to and including ${dap.size+lap.size}. Given: $sortedUpto")
@@ -377,8 +349,8 @@ sealed class ImmutableBagAccessPath(
   ) : ImmutableBagAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), sortedUpto, duplicates)
 
   override fun toString(): String{
-    val s = StringBuilder("ImmutableBagAccessPath(dap=$dap, lap=$lap")
-    if (sortedUpto != dap.size+lap.size)
+    val s = StringBuilder("ImmutableBagAccessPath(dap=$dapNames, lap=$lapNames")
+    if (sortedUpto != dapNames.size+ lapNames.size)
       s.append(", sortedUpto=$sortedUpto")
     if (duplicates)
       s.append(", dups")

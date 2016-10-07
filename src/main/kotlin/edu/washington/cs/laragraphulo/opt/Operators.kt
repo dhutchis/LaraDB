@@ -1,9 +1,17 @@
 package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableListMultimap
 import edu.washington.cs.laragraphulo.Encode
-import org.apache.accumulo.core.data.ArrayByteSequence
+import org.apache.accumulo.core.client.BatchWriter
+import org.apache.accumulo.core.client.BatchWriterConfig
+import org.apache.accumulo.core.client.sample.SamplerConfiguration
+import org.apache.accumulo.core.conf.AccumuloConfiguration
+import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
+import org.apache.accumulo.core.iterators.IteratorUtil
+import org.apache.accumulo.core.iterators.SortedKeyValueIterator
+import org.apache.accumulo.core.security.Authorizations
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVRecord
@@ -15,68 +23,27 @@ import java.util.*
 
 
 
-sealed class AccumuloOp(args: List<Op<*>> = emptyList()) : Op<Tuple>(args), Serializable
-{
-  constructor(vararg args: Op<*>): this(args.asList())
-
-  /**
-   * From the RACO types in the catalog for Scan; FileScan scheme.
-   */
-  abstract val encodingSchema: EncodingSchema
-  /**
-   * todo. Attach a prior iterator in place of this.
-   */
-  abstract val reducingSchema: ReducingSchema
-  /**
-   * From the order of the attributes in the catalog / FileScan scheme; with placeholders __DAP__ and __LAP__
-   */
-  abstract val keySchema: KeySchema
-  /**
-   * From the order of the attributes in the catalog / FileScan scheme; with placeholders __DAP__ and __LAP__
-   */
-  abstract val positionSchema: PositionSchema
-
-  /**
-   * @param parent The source iterator that one of the leaves will connect to.
-   * @param options Execution-time environmental parameters, passed from client
-   * @param env Execution-time Accumulo parameters
-   */
-  abstract fun construct(parent: TupleIterator, options: Map<String,String>, env: IteratorEnvironment): AccumuloLikeIterator<*,*>
-}
-
-
 
 
 class OpCSVScan(
-    val url: Obj<String>,
+    val url: String,
     /** Nulls in the list indicate fields to skip reading */
-    val encoders: Obj<List<Encode<String>?>>,
-    val names: Obj<List<Pair<Name,Type<*>>>>,
-    val skip: Obj<Int> = Obj(0),
-    val delimiter: Obj<Char> = Obj(','),
-    val quote: Obj<Char> = Obj('"'),
-    val escape: Obj<Char?> = Obj(null)
-) : AccumuloOp(url, encoders, skip, delimiter, quote, escape) {
+    val encoders: List<Encode<String>?>,
+    val names: List<Pair<Name, Type<*>>>,
+    val skip: Int = 0,
+    val delimiter: Char = ',',
+    val quote: Char = '"',
+    val escape: Char? = null
+) : Op<TupleIterator>(url.toObj(), encoders.toObj(), skip.toObj(), delimiter.toObj(), quote.toObj(), escape.toObj()) {
   init {
-    require(encoders().filterNotNull().size == names().size) {"There must be a name/type for each (non-null) encoder. Names: $names. Encoders: $encoders"}
-  }
-  override fun construct(parent: TupleIterator, options: Map<String, String>, env: IteratorEnvironment): CSVScan {
-    return CSVScan(URL(url.obj), encoders.obj, skip.obj, delimiter.obj, quote.obj, escape.obj)
+    require(encoders.filterNotNull().size == names.size) {"There must be a name/type for each (non-null) encoder. Names: $names. Encoders: $encoders"}
   }
 
-  override val encodingSchema = throw UnsupportedOperationException("meh")
-//  object : EncodingSchema {
-//    override val encodings: Map<Name, Type<*>> = names().toMap()
-//  }
-  override val reducingSchema = throw UnsupportedOperationException("meh")
-//  object : ReducingSchema {
-//    override val reducers: Map<Name, (List<FullValue>) -> FullValue> = emptyMap()
-//  }
-  override val keySchema = throw UnsupportedOperationException("meh")
-//  object : KeySchema {
-//    override val keyNames: List<Name> = names().map { it.first }
-//  }
-  override val positionSchema: List<Name> = names().map { it.first }
+  override val unbound: List<Arg<*>> = emptyList()
+
+  override fun invoke(reqs: List<*>): TupleIterator {
+    return CSVScan(URL(url), encoders, skip, delimiter, quote, escape)
+  }
 }
 
 
@@ -93,10 +60,10 @@ class CSVScan(
     val escape: Char? = null
 ) : TupleIterator {
 //  val parser: CSVParser
-  private val iterator: Iterator<CSVRecord>
+  private lateinit var iterator: Iterator<CSVRecord>
   private var linenumber: Int = 0
 
-  init {
+  fun init() {
     val parser = CSVParser(
         BufferedReader(InputStreamReader(url.openStream())),
         CSVFormat.newFormat(delimiter).withQuote(quote).withEscape(escape))
@@ -106,8 +73,22 @@ class CSVScan(
     }
   }
 
-  private var top: Tuple? = null
+  override fun seek(seek: TupleSeekKey) {
+    // start from scratch
+    if (!seek.range.hasUpperBound()) {
+      init()
+    } else {
+      // recover from a saved state
+      throw UnsupportedOperationException("not implemented")
+    }
+  }
 
+  override fun serializeState(): ByteArray {
+    // write the line number to a bytearray
+    throw UnsupportedOperationException("not implemented")
+  }
+
+  private var top: Tuple? = null
   private fun findTop() {
     if (top == null && iterator.hasNext()) {
       val csvRecord = iterator.next()
@@ -119,7 +100,6 @@ class CSVScan(
       linenumber++
     }
   }
-
   override fun hasNext(): Boolean {
     findTop()
     return top != null
@@ -133,14 +113,6 @@ class CSVScan(
   override fun peek(): Tuple {
     findTop()
     return top ?: throw NoSuchElementException()
-  }
-  override fun seek(seek: TupleSeekKey) {
-    // recover from a saved state
-    throw UnsupportedOperationException("not implemented")
-  }
-  override fun serializeState(): ByteArray {
-    // write the line number to a bytearray
-    throw UnsupportedOperationException("not implemented")
   }
   override fun deepCopy(env: IteratorEnvironment): CSVScan {
     if (linenumber != 0)
@@ -164,52 +136,55 @@ data class ValueTypedExpr(
     val type: Type<*>
 )
 
-
-class OpApplyIterator(
-    val parent: AccumuloOp,
-    val keyExprs: Obj<List< TypedExpr >>,
-    val famExpr: Obj< TypedExpr >,
-    val valExprs: Obj<List< ValueTypedExpr >>,
-    override val keySchema: KeySchema
-) : AccumuloOp(parent, keyExprs, famExpr, valExprs) {
-
-  val encodings: Map<Name,Type<*>>
-  val positions: List<Name>
-
-  init {
-    val keyNames: Map<Name, Type<*>> = keyExprs().zip(keySchema.keyNames).map { it.second to it.first.type }.toMap()
-    val valNames = valExprs().map { it.name.toString() to it.type }
-    val famName = mapOf(__FAMILY__ to famExpr().type)
-    encodings = keyNames + valNames.toMap() + famName
-    positions = keySchema.keyNames + __FAMILY__ + famName.map { it.key }
-  }
-
-
-
-
-
-
-  override val encodingSchema: EncodingSchema = object : EncodingSchema {
-    override val encodings: Map<Name, Type<*>> = this@OpApplyIterator.encodings
-  }
-  override val reducingSchema: ReducingSchema = parent.reducingSchema
-  override val positionSchema: PositionSchema = positions
-
-  override fun construct(parent: TupleIterator, options: Map<String, String>, env: IteratorEnvironment): AccumuloLikeIterator<*, *> {
-    return ApplyIterator(
-        parent, keyExprs().map { it.expr }, famExpr().expr,
-        valExprs().map { it.name to it.expr }
-    )
-  }
-}
-
-
+//
+//class OpApplyIterator(
+//    val source: Op<TupleIterator>,
+//    val keyExprs: List<TypedExpr>,
+//    val famExpr: TypedExpr,
+//    val valExprs: List<ValueTypedExpr>
+//) : KeySchema, ValSchema, Op<TupleIterator>(source.toObj(), keyExprs.toObj(), famExpr.toObj(), valExprs.toObj()) {
+//
+//  override val keyNames: List<String>
+//  override val valNames: List<String>
+//
+//  val encodings: Map<Name,Type<*>>
+//  val positions: List<Name>
+//
+//  init {
+//    val keyNames: Map<Name, Type<*>> = keyExprs.zip(keySchema.keyNames).map { it.second to it.first.type }.toMap()
+//    val valNames = valExprs.map { it.name.toString() to it.type }
+//    val famName = mapOf(__FAMILY__ to famExpr.type)
+//    encodings = keyNames + valNames.toMap() + famName
+//    positions = keySchema.keyNames + __FAMILY__ + famName.map { it.key }
+//  }
+//
+//
+////  override val typeSchema: TypeSchema = object : TypeSchema {
+////    override val types: Map<Name, Type<*>> = this@OpApplyIterator.encodings
+////  }
+////  override val reducingSchema: ReducingSchema = source.reducingSchema
+////  override val positionSchema: PositionSchema = positions
+//
+//  override val unbound: List<Arg<*>> = source.unbound
+//
+//  override fun invoke(reqs: List<*>): TupleIterator {
+//    return ApplyIterator(
+//        source(reqs), keyExprs.map { it.expr }, famExpr.expr,
+//        valExprs.map { it.name to it.expr }
+//    )
+//  }
+//}
 
 
 
 
 
-/** Mock version that does a fixed thing. */
+
+
+/** A [TupleIterator] that creates new tuples
+ * whose keys are the result of [keyExprs],
+ * family is the result of [famExpr],
+ * and values are the result of [valExprs]. */
 class ApplyIterator(
     val parent: TupleIterator,
     val keyExprs: List<Expr<ABS>>,
@@ -218,12 +193,12 @@ class ApplyIterator(
 ) : TupleIterator {
   var topTuple: Tuple? = null
 
-  companion object {
-    val RESULT = ABS("result".toByteArray())
-    val SRC = ABS("src".toByteArray())
-    val DST = ABS("dst".toByteArray())
-    val UNDER = '_'.toByte()
-  }
+//  companion object {
+//    val RESULT = ABS("result".toByteArray())
+//    val SRC = ABS("src".toByteArray())
+//    val DST = ABS("dst".toByteArray())
+//    val UNDER = '_'.toByte()
+//  }
 
   override fun seek(seek: TupleSeekKey) {
     parent.seek(seek)
@@ -233,7 +208,10 @@ class ApplyIterator(
     val input = listOf(pt) // single tuple expression
     val keys = keyExprs.map { it(input) }
     val fam = famExpr(input)
-    val vals: ImmutableListMultimap<ArrayByteSequence, FullValue> = valExprs.fold(ImmutableListMultimap.builder<ABS,FullValue>()) { builder, it -> builder.put(it.first, it.second(input)) }.build()
+    val vals: ImmutableListMultimap<ArrayByteSequence, FullValue> =
+        valExprs.fold(ImmutableListMultimap.builder<ABS,FullValue>()) {
+          builder, it -> builder.put(it.first, it.second(input))
+        }.build()
     return TupleImpl(keys, fam, vals)
   }
 
@@ -284,32 +262,133 @@ class ApplyIterator(
 
 
 
-class OpStoreIterator(
-    val input: AccumuloOp,
+class OpRWI(
+    val input: Op<SKVI>,
     val tableName: String,
     val accumuloConfig: AccumuloConfig
-) : AccumuloOp(input, Obj(tableName), Obj(accumuloConfig)) {
-  override val encodingSchema: EncodingSchema
-    get() = throw UnsupportedOperationException()
-  override val reducingSchema: ReducingSchema
-    get() = throw UnsupportedOperationException()
-  override val keySchema: KeySchema
-    get() = throw UnsupportedOperationException()
-  override val positionSchema: List<String>
-    get() = throw UnsupportedOperationException()
+) : Op<SKVI>(input, Obj(tableName), Obj(accumuloConfig)) {
 
-  override fun construct(parent: TupleIterator, options: Map<String, String>, env: IteratorEnvironment): AccumuloLikeIterator<*, *> {
 
-//    TupleToKeyValueIterator(parent, )
+  override val unbound: List<Arg<*>> = input.unbound
 
-    // RemoteWriteIterator from accumuloConfig
-    // pass in the input
+  override fun invoke(reqs: List<*>): SortedKeyValueIterator<Key, Value> {
+    val opts = accumuloConfig.basicRemoteOpts("", tableName, null, null)
+    val skvi = RemoteWriteIterator()
+    skvi.init(input(reqs), opts, object : IteratorEnvironment {
+      override fun getAuthorizations(): Authorizations {
+        throw UnsupportedOperationException("not implemented")
+      }
 
-    throw UnsupportedOperationException("not implemented")
+      override fun cloneWithSamplingEnabled(): IteratorEnvironment {
+        throw UnsupportedOperationException("not implemented")
+      }
+
+      override fun reserveMapFileReader(mapFileName: String?): SortedKeyValueIterator<Key, Value> {
+        throw UnsupportedOperationException("not implemented")
+      }
+
+      override fun getIteratorScope(): IteratorUtil.IteratorScope {
+        return IteratorUtil.IteratorScope.scan
+      }
+
+      override fun getConfig(): AccumuloConfiguration {
+        throw UnsupportedOperationException("not implemented")
+      }
+
+      override fun isSamplingEnabled(): Boolean {
+        throw UnsupportedOperationException("not implemented")
+      }
+
+      override fun isFullMajorCompaction(): Boolean {
+        throw UnsupportedOperationException("not implemented")
+      }
+
+      override fun getSamplerConfiguration(): SamplerConfiguration {
+        throw UnsupportedOperationException("not implemented")
+      }
+
+      override fun registerSideChannel(iter: SortedKeyValueIterator<Key, Value>?) {
+        throw UnsupportedOperationException("not implemented")
+      }
+    })
+    return skvi
+  }
+
+  companion object {
+    /**
+     * This method shouldn't really be public, but it is useful for setting up some of the iterators.
+
+     * Create the basic iterator settings for the [RemoteWriteIterator].
+     * @param prefix A prefix to apply to keys in the option map, e.g., the "B" in "B.tableName".
+     * @param remoteTable Name of table to write to. Null does not put in the table name.
+     * @param remoteTableTranspose Name of table to write transpose to. Null does not put in the transpose table name.
+     * @param authorizations Authorizations for the server-side iterator. Null means use default: Authorizations.EMPTY
+     * @return The basic set of options for [RemoteWriteIterator].
+     */
+    fun AccumuloConfig.basicRemoteOpts(prefix: String?, remoteTable: String?,
+                        remoteTableTranspose: String?, authorizations: Authorizations?): Map<String, String> {
+      var prefix = prefix
+      if (prefix == null) prefix = ""
+      val opt = HashMap<String, String>()
+      val instance = connector.instance.instanceName
+      val zookeepers = connector.instance.zooKeepers
+      val user = connector.whoami()
+      opt.put(prefix + RemoteSourceIterator.ZOOKEEPERHOST, zookeepers)
+      opt.put(prefix + RemoteSourceIterator.INSTANCENAME, instance)
+      if (remoteTable != null)
+        opt.put(prefix + RemoteSourceIterator.TABLENAME, remoteTable)
+      if (remoteTableTranspose != null)
+        opt.put(prefix + RemoteWriteIterator.TABLENAMETRANSPOSE, remoteTableTranspose)
+      opt.put(prefix + RemoteSourceIterator.USERNAME, user)
+      opt.put(prefix + RemoteSourceIterator.AUTHENTICATION_TOKEN, SerializationUtil.serializeWritableBase64(authenticationToken))
+      opt.put(prefix + RemoteSourceIterator.AUTHENTICATION_TOKEN_CLASS, authenticationToken.javaClass.name)
+      if (authorizations != null && authorizations != Authorizations.EMPTY)
+        opt.put(prefix + RemoteSourceIterator.AUTHORIZATIONS, authorizations.serialize())
+      return opt
+    }
   }
 }
 
-
+//class StoreIterator(
+//    val tableName: String,
+//    val accumuloConfig: AccumuloConfig
+//) : SKVI {
+//  lateinit var writer: BatchWriter
+//
+//  fun setup() {
+//    val bwc = BatchWriterConfig()
+//    writer = accumuloConfig.connector.createBatchWriter(tableName, bwc)
+//
+//  }
+//
+//  override fun init(source: SortedKeyValueIterator<Key, Value>?, options: MutableMap<String, String>?, env: IteratorEnvironment?) {
+//
+//  }
+//
+//  override fun next() {
+//    throw UnsupportedOperationException("not implemented")
+//  }
+//
+//  override fun seek(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) {
+//    throw UnsupportedOperationException("not implemented")
+//  }
+//
+//  override fun getTopValue(): Value {
+//    throw UnsupportedOperationException("not implemented")
+//  }
+//
+//  override fun hasTop(): Boolean {
+//    throw UnsupportedOperationException("not implemented")
+//  }
+//
+//  override fun deepCopy(env: IteratorEnvironment?): SortedKeyValueIterator<Key, Value> {
+//    throw UnsupportedOperationException("not implemented")
+//  }
+//
+//  override fun getTopKey(): Key {
+//    throw UnsupportedOperationException("not implemented")
+//  }
+//}
 
 
 

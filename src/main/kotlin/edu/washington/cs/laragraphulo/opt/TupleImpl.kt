@@ -25,7 +25,7 @@ import kotlin.comparisons.compareBy
 typealias MultiplyOp = (Array<Tuple>) -> Iterator<Tuple>
 
 interface Collider {
-  fun schema(inputs: List<APSortedSchema>): APSortedSchema
+  fun <T> schema(inputs: List<T>): T where T : SortedKeySchema, T : APKeySchema
   /** Do NOT modify the contents of [actives]. */
   fun collide(inputs: List<PeekingIterator<Tuple>>, actives: BooleanArray): Iterator<Tuple>
 }
@@ -150,12 +150,12 @@ class Merger(
 fun commonKeyNames(schemas: List<KeySchema>): Set<Name> =
     schemas.map { it.keyNames.toSet() }.reduce { s1, s2 -> s1.intersect(s2) }
 
-fun ensureKeyNamesSortedAtPrefix(schemas: List<SortedSchema>, names: Set<Name>): List<Name> {
-  if (schemas.isEmpty()) return names.toList()
-  val bag1 = schemas[0]
+fun ensureKeyNamesSortedAtPrefix(keySchemas: List<SortedKeySchema>, names: Set<Name>): List<Name> {
+  if (keySchemas.isEmpty()) return names.toList()
+  val bag1 = keySchemas[0]
   val nl: List<Name> = bag1.keyNames.subList(0, names.size)
   require(nl.toSet() == names) {"names $names must be in the prefix of each iterator, but the first iterator has a prefix of $nl"}
-  schemas.forEach {
+  keySchemas.forEach {
     require(it.keyNames.subList(0, names.size) == nl) {"all iterators must have the same prefix key attributes; expected $nl but actual ${it.keyNames}"}
     require(it.sortedUpto >= names.size) {"all iterators must be sorted at least up to the names $names; this one is sorted on the first ${it.sortedUpto} elements of ${it.keyNames}"}
   }
@@ -172,8 +172,8 @@ fun ensureSamePrefix(schemas: List<KeySchema>, prefixSize: Int) {
   }
 }
 
-fun ensureSortedUpto(schemas: List<SortedSchema>, prefixSize: Int) {
-  schemas.forEach { require(it.sortedUpto >= prefixSize) }
+fun ensureSortedUpto(keySchemas: List<SortedKeySchema>, prefixSize: Int) {
+  keySchemas.forEach { require(it.sortedUpto >= prefixSize) }
 }
 
 /**
@@ -311,6 +311,8 @@ interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
   @Deprecated("unsupported", level = DeprecationLevel.ERROR, replaceWith = ReplaceWith("assert(false) {\"remove is not supported\"}"))
   override fun remove() = throw UnsupportedOperationException("remove is not supported")
 
+
+
   fun seek(seek: K)
   fun deepCopy(env: IteratorEnvironment): AccumuloLikeIterator<K,T>
   /** @return null if it is not safe to serialize state */
@@ -337,9 +339,9 @@ data class SeekKey(
     val families: Collection<ArrayByteSequence>,
     val inclusive: Boolean
 ) {
-  fun toTupleSeekKey(apSchema: APSchema, widthSchema: WidthSchema): TupleSeekKey =
+  fun toTupleSeekKey(apKeySchema: APKeySchema, widthSchema: WidthSchema): TupleSeekKey =
       TupleSeekKey(
-          GraphuloUtil.transform(range) {KeyValueToTuple.readKeyFromTop(apSchema, widthSchema, it) ?: throw RuntimeException("bad key when trying to convert to tuplekey: $it")},
+          GraphuloUtil.transform(range) {KeyValueToTuple.readKeyFromTop(apKeySchema, widthSchema, it) ?: throw RuntimeException("bad key when trying to convert to tuplekey: $it")},
           this.families, this.inclusive
       )
 }
@@ -349,9 +351,9 @@ data class TupleSeekKey(
     val families: Collection<ArrayByteSequence>,
     val inclusive: Boolean
 ) {
-  fun toSeekKey(apSchema: APSchema): SeekKey =
+  fun toSeekKey(apKeySchema: APKeySchema): SeekKey =
       SeekKey(
-          GraphuloUtil.transform(range) {it.toKey(apSchema)},
+          GraphuloUtil.transform(range) {it.toKey(apKeySchema)},
           families, inclusive
       )
 }
