@@ -161,14 +161,14 @@ fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): AccessPath {
   } else {
     daplen = dapidx
     namesNoDap = names.subList(0,dapidx) + if (dapidx+1 < names.size) names.subList(dapidx+1,names.size) else emptyList()
-    typesNoDap = types.subList(0,dapidx) + if (dapidx+1 < names.size) types.subList(dapidx+1,names.size) else emptyList()
+    typesNoDap = types.subList(0,dapidx) + if (dapidx+1 < types.size) types.subList(dapidx+1,types.size) else emptyList()
   }
   val lapidx = namesNoDap.indexOf(__LAP__)
   val laplen: Int
   val namesNoDapNoLap: List<Name>
   val typesNoDapNoLap: List<Type<*>>
   if (lapidx == -1) {
-    laplen = names.size - daplen
+    laplen = namesNoDap.size - daplen
     namesNoDapNoLap = namesNoDap
     typesNoDapNoLap = typesNoDap
   } else {
@@ -183,6 +183,7 @@ fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): AccessPath {
 //      namesNoDapNoLap, daplen, laplen,
 //      sortedUpto = 0, types = typesNoDapNoLap
 //  )
+//  println("namesNoDapNoLap: $namesNoDapNoLap, daplen: $daplen, laplen: $laplen, typesNoDapNoLap: $typesNoDapNoLap, scheme: $scheme")
   return AccessPath.of(namesNoDapNoLap, daplen, laplen, typesNoDapNoLap)
 }
 
@@ -196,7 +197,7 @@ data class NameTypeWidth(
     val type: Type<*>,
     val width: Width = type.naturalWidth
 ) : Serializable {
-  override fun toString(): String = "<$name@$type@$width>"
+  override fun toString(): String = "<$name@$type${if (width != type.naturalWidth) "@$width" else ""}>"
 }
 
 

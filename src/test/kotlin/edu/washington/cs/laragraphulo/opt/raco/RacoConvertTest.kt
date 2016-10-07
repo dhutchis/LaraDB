@@ -9,6 +9,7 @@ import org.junit.runners.Parameterized
 import java.io.StringReader
 import java.nio.ByteBuffer
 import edu.washington.cs.laragraphulo.opt.raco.PTree.*
+import edu.washington.cs.laragraphulo.opt.viz.generateDot
 import org.junit.Assume
 
 
@@ -53,6 +54,7 @@ class RacoConvertTest(
         }
         is OpAccumuloPipelineTask -> {
           println("AccumuloPipelineTask(${callable.accumuloPipeline.tableName}): ${callable.accumuloPipeline.op}")
+          println("dot:\n${callable.accumuloPipeline.op.generateDot()}")
           val serialized = callable.accumuloPipeline.serializer.serializeToString(callable.accumuloPipeline.op)
           val deserialized = callable.accumuloPipeline.serializer.deserializeFromString(serialized)
 //          Assert.assertEquals("Serialization should match original object", callable.accumuloPipeline.op, deserialized)
@@ -140,9 +142,13 @@ racoOp: Dump(input=Apply(emitters=[(src, NamedAttributeRef(attributename=src)), 
             expected = listOf()
         ),
         /*
+Test: store apply scan Named
 query: Store(RelationKey('public','adhoc','newtable'), Apply([('dst', NamedAttributeRef('dst'))], Scan(RelationKey('public','adhoc','smallGraph'), Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), 10000, RepresentationProperties(frozenset([]), None, None))))
 ptree: PNode(name=Store, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=newtable)]), PNode(name=Apply, args=[PList(list=[PPair(left=PString(str=dst), right=PNode(name=NamedAttributeRef, args=[PString(str=dst)]))]), PNode(name=Scan, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=smallGraph)]), PNode(name=Scheme, args=[PList(list=[PPair(left=PString(str=src), right=PString(str=LONG_TYPE)), PPair(left=PString(str=dst), right=PString(str=LONG_TYPE))])]), PLong(v=10000), PNode(name=RepresentationProperties, args=[PNode(name=frozenset, args=[PList(list=[])]), PNone, PNone])])])])
 racoOp: Store(relationKey=RelationKey(user=public, program=adhoc, relation=newtable), input=Apply(emitters=[(dst, NamedAttributeRef(attributename=dst))], input=Scan(relationKey=RelationKey(user=public, program=adhoc, relation=smallGraph), scheme=[(src, LONG), (dst, LONG)], cardinality=10000, partitioning=RepresentationProperties(hashPartition=[], sorted=[], grouped=[]))))
+Callables : [CreateTableTask(tableName=public_adhoc_newtable, accumuloConfig=AccumuloConfig(instance=instance), ntc=org.apache.accumulo.core.client.admin.NewTableConfiguration@475530b9), OpAccumuloPipelineTask(accumuloPipeline=OpAccumuloPipeline(op=OpRWI([OpKeyValueToSkviAdapter([OpTupleToKeyValueIterator([OpApplyIterator([OpAccumuloBase([AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2), AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2)]), [RefKey(tupleNum=0, keyNum=1)], RefFamily(tupleNum=0), []]), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0)])]), public_adhoc_newtable, AccumuloConfig(instance=instance)]), serializer=edu.washington.cs.laragraphulo.opt.RacoToAccumuloKt$opSerializer$1@4c70fda8, tableName=public_adhoc_smallGraph), accumuloConfig=AccumuloConfig(instance=instance))]
+0: CreateTableTask(public_adhoc_newtable)
+1: AccumuloPipelineTask(public_adhoc_smallGraph): OpRWI([OpKeyValueToSkviAdapter([OpTupleToKeyValueIterator([OpApplyIterator([OpAccumuloBase([AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2), AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2)]), [RefKey(tupleNum=0, keyNum=1)], RefFamily(tupleNum=0), []]), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0)])]), public_adhoc_newtable, AccumuloConfig(instance=instance)])
 
          */
         Params(
@@ -159,9 +165,13 @@ racoOp: Store(relationKey=RelationKey(user=public, program=adhoc, relation=newta
             expected = listOf()
         ),
 /*
+Test: store apply scan Unnamed
 query: Store(RelationKey('public','adhoc','newtable'), Apply([('dst', UnnamedAttributeRef(1, None))], Scan(RelationKey('public','adhoc','smallGraph'), Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), 10000, RepresentationProperties(frozenset([]), None, None))))
 ptree: PNode(name=Store, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=newtable)]), PNode(name=Apply, args=[PList(list=[PPair(left=PString(str=dst), right=PNode(name=UnnamedAttributeRef, args=[PLong(v=1), PNone]))]), PNode(name=Scan, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=smallGraph)]), PNode(name=Scheme, args=[PList(list=[PPair(left=PString(str=src), right=PString(str=LONG_TYPE)), PPair(left=PString(str=dst), right=PString(str=LONG_TYPE))])]), PLong(v=10000), PNode(name=RepresentationProperties, args=[PNode(name=frozenset, args=[PList(list=[])]), PNone, PNone])])])])
 racoOp: Store(relationKey=RelationKey(user=public, program=adhoc, relation=newtable), input=Apply(emitters=[(dst, UnnamedAttributeRef(position=1, debug_info=null))], input=Scan(relationKey=RelationKey(user=public, program=adhoc, relation=smallGraph), scheme=[(src, LONG), (dst, LONG)], cardinality=10000, partitioning=RepresentationProperties(hashPartition=[], sorted=[], grouped=[]))))
+Callables : [CreateTableTask(tableName=public_adhoc_newtable, accumuloConfig=AccumuloConfig(instance=instance), ntc=org.apache.accumulo.core.client.admin.NewTableConfiguration@4445629), OpAccumuloPipelineTask(accumuloPipeline=OpAccumuloPipeline(op=OpRWI([OpKeyValueToSkviAdapter([OpTupleToKeyValueIterator([OpApplyIterator([OpAccumuloBase([AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2), AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2)]), [RefKey(tupleNum=0, keyNum=1)], RefFamily(tupleNum=0), []]), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0)])]), public_adhoc_newtable, AccumuloConfig(instance=instance)]), serializer=edu.washington.cs.laragraphulo.opt.RacoToAccumuloKt$opSerializer$1@4c70fda8, tableName=public_adhoc_smallGraph), accumuloConfig=AccumuloConfig(instance=instance))]
+0: CreateTableTask(public_adhoc_newtable)
+1: AccumuloPipelineTask(public_adhoc_smallGraph): OpRWI([OpKeyValueToSkviAdapter([OpTupleToKeyValueIterator([OpApplyIterator([OpAccumuloBase([AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2), AP(dap[<src@LONG@8>, <dst@LONG@8>]; lap=[]; val=[]; sort=2)]), [RefKey(tupleNum=0, keyNum=1)], RefFamily(tupleNum=0), []]), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0), AP(dap[<dst@LONG@8>]; lap=[]; val=[]; sort=0)])]), public_adhoc_newtable, AccumuloConfig(instance=instance)])
 
  */
         Params(
@@ -176,7 +186,24 @@ racoOp: Store(relationKey=RelationKey(user=public, program=adhoc, relation=newta
                 mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
             ),
             expected = listOf()
+        ),
+
+
+        Params(
+            name = "store apply scan Unnamed with manual DAP",
+            query = "Store(RelationKey('public','adhoc','newtable'), " +
+                "Apply([('dst', UnnamedAttributeRef(1, None))], " +
+                "Scan(RelationKey('public','adhoc','smallGraph'), " +
+                "Scheme([('src', 'LONG_TYPE'), ('$__DAP__', 'STRING_TYPE'), ('dst', 'LONG_TYPE')]), 10000, " +
+                "RepresentationProperties(frozenset([]), None, None))))",
+            catalog = listOf("src" to RacoType.LONG, __DAP__ to RacoType.STRING, "dst" to RacoType.LONG),
+            data = listOf(
+                mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
+            ),
+            expected = listOf()
         )
+
+
 //        ,
 //        Params(
 //            name = "store apply scan Unnamed",

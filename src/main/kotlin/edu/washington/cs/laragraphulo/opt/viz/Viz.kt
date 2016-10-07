@@ -11,7 +11,7 @@ private fun Op<*>.collectEdges(edges: MutableMap<Op<*>,Set<Op<*>>> = HashMap()):
   val set = HashSet<Op<*>>()
   args.forEach { set.add(it) }
   edges.put(this, set)
-  args.forEach { collectEdges(edges) }
+  args.forEach { it.collectEdges(edges) }
   return edges
 }
 
@@ -20,7 +20,7 @@ fun Op<*>.generateDot(title: String = ""): String {
   val edgeMap: Map<Op<*>, Set<Op<*>>> = collectEdges()
   val nodeStr = edgeMap
       .flatMap { it.value.map { it } + it.key }
-      .map { """'"${it.hashCode()}" [label="${it.toShortStr().replace("\"","\\\"")}"] ;'""" }
+      .map { """"${it.hashCode()}" [label="${it.toShortStr().replace("\"","\\\"")}"] ;""" }
       .joinToString(separator = "\n      ")
   val edgeStr = edgeMap
       .flatMap { pit -> pit.value.map { cit -> Pair(pit.key, cit) } }

@@ -252,12 +252,12 @@ fun racoToAccumulo(
       val emittersType: List<Pair<Name, Type<*>>> = emittersRaco.map { it.first to it.second.getType(pp.sap) }
 
 
-      val emittersScheme: AccessPath
+      var emittersScheme: AccessPath
       val keyExprs: List<Expr<ABS>>
       val valExprs: List< Pair<ABS,Expr<FullValue>> >
       // if __DAP__ and/or __LAP__ were present as emitted attributes, then they are accounted for in emittersScheme
       // if both were not present, then all attributes are in the DAP
-      val (dap, lap, cap) = if (emittersType.any() { it.first == __DAP__ }) {
+      var (dap, lap, cap) = if (emittersType.any() { it.first == __DAP__ }) {
         emittersScheme = fromRacoScheme(emittersType)
         val dap = emittersScheme.dapNames.map { dapName -> exprInfos.find { it.first == dapName }!! }
         val lap = emittersScheme.lapNames.map { dapName -> exprInfos.find { it.first == dapName }!! }
@@ -285,8 +285,20 @@ fun racoToAccumulo(
           partitions
         }
         val (dap,lap,cap) = trip
+
         emittersScheme = AccessPath.of(dap.map { it.first }, lap.map { it.first }, cap.map { it.first }, (dap+lap+cap).map { it.third })
         trip
+      }
+
+      // if dap0 is empty and lap0 has an element, then upgrade the first element in lap to dap
+      if (dap.isEmpty() && lap.isNotEmpty()) {
+        val first = lap.first()
+        dap = listOf(first)
+        lap -= first
+        val firstName = emittersScheme.lapNames.first()
+        val dapNames = listOf(firstName)
+        val lapNames = emittersScheme.lapNames - firstName
+        emittersScheme = AccessPath.of(dapNames, lapNames, emittersScheme.valNames, emittersScheme.types, emittersScheme.widths)
       }
 
       keyExprs = (dap+lap).map { it.second }
