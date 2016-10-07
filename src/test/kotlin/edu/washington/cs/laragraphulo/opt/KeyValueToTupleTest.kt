@@ -56,107 +56,93 @@ class KeyValueToTupleTest(
 
     fun String.toABS() = this.toByteArray().let { ArrayByteSequence(it, 0, it.size) }
 
-    fun par(name: String, inputs: List<KeyValue>, uberSchema: ImmutableUberSchema, expected: List<Tuple>) =
-        Params(name, inputs, uberSchema, uberSchema, expected)
+    private fun par(name: String, inputs: List<KeyValue>, ap: AccessPath, expected: List<Tuple>) =
+        Params(name, inputs, ap, ap, expected)
 
     val data = arrayOf(
-        Params(
+        par(
             name = "empty no-schema",
             inputs = listOf(),
-            apKeySchema = ImmutableUberSchema(
-                listOf(), 0, 0, 
-                0, listOf(),
-                widths = listOf()
-            ),
-            widthSchema = WidthSchemaImpl(listOf()),
+            ap = AccessPath.of(listOf(), listOf(), widths = listOf()),
             expected = listOf()
         ),
-        Params(
+        par(
             name = "1-k no-schema",
             inputs = listOf(Key("","fam","q") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
-            widthSchema = WidthSchemaImpl(listOf()),
+            ap = AccessPath.of(listOf(), listOf(), widths = listOf()),
             expected = listOf(TupleImpl(
                 listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))))
         ),
-        Params(
+        par(
             name = "1-k duplicate v no-schema",
             inputs = listOf(Key("","fam","q") to Value(), Key("","fam","q") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
-            widthSchema = WidthSchemaImpl(listOf()),
+            ap = AccessPath.of(listOf(), listOf(), widths = listOf()),
             expected = listOf(
                 TupleImpl(listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE),
                     "q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
-        Params(
+        par(
             name = "1-k 2-v no-schema",
             inputs = listOf(Key("","fam","q") to Value(), Key("","fam","q2") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
-            widthSchema = WidthSchemaImpl(listOf()),
+            ap = AccessPath.of(listOf(), listOf(), widths = listOf()),
             expected = listOf(
                 TupleImpl(listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE),
                     "q2".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
-        Params(
+        par(
             name = "2-k no-schema",
             inputs = listOf(Key("","fam","q") to Value(), Key("","fam2","q") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf(), listOf()),
-            widthSchema = WidthSchemaImpl(listOf()),
+            ap = AccessPath.of(listOf(), listOf(), widths = listOf()),
             expected = listOf(
                 TupleImpl(listOf(),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
                 TupleImpl(listOf(),"fam2".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
-        Params(
+        par(
             name = "2-k 1-row-schema",
             inputs = listOf(Key("r","fam","q") to Value(), Key("r2","fam","q") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf("row"), listOf()),
-            widthSchema = WidthSchemaImpl(listOf(-1)),
+            ap = AccessPath.of(listOf("row"), listOf(), widths = listOf(-1)),
             expected = listOf(
                 TupleImpl(listOf("r".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
                 TupleImpl(listOf("r2".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
-        Params(
+        par(
             name = "2-k colq-schema",
             inputs = listOf(Key("","fam","abaaq") to Value(), Key("","fam","abbbq") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf(), listOf("cqPrePre","cqPre")),
-            widthSchema = WidthSchemaImpl(listOf(3, 1)),
+            ap = AccessPath.of(listOf(), listOf("cqPrePre","cqPre"), widths = listOf(3, 1)),
             expected = listOf(
                 TupleImpl(listOf("aba".toABS(), "a".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
                 TupleImpl(listOf("abb".toABS(), "b".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
-        Params(
+        par(
             name = "2-k all-schema",
             inputs = listOf(Key("r","fam","aq") to Value(), Key("r2","fam","bq") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf("row"), listOf("cqPre")),
-            widthSchema = WidthSchemaImpl(listOf(-1, 1)),
+            ap = AccessPath.of(listOf("row"), listOf("cqPre"), widths = listOf(-1, 1)),
             expected = listOf(
                 TupleImpl(listOf("r".toABS(), "a".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE))),
                 TupleImpl(listOf("r2".toABS(), "b".toABS()),"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
-        Params(
+        par(
             name = "big mess",
             inputs = listOf(Key("ar","fam","aaq") to Value("yes"), Key("ar","fam","aaq2") to Value("no"),
                 Key("ar2","fam","abq33") to Value()).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2")),
-            widthSchema = WidthSchemaImpl(listOf(1, -1, 1, 1)),
+            ap = AccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2"), widths = listOf(1, -1, 1, 1)),
             expected = listOf(
                 TupleImpl(listOf("a","r","a","a").map { it.toABS() },"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue("yes".toABS(), EMPTY, Long.MAX_VALUE),
                     "q2".toABS(), FullValue("no".toABS(), EMPTY, Long.MAX_VALUE))),
                 TupleImpl(listOf("a","r2","a","b").map { it.toABS() },"fam".toABS(),ImmutableListMultimap.of("q33".toABS(), FullValue(EMPTY, EMPTY, Long.MAX_VALUE)))
             )
         ),
-        Params(
+        par(
             name = "big mess with visibility and timestamps",
             inputs = listOf(Key("ar","fam","aaq","xxx",42) to Value("yes"), Key("ar","fam","aaq2") to Value("no"),
                 Key("ar2","fam","abq33", 33) to Value("bigo33")).map { KeyValue(it) },
-            apKeySchema = ImmutableAccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2")),
-            widthSchema = WidthSchemaImpl(listOf(1, -1, 1, 1)),
+            ap = AccessPath.of(listOf("rowpre","row"), listOf("cqPre", "cqPre2"), widths = listOf(1, -1, 1, 1)),
             expected = listOf(
                 TupleImpl(listOf("a","r","a","a").map { it.toABS() },"fam".toABS(),ImmutableListMultimap.of("q".toABS(), FullValue("yes".toABS(), "xxx".toABS(), 42),
                     "q2".toABS(), FullValue("no".toABS(), EMPTY, Long.MAX_VALUE))),

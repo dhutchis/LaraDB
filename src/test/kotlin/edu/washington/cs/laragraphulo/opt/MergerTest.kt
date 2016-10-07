@@ -26,7 +26,7 @@ class MergerTest(
       /**
        *
        */
-      val inputs: List< Pair<List<Tuple>, ImmutableBagAccessPath> >,
+      val inputs: List< Pair<List<Tuple>, SortedAccessPath> >,
       val prefixSize: Int,
 //      val baps: List<ImmutableBagAccessPath>,
       val emitNoMatches: Set<Int> = setOf(),
@@ -47,9 +47,10 @@ class MergerTest(
     lateinit var ALL_ACTIVE: BooleanArray
     var lastTuples: List<Tuple>? = null
 
-    override fun schema(inputs: List<APSortedKeySchema>): APSortedKeySchema {
+    override fun <T> schema(inputs: List<T>): SortedAccessPath where T : SortedKeySchema, T : APKeySchema {
+//    override fun schema(inputs: List<SortedAccessPath>): SortedAccessPath {
       if (inputs.isEmpty())
-        return ImmutableBagAccessPath.of(listOf(), listOf(), 0, false)
+        return SortedAccessPath.of(listOf(), listOf(), sortedUpto = 0)
       val input0 = inputs[0]
       assertTrue("Prefix $prefixSize exceeds key attributes ${input0.keyNames}", prefixSize <= input0.keyNames.size)
       ensureSamePrefix(inputs, prefixSize)
@@ -57,8 +58,8 @@ class MergerTest(
       ALL_ACTIVE = BooleanArray(inputs.size, {true})
       val tupleRefs = ImmutableList.builder<TupleRef>()
 
-      // dap = the common prefix attributes
-      // lap = the rest, in order of the iterators
+      // dapNames = the common prefix attributes
+      // lapNames = the rest, in order of the iterators
 
       val dapCopySize = Math.min(prefixSize, input0.dapNames.size)
       val dap = ImmutableList.builder<Name>().addAll(input0.dapNames.subList(0, dapCopySize))
@@ -80,7 +81,7 @@ class MergerTest(
 
 //      val capmap = HashMap<Name, Pair<ImmutableList.Builder<Name>,ImmutableList.Builder<TupleRef>>>()
 //      for ((index, input) in inputs.withIndex()) {
-//        var p = input.dap.size+input.lap.size
+//        var p = input.dapNames.size+input.lapNames.size
 //        for (cf in input.cap) {
 //          val content = capmap[cf.name] ?: Pair(ImmutableList.builder<Name>(), ImmutableList.builder<TupleRef>())
 //          content.first.addAll(cf.attributes)
@@ -97,8 +98,8 @@ class MergerTest(
       val bdap = dap.build(); val blap = lap.build()
       val sortedUpto = bdap.size+blap.size // the iterator will maintain sorted order
       // ************* special cases with each iterator's sortedUpto --- ONEROWA vs ONEROWB vs always safe TWOROW
-      return ImmutableBagAccessPath.of(
-         bdap, blap, sortedUpto, false
+      return SortedAccessPath.of(
+         bdap, blap, sortedUpto = sortedUpto
       )
     }
 
@@ -108,7 +109,7 @@ class MergerTest(
       for (i in tuples.indices)
         assertEquals("tuples are not equal by rowComparator $rowComparator: ${Arrays.toString(tuples)}", 0, rowComparator.compare(tuples[0], tuples[i]))
       val list = ArrayList<ArrayByteSequence>(tupleReferences.size+prefixSize)
-      list.addAll(tuples[0].keys.subList(0,prefixSize)) // the dap
+      list.addAll(tuples[0].keys.subList(0,prefixSize)) // the dapNames
       for ((tupleRef, attrRef) in tupleReferences) {
         list += tuples[tupleRef].keys[attrRef]
       }
@@ -185,50 +186,50 @@ class MergerTest(
     val data: Array<Params> = arrayOf(
         Params(
             name = "one tuple each; no match",
-            inputs = listOf(ti1 to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                ti2 to ImmutableBagAccessPath.of(listOf("a1"), listOf("b2"))),
+            inputs = listOf(ti1 to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                ti2 to SortedAccessPath.of(listOf("a1"), listOf("b2"))),
             prefixSize = 1,
             expected = listOf()
         ),
         Params(
             name = "one tuple each; match",
-            inputs = listOf(ti1 to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                ti3 to ImmutableBagAccessPath.of(listOf("a1"), listOf("b2"))),
+            inputs = listOf(ti1 to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                ti3 to SortedAccessPath.of(listOf("a1"), listOf("b2"))),
             prefixSize = 1,
             expected = listOf(tuple("1a", "2a", "2c"))
         ),
         Params(
             name = "one tuple each; cartesian product",
-            inputs = listOf(ti1 to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                ti2 to ImmutableBagAccessPath.of(listOf("b1"), listOf("b2"))),
+            inputs = listOf(ti1 to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                ti2 to SortedAccessPath.of(listOf("b1"), listOf("b2"))),
             prefixSize = 0,
             expected = listOf(tuple("1a", "2a", "1b", "2b"))
         ),
         Params(
             name = "one iter empty; match",
-            inputs = listOf(ti1 to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                tiEmpty to ImmutableBagAccessPath.of(listOf("a1"), listOf("b2"))),
+            inputs = listOf(ti1 to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                tiEmpty to SortedAccessPath.of(listOf("a1"), listOf("b2"))),
             prefixSize = 1,
             expected = listOf()
         ),
         Params(
             name = "one iter empty; cartesian product",
-            inputs = listOf(ti1 to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                tiEmpty to ImmutableBagAccessPath.of(listOf("b1"), listOf("b2"))),
+            inputs = listOf(ti1 to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                tiEmpty to SortedAccessPath.of(listOf("b1"), listOf("b2"))),
             prefixSize = 0,
             expected = listOf()
         ),
         Params(
             name = "1x2 match",
-            inputs = listOf(ti1 to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                ti12 to ImmutableBagAccessPath.of(listOf("a1"), listOf("b2"))),
+            inputs = listOf(ti1 to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                ti12 to SortedAccessPath.of(listOf("a1"), listOf("b2"))),
             prefixSize = 1,
             expected = listOf(tuple("1a", "2a", "2b"), tuple("1a","2a","2c"))
         ),
         Params(
             name = "2x3 match",
-            inputs = listOf(ti12 to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                ti13 to ImmutableBagAccessPath.of(listOf("a1"), listOf("b2"))),
+            inputs = listOf(ti12 to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                ti13 to SortedAccessPath.of(listOf("a1"), listOf("b2"))),
             prefixSize = 1,
             expected = listOf(tuple("1a", "2b", "2d"), tuple("1a","2b","2e"), tuple("1a","2b","2f"),
                 tuple("1a", "2c", "2d"), tuple("1a","2c","2e"), tuple("1a","2c","2f"))
@@ -236,8 +237,8 @@ class MergerTest(
         Params(
             name = "2x1 + 1x2 match",
             inputs = listOf(
-                listOf(tuple("1a","2b"), tuple("1a","2c"), tuple("1b","2x")) to ImmutableBagAccessPath.of(listOf("a1"), listOf("a2")),
-                listOf(tuple("1a","2g"), tuple("1b","2y"), tuple("1b","2z")) to ImmutableBagAccessPath.of(listOf("a1"), listOf("b2"))),
+                listOf(tuple("1a","2b"), tuple("1a","2c"), tuple("1b","2x")) to SortedAccessPath.of(listOf("a1"), listOf("a2")),
+                listOf(tuple("1a","2g"), tuple("1b","2y"), tuple("1b","2z")) to SortedAccessPath.of(listOf("a1"), listOf("b2"))),
             prefixSize = 1,
             expected = listOf(tuple("1a", "2b", "2g"), tuple("1a","2c","2g"),
                 tuple("1b", "2x", "2y"), tuple("1b","2x","2z"))

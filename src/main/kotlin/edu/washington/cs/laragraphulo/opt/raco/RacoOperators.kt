@@ -22,44 +22,44 @@ sealed class RacoExpression(args: List<Op<*>> = emptyList()): Op<Unit>(args) {
   override val unbound: List<Arg<*>> = emptyList()
   override fun invoke(reqs: List<*>) {}
 
-  abstract fun <P> getType(props: P): Type<*> where P : KeySchema, P : TypeSchema
+  abstract fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema
 
   sealed class Literal<out R>(open val obj: R): RacoExpression(obj.toObj()){
     abstract fun toABS(): ArrayByteSequence
     data class StringLiteral(override val obj: String): Literal<String>(obj) {
       override fun toABS(): ArrayByteSequence = Type.STRING.encode(obj).toABS()
-      override fun <P> getType(props: P) where P : KeySchema, P : TypeSchema = Type.STRING
+      override fun <P> getType(props: P) where P : NameSchema, P : TypeSchema = Type.STRING
     }
     data class BooleanLiteral(override val obj: Boolean): Literal<Boolean>(obj) {
       override fun toABS(): ArrayByteSequence = Type.BOOLEAN.encode(obj).toABS()
-      override fun <P> getType(props: P) where P : KeySchema, P : TypeSchema = Type.BOOLEAN
+      override fun <P> getType(props: P) where P : NameSchema, P : TypeSchema = Type.BOOLEAN
     }
 //    data class NumericLiteral(override val obj: Number): Literal<Number>(obj)
     data class DoubleLiteral(override val obj: Double): Literal<Double>(obj) {
       override fun toABS(): ArrayByteSequence = Type.DOUBLE.encode(obj).toABS()
-      override fun <P> getType(props: P) where P : KeySchema, P : TypeSchema = Type.DOUBLE
+      override fun <P> getType(props: P) where P : NameSchema, P : TypeSchema = Type.DOUBLE
     }
     data class LongLiteral(override val obj: Long): Literal<Long>(obj) {
       override fun toABS(): ArrayByteSequence = Type.LONG.encode(obj).toABS()
-      override fun <P> getType(props: P) where P : KeySchema, P : TypeSchema = Type.LONG
+      override fun <P> getType(props: P) where P : NameSchema, P : TypeSchema = Type.LONG
     }
   }
 
   data class NamedAttributeRef(val attributename: Name): RacoExpression(attributename.toObj()) {
-    override fun <P> getType(props: P): Type<*> where P : KeySchema, P : TypeSchema {
+    override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
       val enc = props.types[props.allNames.indexOf(attributename)] ?: throw UnsupportedOperationException("no encoder / type information for attribute $attributename")
       return enc
     }
   }
   data class UnnamedAttributeRef(val position: Int, val debug_info: Any?): RacoExpression(position.toObj(), debug_info.toObj()) {
-    override fun <P> getType(props: P): Type<*> where P : KeySchema, P : TypeSchema {
+    override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
       val enc = props.types[position] ?: throw UnsupportedOperationException("no encoder / type information for attribute #$position")
       return enc
     }
   }
 
   data class PLUS(val left: RacoExpression, val right: RacoExpression): RacoExpression(left, right) {
-    override fun <P> getType(props: P): Type<*> where P : KeySchema, P : TypeSchema {
+    override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
       val t = left.getType(props)
       if (t != right.getType(props))
         throw RuntimeException("types mismatch: $t and ${right.getType(props)}. This might be fixable by type upcasting")

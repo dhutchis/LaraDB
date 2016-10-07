@@ -56,7 +56,7 @@ open class TupleKeyImpl(
     }
   }
 
-  /** Convert this TupleKey to a Key filled up to the CQ with the dap, family, and lap. */
+  /** Convert this TupleKey to a Key filled up to the CQ with the dapNames, family, and lapNames. */
   override fun toKey(apKeySchema: APKeySchema): Key {
     /** Only when [IntRange.step] is 0 */
     fun IntRange.size(): Int = this.endInclusive - this.first + 1
@@ -284,12 +284,12 @@ class KeyValueToTuple(
         return p
       }
 
-      // fill the dap from the row
+      // fill the dapNames from the row
       val row = k.rowData
       val tmp = addToList(row, 0, apKeySchema.dapNames.size, true) // don't care about the bytes remaining after reading the row
       if (tmp == -1) return null
 
-      // fill the lap from the cq
+      // fill the lapNames from the cq
       val cqFirst = k.columnQualifierData
       val valNamePos = addToList(cqFirst, apKeySchema.dapNames.size, apKeySchema.lapNames.size, false)
       if (valNamePos == -1) return null
@@ -329,12 +329,12 @@ class KeyValueToTuple(
         return p
       }
 
-      // fill the dap from the row
+      // fill the dapNames from the row
       val row = firstKV.key.rowData
       val tmp = addToList(row, 0, apKeySchema.dapNames.size, true) // don't care about the bytes remaining after reading the row
       if (tmp == -1) continue
 
-      // fill the lap from the cq
+      // fill the lapNames from the cq
       val cqFirst = firstKV.key.columnQualifierData
       valNamePos = addToList(cqFirst, apKeySchema.dapNames.size, apKeySchema.lapNames.size, false)
       if (valNamePos == -1) continue

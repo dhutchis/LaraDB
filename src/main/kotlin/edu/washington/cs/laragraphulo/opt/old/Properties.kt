@@ -36,7 +36,7 @@ private fun <K : Comparable<K>,V> mergeMaps(m1: ImmutableSortedMap<K, V>, m2: Im
 open class Attributes protected constructor(
     val allAttributes: ImmutableSortedMap<String, Attribute<*>>
 ) : Property<AssociativeTable> {
-  constructor(attrs: Collection<Attribute<*>>) : this(ImmutableSortedMap.copyOf(attrs.map { it.name to it }.toMap()))
+  constructor(allNames: Collection<Attribute<*>>) : this(ImmutableSortedMap.copyOf(allNames.map { it.name to it }.toMap()))
 
   /**
    * If we conclude two [Attributes] that agree on everything, then no new results.
@@ -120,9 +120,9 @@ open class Schema protected constructor(
 
 open class AccessPath(
     /** distributed access path */
-    val dap: ImmutableList<Attribute<*>>,
+    val dapNames: ImmutableList<Attribute<*>>,
     /** local access path */
-    val lap: ImmutableList<Attribute<*>>,
+    val lapNames: ImmutableList<Attribute<*>>,
     /**
      * column access path
      * A list of the attribute groups. Each group is potentially stored in a different file.
@@ -131,8 +131,8 @@ open class AccessPath(
     val cap: ImmutableSortedMap<String, ColumnFamily>
 ) : Schema(
     ImmutableSortedMap.naturalOrder<String, Attribute<*>>()
-        .putAll(dap.map { it.name to it }.toMap())
-        .putAll(lap.map { it.name to it }.toMap())
+        .putAll(dapNames.map { it.name to it }.toMap())
+        .putAll(lapNames.map { it.name to it }.toMap())
         .build(),
     ImmutableSortedMap.naturalOrder<String, Attribute<*>>()
         .putAll(cap.flatMap { it.value.attributes.entries }.map { it.key to it.value }.toMap())
@@ -140,10 +140,10 @@ open class AccessPath(
 ) {
   override fun merge(newp: Property<AssociativeTable>): Property.NewPropWithImplied<AssociativeTable, Property<AssociativeTable>> {
     if (newp !is AccessPath) throw IllegalArgumentException("Merging a different kind of property! $newp")
-    if (dap != newp.dap)
-      throw Contradiction("Different distributed access paths $dap vs ${newp.dap}")
-    if (lap != newp.lap)
-      throw Contradiction("Different distributed access paths $lap vs ${newp.lap}")
+    if (dapNames != newp.dapNames)
+      throw Contradiction("Different distributed access paths $dapNames vs ${newp.dapNames}")
+    if (lapNames != newp.lapNames)
+      throw Contradiction("Different distributed access paths $lapNames vs ${newp.lapNames}")
     if (cap == newp.cap)
       return Property.NewPropWithImplied(this)
 
@@ -167,14 +167,14 @@ open class AccessPath(
         newcapBuilder.put(name, cape.value)
     }
     val ncap = newcapBuilder.build()
-//    if (ndap === dap && nlap === lap && ncap === cap)
+//    if (ndap === dapNames && nlap === lapNames && ncap === cap)
 //      return Property.NewPropWithImplied(this)
 //    else
-    return Property.NewPropWithImplied(AccessPath(dap, lap, ncap))
+    return Property.NewPropWithImplied(AccessPath(dapNames, lapNames, ncap))
   }
 
   override fun toString(): String{
-    return "AccessPath(dap=$dap, lap=$lap, cap=$cap)"
+    return "AccessPath(dapNames=$dapNames, lapNames=$lapNames, cap=$cap)"
   }
 
   override fun equals(other: Any?): Boolean{
@@ -183,8 +183,8 @@ open class AccessPath(
 
     other as AccessPath
 
-    if (dap != other.dap) return false
-    if (lap != other.lap) return false
+    if (dapNames != other.dapNames) return false
+    if (lapNames != other.lapNames) return false
     if (cap != other.cap) return false
 
     return true
@@ -192,8 +192,8 @@ open class AccessPath(
 
   override fun hashCode(): Int{
     var result = super.hashCode()
-    result = 31 * result + dap.hashCode()
-    result = 31 * result + lap.hashCode()
+    result = 31 * result + dapNames.hashCode()
+    result = 31 * result + lapNames.hashCode()
     result = 31 * result + cap.hashCode()
     return result
   }

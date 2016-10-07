@@ -12,6 +12,21 @@ sealed class Type<T> : LexicoderPlus<T> {
   abstract val naturalWidth: Int
   abstract val naturalDefault: T
   abstract val naturalDefaultEncoded: ByteArray
+  override abstract fun toString(): String
+
+  /**  */
+  object UNKNOWN : Type<ABS>() {
+    override fun encode(v: ABS): ByteArray = v.toArray()
+    override fun decode(b: ByteArray, off: Int, len: Int) = ABS(b,off,len)
+    override val encodeFromString = object : Encode<String> {
+      override fun encode(v: String) = v.toByteArray()
+//      override fun decode(b: ByteArray, off: Int, len: Int): String = decode(b,off,len).toString()
+    }
+    override val naturalWidth = 4
+    override val naturalDefault: ABS = EMPTY
+    override val naturalDefaultEncoded = EMPTY_B
+    override fun toString() = "UNKNOWN"
+  }
 
   /** Fixed width int encoding.
    * This might not preserve the order of unsigned integers.
@@ -29,6 +44,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth = 4
     override val naturalDefault: Int = 0
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "INT"
   }
   /** See [IntegerLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
   object INT_VARIABLE : Type<Int>() {
@@ -41,6 +57,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     }
     override val naturalDefault: Int = 0
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "INT_VARIABLE"
   }
   object LONG : Type<Long>() {
     override fun decode(b: ByteArray, off: Int, len: Int): Long = Longs.fromBytes(b[off],b[off+1],b[off+2],b[off+3],b[off+4],b[off+5],b[off+6],b[off+7])
@@ -51,6 +68,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = 8
     override val naturalDefault = 0L
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "LONG"
   }
   /** See [LongLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
   object LONG_VARIABLE : Type<Long>() {
@@ -63,6 +81,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = -1
     override val naturalDefault = 0L
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "LONG_VARIABLE"
   }
   object BOOLEAN : Type<Boolean>() {
     const val ZERO: Byte = 0
@@ -76,6 +95,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = 1
     override val naturalDefault = false
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "BOOLEAN"
   }
   /** Encode in terms of long bits. Probably does not preserve order. */
   object DOUBLE : Type<Double>() {
@@ -87,6 +107,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = 8
     override val naturalDefault = 0.0
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "DOUBLE"
   }
   /** See [DoubleLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
   object DOUBLE_VARIABLE : Type<Double>() {
@@ -99,6 +120,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = -1
     override val naturalDefault = 0.0
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "DOUBLE_VARIABLE"
   }
   /** UTF8 string encoding */
   object STRING : Type<String>() {
@@ -109,6 +131,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = -1
     override val naturalDefault = ""
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "STRING"
   }
 //  object DATETIME : Type<DateTime>() {
 //    val lex = DateTimeLexicoder()
@@ -125,6 +148,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = 4
     override val naturalDefault = 0.0f
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "FLOAT"
   }
   /** See [FloatLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
   object FLOAT_VARIABLE : Type<Float>() {
@@ -137,6 +161,7 @@ sealed class Type<T> : LexicoderPlus<T> {
     override val naturalWidth: Int = -1
     override val naturalDefault = 0.0f
     override val naturalDefaultEncoded = encode(naturalDefault)
+    override fun toString() = "FLOAT_VARIABLE"
   }
 //  object BYTE_ARRAY : Type<ByteArray>() {
 //

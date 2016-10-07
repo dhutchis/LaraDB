@@ -3,6 +3,7 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
 import org.apache.accumulo.core.data.ArrayByteSequence
+import java.util.regex.Pattern
 
 /*
 These interfaces are capability interfaces.
@@ -11,21 +12,15 @@ They do not enforce any error checking. That is left to implementing classes.
 
 /** An ordered list of attribute names. */
 interface NameSchema {
-  /** attribute names in order */
+  /** Attribute names in order. Whether these contain keys, values, both, or something else depends on context.
+   * When it contains keys and values, the keys come first (first dapNames, then lapNames) and values come second. */
   val allNames: List<Name>
 }
 
 /** An ordered list of key attribute names. */
 interface KeySchema {
-  /** key attribute names in order */
+  /** An ordered list of key attribute names. Does not include value attributes. */
   val keyNames: List<Name>
-//  val keyRange: IntRange
-//    get() = 0..keyNames.size-1
-}
-/** An ordered list of value attribute names. */
-interface ValSchema {
-  /** value attribute names in order */
-  val valNames: List<Name>
 }
 
 /** A refinement of [KeySchema] that divides [keyNames] into [dapNames] and [lapNames]. */
@@ -35,10 +30,35 @@ interface APKeySchema : KeySchema {
   /** local access path; the second portion of [keyNames] */
   val lapNames: List<Name>
 
+  override val keyNames: List<Name>
+    get() = dapNames + lapNames
+
+  /** Shortcut property for indexing into [keyNames] */
   val dapRange: IntRange
     get() = 0..dapNames.size-1
+  /** Shortcut property for indexing into [keyNames] */
   val lapRange: IntRange
-    get() = dapNames.size..dapNames.size+ lapNames.size-1
+    get() = dapNames.size..dapNames.size+lapNames.size-1
+}
+
+/** A refinement of [NameSchema] that divides [allNames] into [keyNames] and [valNames]. */
+interface KVSchema : NameSchema {
+  val keyNames: List<Name>
+  val valNames: List<Name>
+
+  override val allNames: List<String>
+    get() = keyNames + valNames
+
+  val keyRange: IntRange
+    get() = 0..keyNames.size-1
+  val valRange: IntRange
+    get() = keyNames.size..allNames.size-1
+}
+
+/** The [allNames] here are fully divided into [dapNames], [lapNames], [valNames]. */
+interface APSchema : APKeySchema, KVSchema {
+  override val keyNames: List<String>
+    get() = super.keyNames
 }
 
 /** A refinement of [KeySchema] that specifies how large a prefix of the [keyNames] are sorted. */
@@ -46,12 +66,10 @@ interface SortedKeySchema : KeySchema {
   /** An int such that all [KeySchema.keyNames] whose index is less than sortedUpto are sorted.
    * 0 means nothing is sorted. Valid up to and including [KeySchema.keyNames].size. */
   val sortedUpto: Int
-//  /** Whether there are multiple tuples with the same key attribute values. */
-//  val duplicates: Boolean
 }
 
-/** Specifies the [Type] of each attribute. */
-interface TypeSchema : NameSchema {
+/** [Type] of each attribute. */
+interface TypeSchema {
   val types: List<Type<*>>
 }
 
@@ -62,20 +80,18 @@ interface TypeSchema : NameSchema {
 //  val defaults: List<Default>
 //}
 
-/** Widths for each name in a [NameSchema]. */
-interface WidthSchema : NameSchema {
+/** [Width] of each attribute. */
+interface WidthSchema {
   /**
    * A width for each name
    *
    * `>= 0` means fixed width.
    * `-1` means variable width.
    *
-   * The last attribute in the dap may be variable width.
+   * The last attribute in the dapNames may be variable width.
    * Todo: Support other variable-width encoding.
    */
   val widths: List<Width>
-//    require(widths.size == names.size) {"widths and names sizes differ: $widths ; $names"}
-//    require(widths.all { it == -1 || it >= 0 }) {"There is a bad width: $widths"}
 }
 
 
@@ -83,89 +99,93 @@ interface WidthSchema : NameSchema {
 const val __DAP__ = "__DAP__"
 const val __LAP__ = "__LAP__"
 
-class ImmutableUberSchema(
-    allNames: List<Name>,
-    dapLen: Int,
-    lapLen: Int,
-    /** An int such that all [dapNames] and [lapNames] whose index is less than sortedUpto are sorted.
-     * 0 means nothing is sorted. Valid up to and including [dapNames].size + [lapNames].size. */
-    override val sortedUpto: Int,
-    types: List<Type<*>>,
-    /** Only for keys (dap and lap); not used for value attributes */
-    widths: List<Width> = types.map { it.naturalWidth },
-    /** Only for values */
-    defaults: List<Default> = types.map { it.naturalDefaultEncoded }
-    // not sure if this should be here
-//    family: ABS = EMPTY
-) : APKeySchema, SortedKeySchema, TypeSchema, ValSchema, WidthSchema {
-  override val allNames: List<Name> = ImmutableList.copyOf(allNames)
-  override val keyNames: List<Name> = this.allNames.subList(0,dapLen+lapLen)
-  override val dapNames: List<Name> = this.keyNames.subList(0,dapLen)
-  override val lapNames: List<Name> = this.keyNames.subList(dapLen,dapLen+lapLen)
-  override val valNames: List<Name> = this.allNames.subList(dapLen+lapLen, this.allNames.size)
-  override val types: List<Type<*>> = ImmutableList.copyOf(types)
-  /** Only for keys (dap and lap); not used for value attributes */
-  override val widths: List<Width> = ImmutableList.copyOf(widths)
-  /** Only for values */
-  val defaults: List<Default> = ImmutableList.copyOf(defaults)
-//  val fam: ByteArray = Arrays.copyOfRange(family.backingArray, family.offset(), family.offset()+family.length())
+//class ImmutableUberSchema(
+//    allNames: List<Name>,
+//    dapLen: Int,
+//    lapLen: Int,
+//    /** An int such that all [dapNames] and [lapNames] whose index is less than sortedUpto are sorted.
+//     * 0 means nothing is sorted. Valid up to and including [dapNames].size + [lapNames].size. */
+//    override val sortedUpto: Int,
+//    types: List<Type<*>>,
+//    /** Only for keys (dapNames and lapNames); not used for value attributes */
+//    widths: List<Width> = types.map { it.naturalWidth },
+//    /** Only for values */
+//    defaults: List<Default> = types.map { it.naturalDefaultEncoded }
+//    // not sure if this should be here
+////    family: ABS = EMPTY
+//)  {
+//  override val allNames: List<Name> = ImmutableList.copyOf(allNames)
+//  override val keyNames: List<Name> = this.allNames.subList(0,dapLen+lapLen)
+//  override val dapNames: List<Name> = this.keyNames.subList(0,dapLen)
+//  override val lapNames: List<Name> = this.keyNames.subList(dapLen,dapLen+lapLen)
+//  override val valNames: List<Name> = this.allNames.subList(dapLen+lapLen, this.allNames.size)
+//  override val types: List<Type<*>> = ImmutableList.copyOf(types)
+//  /** Only for keys (dapNames and lapNames); not used for value attributes */
+//  override val widths: List<Width> = ImmutableList.copyOf(widths)
+//  /** Only for values */
+//  val defaults: List<Default> = ImmutableList.copyOf(defaults)
+////  val fam: ByteArray = Arrays.copyOfRange(family.backingArray, family.offset(), family.offset()+family.length())
+//
+//  fun toRacoScheme(): List<Pair<Name,Type<*>>> {
+//    return allNames.zip(types).foldIndexed(ImmutableList.builder<Pair<Name, Type<*>>>()) { i, builder, pair -> when (i) {
+//      dapNames.size -> builder.add(__DAP__ to Type.STRING).apply { if (lapNames.size == dapNames.size) add(__LAP__ to Type.STRING) }
+//      lapNames.size -> builder.add(__LAP__ to Type.STRING)
+//      else -> builder
+//    }.add(pair) }.build()
+////    val list: ArrayList<Pair<Name, Type<*>>> = all.zip(types).mapTo(ArrayList<Pair<Name, Type<*>>>(all.size + 2))
+////    list.add(dapNames.size+lapNames.size, __LAP__ to Type.STRING)
+////    list.add(dapNames.size, __DAP__ to Type.STRING)
+////    return list
+//  }
+//
+//  override fun toString(): String{
+//    return "USchema(dapNames=${dapNames}, lapNames=${lapNames}, cap=${valNames})"
+//    // sortedUpto=$sortedUpto, all=$all, dapNames=$dapNames, lapNames=$lapNames, cap=$cap, widths=$widths, defaults=$defaults, fam=${Arrays.toString(fam)}
+//  }
+//}
 
-  fun toRacoScheme(): List<Pair<Name,Type<*>>> {
-    return allNames.zip(types).foldIndexed(ImmutableList.builder<Pair<Name, Type<*>>>()) { i, builder, pair -> when (i) {
-      dapNames.size -> builder.add(__DAP__ to Type.STRING).apply { if (lapNames.size == dapNames.size) add(__LAP__ to Type.STRING) }
-      lapNames.size -> builder.add(__LAP__ to Type.STRING)
-      else -> builder
-    }.add(pair) }.build()
-//    val list: ArrayList<Pair<Name, Type<*>>> = all.zip(types).mapTo(ArrayList<Pair<Name, Type<*>>>(all.size + 2))
-//    list.add(dap.size+lap.size, __LAP__ to Type.STRING)
-//    list.add(dap.size, __DAP__ to Type.STRING)
-//    return list
+
+
+
+fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): AccessPath {
+  val (names, types) = scheme.unzip()
+  val dapidx = names.indexOf(__DAP__)
+  val daplen: Int
+  val namesNoDap: List<Name>
+  val typesNoDap: List<Type<*>>
+  if (dapidx == -1) {
+    daplen = names.size
+    namesNoDap = names
+    typesNoDap = types
+  } else {
+    daplen = dapidx
+    namesNoDap = names.subList(0,dapidx) + if (dapidx+1 < names.size) names.subList(dapidx+1,names.size) else emptyList()
+    typesNoDap = types.subList(0,dapidx) + if (dapidx+1 < names.size) types.subList(dapidx+1,names.size) else emptyList()
   }
-
-  companion object {
-    fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): ImmutableUberSchema {
-      val (names, types) = scheme.unzip()
-      val dapidx = names.indexOf(__DAP__)
-      val daplen: Int
-      val namesNoDap: List<Name>
-      val typesNoDap: List<Type<*>>
-      if (dapidx == -1) {
-        daplen = names.size
-        namesNoDap = names
-        typesNoDap = types
-      } else {
-        daplen = dapidx
-        namesNoDap = names.subList(0,dapidx) + if (dapidx+1 < names.size) names.subList(dapidx+1,names.size) else emptyList()
-        typesNoDap = types.subList(0,dapidx) + if (dapidx+1 < names.size) types.subList(dapidx+1,names.size) else emptyList()
-      }
-      val lapidx = namesNoDap.indexOf(__LAP__)
-      val laplen: Int
-      val namesNoDapNoLap: List<Name>
-      val typesNoDapNoLap: List<Type<*>>
-      if (lapidx == -1) {
-        laplen = names.size - daplen
-        namesNoDapNoLap = namesNoDap
-        typesNoDapNoLap = typesNoDap
-      } else {
-        require(lapidx >= daplen) { "$__DAP__ appears after $__LAP__ in $names" }
-        laplen = lapidx - daplen
-        namesNoDapNoLap = namesNoDap.subList(0,lapidx) + if (lapidx+1 < namesNoDap.size) namesNoDap.subList(lapidx+1,namesNoDap.size) else emptyList()
-        typesNoDapNoLap = typesNoDap.subList(0,lapidx) + if (lapidx+1 < typesNoDap.size) typesNoDap.subList(lapidx+1,typesNoDap.size) else emptyList()
-      }
-
-      return ImmutableUberSchema(
-          namesNoDapNoLap, daplen, laplen,
-          sortedUpto = 0, types = typesNoDapNoLap
-      )
-    }
+  val lapidx = namesNoDap.indexOf(__LAP__)
+  val laplen: Int
+  val namesNoDapNoLap: List<Name>
+  val typesNoDapNoLap: List<Type<*>>
+  if (lapidx == -1) {
+    laplen = names.size - daplen
+    namesNoDapNoLap = namesNoDap
+    typesNoDapNoLap = typesNoDap
+  } else {
+    require(lapidx >= daplen) { "$__DAP__ appears after $__LAP__ in $names" }
+    laplen = lapidx - daplen
+    namesNoDapNoLap = namesNoDap.subList(0,lapidx) + if (lapidx+1 < namesNoDap.size) namesNoDap.subList(lapidx+1,namesNoDap.size) else emptyList()
+    typesNoDapNoLap = typesNoDap.subList(0,lapidx) + if (lapidx+1 < typesNoDap.size) typesNoDap.subList(lapidx+1,typesNoDap.size) else emptyList()
   }
+  // this could be simplified; I converted the code
+  val dapNames = namesNoDapNoLap.subList(0,daplen)
+  val lapNames = namesNoDapNoLap.subList(daplen,daplen+laplen)
+  val valNames = namesNoDapNoLap.subList(daplen,daplen+laplen)
 
-  override fun toString(): String{
-    return "USchema(dap=${dapNames}, lap=${lapNames}, cap=${valNames})"
-    // sortedUpto=$sortedUpto, all=$all, dap=$dap, lap=$lap, cap=$cap, widths=$widths, defaults=$defaults, fam=${Arrays.toString(fam)}
-  }
-
-
+//  return ImmutableUberSchema(
+//      namesNoDapNoLap, daplen, laplen,
+//      sortedUpto = 0, types = typesNoDapNoLap
+//  )
+  return AccessPath.of(namesNoDapNoLap, daplen, laplen, typesNoDapNoLap)
 }
 
 
@@ -173,30 +193,45 @@ class ImmutableUberSchema(
 
 
 
+data class NameTypeWidth(
+    val name: Name,
+    val type: Type<*>,
+    val width: Width = type.naturalWidth
+) {
+  override fun toString(): String = "<$name@$type@$width>"
+}
 
 
+/** An ordered list of attribute names.
+ * Context determines whether these are a list of just the key attributes, just the value attributes,
+ * both, or something else. */
+sealed class Schema(
+    allNames: List<Name>,
+    types: List<Type<*>>, // = allNames.map { Type.UNKNOWN },
+    /** Only for keys (dapNames and lapNames); meaningless for value attributes */
+    widths: List<Width> // = types.map { it.naturalWidth }
+//    /** Only for values; meaningless for key attributes (dapNames and lapNames) */
+//    defaults: List<ByteArray> = types.map { it.naturalDefaultEncoded }
+) : NameSchema, TypeSchema, WidthSchema { // List<Name> by keyNames,
+  override val allNames: List<Name> = ImmutableList.copyOf(allNames)
+  final override val types: List<Type<*>> = ImmutableList.copyOf(types)
+  final override val widths: List<Width> = ImmutableList.copyOf(widths)
+//  val defaults: List<Int> = ImmutableList.copyOf(allNames)
 
-
-
-
-
-
-
-sealed class ImmutableKeySchema(
-    keyNames: List<Name>
-): KeySchema { // List<Name> by keyNames,
-  final override val keyNames: List<Name> = ImmutableList.copyOf(keyNames)
   init {
     // check for duplicate names
-    val set = this.keyNames.toSet()
-    require(set.size == this.keyNames.size) {"There is a duplicate attribute name: ${this.keyNames}"}
+    val set = allNames.toSet()
+    require(set.size == allNames.size) {"There is a duplicate attribute name in: $allNames"}
     // check for invalid names
     set.forEach { checkName(it) }
+    // types and widths and defaults
+    require(types.size == allNames.size) {"Number of widths != number of attributes: $widths, $allNames"}
+    require(widths.size == allNames.size) {"Number of widths != number of attributes: $widths, $allNames"}
   }
 
   companion object {
     /** The regular expression specifying what names are valid.  */
-    val VALID_NAME_REGEX = "^[a-zA-Z_]\\w*$"
+    const val VALID_NAME_REGEX = "^[a-zA-Z_]\\w*$"
     /** The regular expression matcher for [.VALID_NAME_REGEX].  */
     private val VALID_NAME_PATTERN = Pattern.compile(VALID_NAME_REGEX)
     /**
@@ -210,7 +245,11 @@ sealed class ImmutableKeySchema(
       return name
     }
 
-    fun of(attrs: List<Name>): ImmutableKeySchema = ImmutableKeySchemaImpl(attrs)
+    fun of(
+        allNames: List<Name> = listOf(),
+        types: List<Type<*>> = allNames.map { Type.UNKNOWN },
+        widths: List<Width> = types.map { it.naturalWidth }
+    ): Schema = SchemaImpl(allNames, types, widths)
   }
 
 //  /**
@@ -240,7 +279,7 @@ sealed class ImmutableKeySchema(
 //   * Return a subset of the current schema.
 //   * @param idxs indices to be selected.
 //   */
-//  open fun getSubAttribtues(idxs: IntArray): ImmutableKeySchema =
+//  open fun getSubAttributes(idxs: IntArray): ImmutableKeySchema =
 //      ImmutableKeySchemaImpl(names.slice(idxs.asIterable()))
 
 
@@ -248,36 +287,58 @@ sealed class ImmutableKeySchema(
 
   // consider overriding +, -
 
-  override fun toString(): String = "ImmutableKeySchema$keyNames"
+  val allZipTypeWidth: List<NameTypeWidth> by lazy {
+    val b = ImmutableList.builder<NameTypeWidth>()
+    assert(allNames.size == types.size && types.size == widths.size) {
+      "There are a different number of allNames, types, widths: $allNames, $types, $widths"}
+    for (i in 0..allNames.size-1) {
+      b.add(NameTypeWidth(allNames[i], types[i], widths[i]))
+    }
+    b.build()
+  }
+
+  override fun toString() = "Schema$allZipTypeWidth"
+
   override fun equals(other: Any?): Boolean{
     if (this === other) return true
     if (other?.javaClass != javaClass) return false
 
-    other as ImmutableKeySchema
+    other as Schema
 
-    if (keyNames != other.keyNames) return false
+    if (allNames != other.allNames) return false
+    if (types != other.types) return false
+    if (widths != other.widths) return false
 
     return true
   }
-
   override fun hashCode(): Int{
-    return keyNames.hashCode()
+    var result = allNames.hashCode()
+    result = 31 * result + types.hashCode()
+    result = 31 * result + widths.hashCode()
+    return result
   }
 
 
-  private class ImmutableKeySchemaImpl(attrs: List<Name>)
-  : ImmutableKeySchema(ImmutableList.copyOf(attrs))
+  private class SchemaImpl(
+      allNames: List<Name>,
+      types: List<Type<*>>,
+      widths: List<Width>
+  ) : Schema(allNames, types, widths)
 }
 
+// I will consider the cap---column access path---later.
 
-sealed class ImmutableAccessPath(
+sealed class AccessPath(
     dapNames: List<Name>,
-    lapNames: List<Name>
-) : ImmutableKeySchema(
-    ImmutableList.builder<Name>().addAll(dapNames).addAll(lapNames).build()
-), APKeySchema {
-  override val dapNames = ImmutableList.copyOf(dapNames)
-  override val lapNames = ImmutableList.copyOf(lapNames)
+    lapNames: List<Name>,
+    valNames: List<Name>,
+    types: List<Type<*>>,
+    widths: List<Width>
+) : APSchema, Schema(ImmutableList.builder<Name>().addAll(dapNames).addAll(lapNames).addAll(valNames).build(), types, widths) {
+  final override val allNames: List<String> = super<Schema>.allNames
+  final override val dapNames: List<Name> = ImmutableList.copyOf(dapNames)
+  final override val lapNames: List<Name> = ImmutableList.copyOf(lapNames)
+  final override val valNames: List<Name> = ImmutableList.copyOf(valNames)
 
 //  init {
 //    require(cap.sumBy { it.attributes.count() } == valNames.size) {
@@ -286,32 +347,67 @@ sealed class ImmutableAccessPath(
 //  }
 
   companion object {
-    fun of( dap: List<Name>,
-            lap: List<Name>): ImmutableAccessPath = ImmutableAccessPathImpl(dap,lap)
+    fun of(dapNames: List<Name> = listOf(),
+           lapNames: List<Name> = listOf(),
+           valNames: List<Name> = listOf(),
+           types: List<Type<*>> = (dapNames+lapNames+valNames).map { Type.UNKNOWN },
+           widths: List<Width> = types.map { it.naturalWidth }
+    ): AccessPath = AccessPathImpl(dapNames, lapNames, valNames, types, widths)
+
+    fun of(allNames: List<Name>,
+           daplen: Int,
+           laplen: Int,
+           types: List<Type<*>> = allNames.map { Type.UNKNOWN },
+           widths: List<Width> = types.map { it.naturalWidth }
+    ): AccessPath {
+      val an = ImmutableList.copyOf(allNames)
+      val dapNames = an.subList(0,daplen)
+      val lapNames = an.subList(daplen,daplen+laplen)
+      val valNames = an.subList(daplen+laplen,an.size)
+      return AccessPathImpl(dapNames, lapNames, valNames, types, widths)
+    }
   }
 
-  private class ImmutableAccessPathImpl(
-      dap: List<Name>,
-      lap: List<Name>
-  ) : ImmutableAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap))
+  private class AccessPathImpl(
+      dapNames: List<Name>,
+      lapNames: List<Name>,
+      valNames: List<Name>,
+      types: List<Type<*>>,
+      widths: List<Width>
+  ) : AccessPath(dapNames, lapNames, valNames, types, widths)
 
-  override fun toString(): String = "ImmutableAccessPath(dap=$dapNames, lap=$lapNames)"
+  val dapZipTypeWidth: List<NameTypeWidth>
+    get() = allZipTypeWidth.subList(0,dapNames.size)
+  val lapZipTypeWidth: List<NameTypeWidth>
+    get() = allZipTypeWidth.subList(dapNames.size,dapNames.size+lapNames.size)
+  val valZipTypeWidth: List<NameTypeWidth>
+    get() = allZipTypeWidth.subList(dapNames.size+lapNames.size,allNames.size)
+
+  override fun toString() = "AP(dap$dapZipTypeWidth; lap=$lapZipTypeWidth; val=$valZipTypeWidth)"
 
   override fun equals(other: Any?): Boolean{
     if (this === other) return true
     if (other?.javaClass != javaClass) return false
+//    if (!super.equals(other)) return false
 
-    other as ImmutableAccessPath
+    other as AccessPath
+    if (types != other.types) return false
+    if (widths != other.widths) return false
 
     if (dapNames != other.dapNames) return false
     if (lapNames != other.lapNames) return false
+    if (valNames != other.valNames) return false
 
     return true
   }
 
   override fun hashCode(): Int{
-    var result = dapNames.hashCode()
+    var result = super.hashCode()
+    result = 31 * result + types.hashCode()
+    result = 31 * result + widths.hashCode()
+    result = 31 * result + dapNames.hashCode()
     result = 31 * result + lapNames.hashCode()
+    result = 31 * result + valNames.hashCode()
     return result
   }
 
@@ -319,54 +415,66 @@ sealed class ImmutableAccessPath(
 }
 
 
-// need to subclass ImmutableAccessPath because this tells us how to interpret each part of the Key/Value
-sealed class ImmutableBagAccessPath(
-    /** @see [APKeySchema.dapNames] */
-    dap: List<Name>,
-    /** @see [APKeySchema.lapNames] */
-    lap: List<Name>,
+sealed class SortedAccessPath(
+    dapNames: List<Name>,
+    lapNames: List<Name>,
+    valNames: List<Name>,
     final override val sortedUpto: Int,
-    final override val duplicates: Boolean
-) : ImmutableAccessPath(dap, lap), SortedKeySchema, APKeySchema {
+    types: List<Type<*>>,
+    widths: List<Width>
+) : SortedKeySchema, AccessPath(dapNames, lapNames, valNames, types, widths) {
   init {
-    Preconditions.checkPositionIndex(sortedUpto, dap.size+lap.size, "sortedUpto is an int such that all keyNames $keyNames " +
-        "whose index is less than sortedUpto are sorted. 0 means nothing is sorted. Valid up to and including ${dap.size+lap.size}. Given: $sortedUpto")
+    Preconditions.checkPositionIndex(sortedUpto, dapNames.size+lapNames.size, "sortedUpto is an int such that all keyNames $keyNames " +
+        "whose index is less than sortedUpto are sorted. 0 means nothing is sorted. Valid up to and including ${dapNames.size+lapNames.size}. Given: $sortedUpto")
   }
 
   companion object {
-    fun of( dap: List<Name>,
-            lap: List<Name>,
+    fun of( dapNames: List<Name> = listOf(),
+            lapNames: List<Name> = listOf(),
+            valNames: List<Name> = listOf(),
             sortedUpto: Int = -1,
-            duplicates: Boolean = false): ImmutableBagAccessPath = ImmutableBagAccessPathImpl(dap, lap,
-        if (sortedUpto == -1) dap.size+lap.size else sortedUpto, duplicates)
+            types: List<Type<*>> = (dapNames+lapNames+valNames).map { Type.UNKNOWN },
+            widths: List<Width> = types.map { it.naturalWidth }
+    ): SortedAccessPath = SortedAccessPathImpl(dapNames, lapNames, valNames,
+        if (sortedUpto == -1) dapNames.size+lapNames.size else sortedUpto,
+        types, widths)
+
+    fun of(allNames: List<Name>,
+           daplen: Int,
+           laplen: Int,
+           sortedUpto: Int = -1,
+           types: List<Type<*>> = allNames.map { Type.UNKNOWN },
+           widths: List<Width> = types.map { it.naturalWidth }
+    ): SortedAccessPath {
+      val an = ImmutableList.copyOf(allNames)
+      val dapNames = an.subList(0,daplen)
+      val lapNames = an.subList(daplen,daplen+laplen)
+      val valNames = an.subList(daplen+laplen,an.size)
+      return SortedAccessPathImpl(dapNames, lapNames, valNames,
+          if (sortedUpto == -1) dapNames.size+lapNames.size else sortedUpto,
+          types, widths)
+    }
   }
 
-  private class ImmutableBagAccessPathImpl(
-      dap: List<Name>,
-      lap: List<Name>,
+  private class SortedAccessPathImpl(
+      dapNames: List<Name>,
+      lapNames: List<Name>,
+      valNames: List<Name>,
       sortedUpto: Int,
-      duplicates: Boolean
-  ) : ImmutableBagAccessPath(ImmutableList.copyOf(dap), ImmutableList.copyOf(lap), sortedUpto, duplicates)
+      types: List<Type<*>>,
+      widths: List<Width>
+  ) : SortedAccessPath(dapNames, lapNames, valNames, sortedUpto, types, widths)
 
-  override fun toString(): String{
-    val s = StringBuilder("ImmutableBagAccessPath(dap=$dapNames, lap=$lapNames")
-    if (sortedUpto != dapNames.size+ lapNames.size)
-      s.append(", sortedUpto=$sortedUpto")
-    if (duplicates)
-      s.append(", dups")
-    s.append(")")
-    return s.toString()
-  }
+  override fun toString() = "AP(dap$dapZipTypeWidth; lap=$lapZipTypeWidth; val=$valZipTypeWidth; sort=$sortedUpto)"
 
   override fun equals(other: Any?): Boolean{
     if (this === other) return true
     if (other?.javaClass != javaClass) return false
     if (!super.equals(other)) return false
 
-    other as ImmutableBagAccessPath
+    other as SortedAccessPath
 
     if (sortedUpto != other.sortedUpto) return false
-    if (duplicates != other.duplicates) return false
 
     return true
   }
@@ -374,7 +482,6 @@ sealed class ImmutableBagAccessPath(
   override fun hashCode(): Int{
     var result = super.hashCode()
     result = 31 * result + sortedUpto
-    result = 31 * result + duplicates.hashCode()
     return result
   }
 
