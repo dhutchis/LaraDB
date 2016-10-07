@@ -12,12 +12,7 @@ import java.util.concurrent.Callable
  */
 typealias PositionSchema = List<Name>
 
-data class ExpressionProperties(
-    val typeSchema: TypeSchema,
-//    val reducingSchema: ReducingSchema,
-    val keySchema: KeySchema,
-    val positionSchema: PositionSchema
-)
+
 
 
 
@@ -45,198 +40,207 @@ val defaultReducer = { list: List<FullValue> -> when (list.size) {
   else -> throw RuntimeException("did not expect > 1 values: $list")
 } }
 
-//
-///**
-// * @param positionSchema The positions associated with each attribute, in the lens of raco. keySchema only includes the keys.
-// */
-//fun racoExprToExpr(
-//    re: RacoExpression<*>,
-//    ep: ExpressionProperties
-//): Expr<ArrayByteSequence> {
-//  return when (re) {
-////    is RacoExpression.Literal.StringLiteral -> Const(re.obj)
-////    is RacoExpression.Literal.BooleanLiteral -> Const(re.obj)
-////    is RacoExpression.Literal.DoubleLiteral -> Const(re.obj)
-////    is RacoExpression.Literal.LongLiteral -> Const(re.obj)
-//    is RacoExpression.Literal -> Const(re.toABS())
-//
-//    is RacoExpression.NamedAttributeRef -> {
-//      convertAttributeRef(re.attributename, ep)
-//    }
-//    is RacoExpression.UnnamedAttributeRef -> {
-//      convertAttributeRef(ep.positionSchema[re.position], ep)
-//    }
-//
-//    is RacoExpression.PLUS<*> -> {
-//      val t = re.getType(ep)
-//      BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), { left: ArrayByteSequence, right: ArrayByteSequence ->
-//        fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
-//        when (t) {
-//          Type.INT -> {
-//            t as Type.INT // compiler ought to be able to infer this; report bug
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.INT_VARIABLE -> {
-//            t as Type.INT_VARIABLE
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.BOOLEAN -> {
-//            t as Type.BOOLEAN
-//            t.encode(left.dec(t) || right.dec(t))
-//          }
-//          Type.LONG -> {
-//            t as Type.LONG
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.LONG_VARIABLE -> {
-//            t as Type.LONG_VARIABLE
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.DOUBLE -> {
-//            t as Type.DOUBLE
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.DOUBLE_VARIABLE -> {
-//            t as Type.DOUBLE_VARIABLE
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.FLOAT -> {
-//            t as Type.FLOAT
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.FLOAT_VARIABLE -> {
-//            t as Type.FLOAT
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//          Type.STRING -> {
-//            t as Type.STRING
-//            t.encode(left.dec(t) + right.dec(t))
-//          }
-//        }.toABS()
-//        })
-//    }
-//  }
-//}
+
+/**
+ * @param positionSchema The positions associated with each attribute, in the lens of raco. keySchema only includes the keys.
+ */
+fun racoExprToExpr(
+    re: RacoExpression,
+    ep: KVAccessPath
+): Expr<ArrayByteSequence> {
+  return when (re) {
+//    is RacoExpression.Literal.StringLiteral -> Const(re.obj)
+//    is RacoExpression.Literal.BooleanLiteral -> Const(re.obj)
+//    is RacoExpression.Literal.DoubleLiteral -> Const(re.obj)
+//    is RacoExpression.Literal.LongLiteral -> Const(re.obj)
+    is RacoExpression.Literal<*> -> Const(re.toABS())
+
+    is RacoExpression.NamedAttributeRef -> {
+      convertAttributeRef(re.attributename, ep.allNames.indexOf(re.attributename), ep)
+    }
+    is RacoExpression.UnnamedAttributeRef -> {
+      convertAttributeRef(ep.allNames[re.position], re.position, ep)
+    }
+
+    is RacoExpression.PLUS -> {
+      val t = re.getType(ep)
+      BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), { left: ArrayByteSequence, right: ArrayByteSequence ->
+        fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
+        when (t) {
+          Type.INT -> {
+            t as Type.INT // compiler ought to be able to infer this; report bug
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.INT_VARIABLE -> {
+            t as Type.INT_VARIABLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.BOOLEAN -> {
+            t as Type.BOOLEAN
+            t.encode(left.dec(t) || right.dec(t))
+          }
+          Type.LONG -> {
+            t as Type.LONG
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.LONG_VARIABLE -> {
+            t as Type.LONG_VARIABLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.DOUBLE -> {
+            t as Type.DOUBLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.DOUBLE_VARIABLE -> {
+            t as Type.DOUBLE_VARIABLE
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.FLOAT -> {
+            t as Type.FLOAT
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.FLOAT_VARIABLE -> {
+            t as Type.FLOAT
+            t.encode(left.dec(t) + right.dec(t))
+          }
+          Type.STRING -> {
+            t as Type.STRING
+            t.encode(left.dec(t) + right.dec(t)) // replace with concatenating the byte[] representation, without decoding?
+          }
+          Type.UNKNOWN -> {
+//            t as Type.UNKNOWN
+            println("Warning! UNKNOWN type PLUS")
+            val bs = ByteArray(left.length()+right.length())
+            System.arraycopy(left.backingArray,left.offset(),bs,0,left.length())
+            System.arraycopy(right.backingArray,right.offset(),bs,left.length(),right.length())
+            bs
+          }
+        }.toABS()
+        })
+    }
+  }
+}
 
 fun ByteArray.toABS() = ArrayByteSequence(this)
 
-///**
-// * Decode <- eitherKeyOrFamilyOrFullValuePart
-// */
-//fun convertAttributeRef(name: String, ep: ExpressionProperties): Expr<ArrayByteSequence> {
-//  // __VIS
-//  // __TS
-//  // __FAMILY__
-//  val idx = ep.keySchema.keyNames.indexOf(name)
-//  val lexicoder = ep.typeSchema.types[name] ?: Type.STRING
-//  return if (idx == -1) {
-//    // value attribute
-//    val reducer = ep.reducingSchema.reducers[name] ?: defaultReducer
-//    when {
-//      name == __FAMILY__ -> {
-//        TupleRef.RefFamily()
-////        UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
-//      }
-//      name.endsWith(__VIS) -> {
-//        UnaryExpr<List<FullValue>,ArrayByteSequence>(TupleRef.RefVal(valName = name.substring(0,name.length-__VIS.length).toABS()), { it -> reducer(it).visibility })
-////        UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
-//      }
-//      name.endsWith(__TS) -> {
-//        val ts = UnaryExpr<List<FullValue>,Long>(TupleRef.RefVal(valName = name.substring(0,name.length-__TS.length).toABS()), { it -> reducer(it).timestamp })
-//        UnaryExpr<Long,ArrayByteSequence>(ts, {it -> Type.LONG.encode(it).toABS()})
-//      }
-//      else -> {
-//        UnaryExpr<List<FullValue>,ArrayByteSequence>(TupleRef.RefVal(valName = name.toABS()), { it -> reducer(it).value})
-////        UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
-//      }
-//    }
-//  } else {
-//    TupleRef.RefKey(keyNum = idx)
-////    UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
-//  }
+/**
+ * Decode <- eitherKeyOrFamilyOrFullValuePart
+ */
+fun <S> convertAttributeRef(name: String, allidx: Int, ep: S): Expr<ArrayByteSequence>
+where S : KVSchema, S : TypeSchema {
+  // __VIS
+  // __TS
+  // __FAMILY__
+  val keyidx = ep.keyNames.indexOf(name)
+  val lexicoder = ep.types[allidx] ?: Type.STRING
+  return if (keyidx == -1) {
+    // value attribute
+    // use default reducer for now
+    val reducer = defaultReducer //ep.reducingSchema.reducers[name]
+    when {
+      name == __FAMILY__ -> {
+        TupleRef.RefFamily()
+//        UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
+      }
+      name.endsWith(__VIS) -> {
+        UnaryExpr<List<FullValue>,ArrayByteSequence>(TupleRef.RefVal(valName = name.substring(0,name.length-__VIS.length).toABS()), { it -> reducer(it).visibility })
+//        UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
+      }
+      name.endsWith(__TS) -> {
+        val ts = UnaryExpr<List<FullValue>,Long>(TupleRef.RefVal(valName = name.substring(0,name.length-__TS.length).toABS()), { it -> reducer(it).timestamp })
+        UnaryExpr<Long,ArrayByteSequence>(ts, {it -> Type.LONG.encode(it).toABS()})
+      }
+      else -> {
+        UnaryExpr<List<FullValue>,ArrayByteSequence>(TupleRef.RefVal(valName = name.toABS()), { it -> reducer(it).value})
+//        UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
+      }
+    }
+  } else {
+    TupleRef.RefKey(keyNum = keyidx)
+//    UnaryExpr<ArrayByteSequence, Any>(untyped, {it: ArrayByteSequence -> lexicoder.decode(it.backingArray, it.offset(), it.length())!!})
+  }
+}
+
+
+//fun extract
+
+
+fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema): Op<*> {
+
+  val x = when (ro) {
+
+
+    is Apply -> {
+      // todo make an ApplyOp
+
+      val parent = racoToAccumulo(ro.input, ep)
+      val emitters: List<Pair<Name, RacoExpression>> = ro.emitters
+
+
+//      OpApplyIterator(parent, keyExprs = , famExpr = , valExprs = , keySchema = )
+
+      throw UnsupportedOperationException("nyi")
+    }
+
+    is FileScan -> {
+      // get the encoders; ensure we store properly; might need to implement the getExpressionProperties on other operators
+      val scheme: List<Pair<Name, RacoType>> = ro.scheme
+      val types: List<Pair<Name, Type<*>>> = scheme.map { it.first to racoTypeToType(it.second) }
+      val encoders: List<Encode<String>?> = types.map { it.second.encodeFromString } // because we force ArrayByteSequence, all are encoded according to the String encoder
+
+      val sk = ro.options["skip"]
+      val skip = when (sk) {
+        null -> 0
+        is PTree.PLong -> sk.v.toInt()
+        is PTree.PString -> sk.str.toInt()
+        is PTree.PDouble -> sk.v.toInt()
+        else -> throw RacoOperator.Companion.ParseRacoException("expected an int skip but got $sk")
+      }
+      OpCSVScan(ro.file, encoders, types, skip = skip)
+    }
+
+    else -> throw UnsupportedOperationException("nyi")
+  }
+
+
+  throw UnsupportedOperationException("nyi")
+}
+
+
+
+sealed class APReq {
+
+
+  class SortedPrefixReq(
+      val prefix: List<Name>
+  ) : APReq()
+
+  class SortedPrefixPermutationReq(
+      val prefix: List<Name>
+  ) : APReq()
+
+}
+
+
+
+
+
+
+
+
+
+
+// a RootRacoOp
+//fun racoSequenceToExecutorTasks(sequence: RacoSequence): ExecutorTaskTree<*> {
+//
 //}
-//
-//
-////fun extract
-//
-//
-//fun racoToAccumulo(ro: RacoOperator<*>, ep: ExpressionProperties): AccumuloOp {
-//
-//  val x = when (ro) {
-//
-//
-//    is Apply -> {
-//      // todo make an ApplyOp
-//
-//      val parent = racoToAccumulo(ro.input, ep)
-//      val emitters: List<Pair<Name, RacoExpression<*>>> = ro.emitters()
-//
-//
-////      OpApplyIterator(parent, keyExprs = , famExpr = , valExprs = , keySchema = )
-//
-//      throw UnsupportedOperationException("nyi")
-//    }
-//
-//    is FileScan -> {
-//      // get the encoders; ensure we store properly; might need to implement the getExpressionProperties on other operators
-//      val scheme: List<Pair<Name, RacoType>> = ro.scheme.obj
-//      val types: List<Pair<Name, Type<*>>> = scheme.map { it.first to racoTypeToType(it.second) }
-//      val encoders: Obj<List<Encode<String>?>> = Obj(types.map { it.second.encodeFromString }) // because we force ArrayByteSequence, all are encoded according to the String encoder
-//      val names = Obj(types)
-//
-//      val sk = ro.options()["skip"]
-//      val skip = Obj(when (sk) {
-//        null -> null
-//        is PTree.PLong -> sk.v.toInt()
-//        is PTree.PString -> sk.str.toInt()
-//        is PTree.PDouble -> sk.v.toInt()
-//        else -> throw RacoOperator.Companion.ParseRacoException("expected an int skip but got $sk")
-//      } ?: 0)
-//      OpCSVScan(ro.file, encoders, names, skip = skip)
-//    }
-//
-//    else -> throw UnsupportedOperationException("nyi")
-//  }
-//
-//
-//  throw UnsupportedOperationException("nyi")
-//}
-//
-//
-//
-//sealed class APReq {
-//
-//
-//  class SortedPrefixReq(
-//      val prefix: List<Name>
-//  ) : APReq()
-//
-//  class SortedPrefixPermutationReq(
-//      val prefix: List<Name>
-//  ) : APReq()
-//
-//}
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//// a RootRacoOp
-////fun racoSequenceToExecutorTasks(sequence: RacoSequence): ExecutorTaskTree<*> {
-////
-////}
-//
-///** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
-//fun sanitizeTableName(table: String): String = table.replace(':','_')
-///** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
-//fun sanitizeTableName(rk: RelationKey): String = "${rk.user}_${rk.program}_${rk.relation}"
-//
-//
+
+/** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
+fun sanitizeTableName(table: String): String = table.replace(':','_')
+/** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
+fun sanitizeTableName(rk: RelationKey): String = "${rk.user}_${rk.program}_${rk.relation}"
+
+
 //// inside a Sequence; probably a Store on top
 //fun compileRacoFragment(
 //    ro: RacoOperator<*>,
@@ -258,6 +262,6 @@ fun ByteArray.toABS() = ArrayByteSequence(this)
 //
 //  throw UnsupportedOperationException("nyi")
 //}
-//
-//
+
+
 

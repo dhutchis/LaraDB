@@ -177,9 +177,6 @@ fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): AccessPath {
     typesNoDapNoLap = typesNoDap.subList(0,lapidx) + if (lapidx+1 < typesNoDap.size) typesNoDap.subList(lapidx+1,typesNoDap.size) else emptyList()
   }
   // this could be simplified; I converted the code
-  val dapNames = namesNoDapNoLap.subList(0,daplen)
-  val lapNames = namesNoDapNoLap.subList(daplen,daplen+laplen)
-  val valNames = namesNoDapNoLap.subList(daplen,daplen+laplen)
 
 //  return ImmutableUberSchema(
 //      namesNoDapNoLap, daplen, laplen,
@@ -326,6 +323,85 @@ sealed class Schema(
   ) : Schema(allNames, types, widths)
 }
 
+
+
+sealed class KVAccessPath(
+    keyNames: List<Name>,
+    valNames: List<Name>,
+    types: List<Type<*>>,
+    widths: List<Width>
+) : KVSchema, Schema(ImmutableList.builder<Name>().addAll(keyNames).addAll(valNames).build(), types, widths) {
+  final override val allNames: List<String> = super<Schema>.allNames
+  override val keyNames: List<Name> = ImmutableList.copyOf(keyNames)
+  final override val valNames: List<Name> = ImmutableList.copyOf(valNames)
+
+//  init {
+//    require(cap.sumBy { it.attributes.count() } == valNames.size) {
+//      "one of the attributes was mentioned twice in two separate column families $cap"
+//    }
+//  }
+
+  companion object {
+    fun of(keyNames: List<Name> = listOf(),
+           valNames: List<Name> = listOf(),
+           types: List<Type<*>> = (keyNames+valNames).map { Type.UNKNOWN },
+           widths: List<Width> = types.map { it.naturalWidth }
+    ): KVAccessPath = KVAccessPathImpl(keyNames, valNames, types, widths)
+
+    fun of(allNames: List<Name>,
+           keylen: Int,
+           types: List<Type<*>> = allNames.map { Type.UNKNOWN },
+           widths: List<Width> = types.map { it.naturalWidth }
+    ): KVAccessPath {
+      val an = ImmutableList.copyOf(allNames)
+      val keyNames = an.subList(0,keylen)
+      val valNames = an.subList(keylen,an.size)
+      return KVAccessPathImpl(keyNames, valNames, types, widths)
+    }
+  }
+
+  private class KVAccessPathImpl(
+      keyNames: List<Name>,
+      valNames: List<Name>,
+      types: List<Type<*>>,
+      widths: List<Width>
+  ) : KVAccessPath(keyNames, valNames, types, widths)
+
+  val keyZipTypeWidth: List<NameTypeWidth>
+    get() = allZipTypeWidth.subList(0,keyNames.size)
+  val valZipTypeWidth: List<NameTypeWidth>
+    get() = allZipTypeWidth.subList(keyNames.size,allNames.size)
+
+  override fun toString() = "AP(key=$keyZipTypeWidth; val=$valZipTypeWidth)"
+
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as KVAccessPath
+    if (types != other.types) return false
+    if (widths != other.widths) return false
+
+    if (keyNames != other.keyNames) return false
+    if (valNames != other.valNames) return false
+
+    return true
+  }
+  override fun hashCode(): Int{
+    var result = super.hashCode()
+    result = 31 * result + types.hashCode()
+    result = 31 * result + widths.hashCode()
+    result = 31 * result + keyNames.hashCode()
+    result = 31 * result + valNames.hashCode()
+    return result
+  }
+
+
+}
+
+
+
+
 // I will consider the cap---column access path---later.
 
 sealed class AccessPath(
@@ -334,11 +410,10 @@ sealed class AccessPath(
     valNames: List<Name>,
     types: List<Type<*>>,
     widths: List<Width>
-) : APSchema, Schema(ImmutableList.builder<Name>().addAll(dapNames).addAll(lapNames).addAll(valNames).build(), types, widths) {
-  final override val allNames: List<String> = super<Schema>.allNames
+) : APSchema, KVAccessPath(ImmutableList.builder<Name>().addAll(dapNames).addAll(lapNames).build(), valNames, types, widths) {
+  final override val keyNames: List<String> = super<KVAccessPath>.keyNames
   final override val dapNames: List<Name> = ImmutableList.copyOf(dapNames)
   final override val lapNames: List<Name> = ImmutableList.copyOf(lapNames)
-  final override val valNames: List<Name> = ImmutableList.copyOf(valNames)
 
 //  init {
 //    require(cap.sumBy { it.attributes.count() } == valNames.size) {
@@ -377,13 +452,11 @@ sealed class AccessPath(
   ) : AccessPath(dapNames, lapNames, valNames, types, widths)
 
   val dapZipTypeWidth: List<NameTypeWidth>
-    get() = allZipTypeWidth.subList(0,dapNames.size)
+    get() = keyZipTypeWidth.subList(0,dapNames.size)
   val lapZipTypeWidth: List<NameTypeWidth>
-    get() = allZipTypeWidth.subList(dapNames.size,dapNames.size+lapNames.size)
-  val valZipTypeWidth: List<NameTypeWidth>
-    get() = allZipTypeWidth.subList(dapNames.size+lapNames.size,allNames.size)
+    get() = keyZipTypeWidth.subList(dapNames.size,dapNames.size+lapNames.size)
 
-  override fun toString() = "AP(dap$dapZipTypeWidth; lap=$lapZipTypeWidth; val=$valZipTypeWidth)"
+  override fun toString() = "AP(dap=$dapZipTypeWidth; lap=$lapZipTypeWidth; val=$valZipTypeWidth)"
 
   override fun equals(other: Any?): Boolean{
     if (this === other) return true
@@ -400,7 +473,6 @@ sealed class AccessPath(
 
     return true
   }
-
   override fun hashCode(): Int{
     var result = super.hashCode()
     result = 31 * result + types.hashCode()
@@ -410,8 +482,6 @@ sealed class AccessPath(
     result = 31 * result + valNames.hashCode()
     return result
   }
-
-
 }
 
 

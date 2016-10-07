@@ -102,6 +102,10 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                   options = ((pa[3] as PTree.PMap).map/*.mapValues { it.value }*/)
               ) }
               "NamedAttributeRef" -> { AAL(1); RacoExpression.NamedAttributeRef(((pa[0] as PTree.PString).str)) }
+              "UnnamedAttributeRef" -> { AAL(2); val dbg = pa[1]; if (dbg != PTree.PNone) throw ParseRacoException("no support for non-None debug_info")
+                RacoExpression.UnnamedAttributeRef(((pa[0] as PTree.PLong).v.toInt()),
+                  debug_info = null
+                ) }
               "Scan" -> { AAL(4); Scan(
                   relationKey = PPT(pa[0]) as RelationKey,
                   scheme = (schemeToMap(pa[1] as PTree.PNode)),
@@ -172,7 +176,7 @@ data class Store(val relationKey: RelationKey, val input: RacoOperator) : RacoOp
 
 data class Dump(val input: Op<Relation>) : RacoOperator(input)
 
-typealias Emitter = Pair<Name, RacoOperator>
+typealias Emitter = Pair<Name, RacoExpression>
 
 data class Apply(
     val emitters: List<Emitter>,

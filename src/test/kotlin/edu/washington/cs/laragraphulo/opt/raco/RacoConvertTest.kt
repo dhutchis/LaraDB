@@ -32,11 +32,13 @@ class RacoConvertTest(
 
   @Test
   fun test1() {
+    println("Test: ${params.name}")
     println("query: ${params.query}")
     val ptree = StringReader(params.query).use { PTree.parseRaco(it) }
     println("ptree: $ptree")
     val racoOp = RacoOperator.parsePTreeToRacoTree(ptree)
     println("racoOp: $racoOp")
+    println()
   }
 
 
@@ -100,7 +102,7 @@ tributeRef('src')), ('dst', NamedAttributeRef('dst'))], Scan(RelationKey('public
         /*
 query: Dump(Apply([('src', NamedAttributeRef('src')), ('dst', NamedAttributeRef('dst'))], FileScan('mock.csv', 'CSV', Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), {})))
 ptree: PNode(name=Dump, args=[PNode(name=Apply, args=[PList(list=[PPair(left=PString(str=src), right=PNode(name=NamedAttributeRef, args=[PString(str=src)])), PPair(left=PString(str=dst), right=PNode(name=NamedAttributeRef, args=[PString(str=dst)]))]), PNode(name=FileScan, args=[PString(str=mock.csv), PString(str=CSV), PNode(name=Scheme, args=[PList(list=[PPair(left=PString(str=src), right=PString(str=LONG_TYPE)), PPair(left=PString(str=dst), right=PString(str=LONG_TYPE))])]), PMap(map={})])])])
-racoOp: Dump(input=Apply(emitters=Obj([Obj((Obj(src), NamedAttributeRef(attributename=Obj(src)))), Obj((Obj(dst), NamedAttributeRef(attributename=Obj(dst))))]), input=FileScan(file=Obj(mock.csv), format=Obj(CSV), scheme=Obj([(src, LONG), (dst, LONG)]), options=Obj({}))))
+racoOp: Dump(input=Apply(emitters=[(src, NamedAttributeRef(attributename=src)), (dst, NamedAttributeRef(attributename=dst))], input=FileScan(file=mock.csv, format=CSV, scheme=[(src, LONG), (dst, LONG)], options={})))
 
          */
         Params(
@@ -116,13 +118,32 @@ racoOp: Dump(input=Apply(emitters=Obj([Obj((Obj(src), NamedAttributeRef(attribut
         /*
 query: Store(RelationKey('public','adhoc','newtable'), Apply([('dst', NamedAttributeRef('dst'))], Scan(RelationKey('public','adhoc','smallGraph'), Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), 10000, RepresentationProperties(frozenset([]), None, None))))
 ptree: PNode(name=Store, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=newtable)]), PNode(name=Apply, args=[PList(list=[PPair(left=PString(str=dst), right=PNode(name=NamedAttributeRef, args=[PString(str=dst)]))]), PNode(name=Scan, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=smallGraph)]), PNode(name=Scheme, args=[PList(list=[PPair(left=PString(str=src), right=PString(str=LONG_TYPE)), PPair(left=PString(str=dst), right=PString(str=LONG_TYPE))])]), PLong(v=10000), PNode(name=RepresentationProperties, args=[PNode(name=frozenset, args=[PList(list=[])]), PNone, PNone])])])])
-racoOp: Store(relationKey=RelationKey(user=Obj(public), program=Obj(adhoc), relation=Obj(newtable)), input=Apply(emitters=Obj([Obj((Obj(dst), NamedAttributeRef(attributename=Obj(dst))))]), input=Scan(relationKey=RelationKey(user=Obj(public), program=Obj(adhoc), relation=Obj(smallGraph)), scheme=Obj([(src, LONG), (dst, LONG)]), cardinality=Obj(10000), partitioning=RepresentationProperties(hashPartition=Obj([]), sorted=Obj([]), grouped=Obj([])))))
+racoOp: Store(relationKey=RelationKey(user=public, program=adhoc, relation=newtable), input=Apply(emitters=[(dst, NamedAttributeRef(attributename=dst))], input=Scan(relationKey=RelationKey(user=public, program=adhoc, relation=smallGraph), scheme=[(src, LONG), (dst, LONG)], cardinality=10000, partitioning=RepresentationProperties(hashPartition=[], sorted=[], grouped=[]))))
 
          */
         Params(
             name = "store apply scan Named",
             query = "Store(RelationKey('public','adhoc','newtable'), " +
                 "Apply([('dst', NamedAttributeRef('dst'))], " +
+                "Scan(RelationKey('public','adhoc','smallGraph'), " +
+                "Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), 10000, " +
+                "RepresentationProperties(frozenset([]), None, None))))",
+            catalog = listOf("src" to RacoType.LONG, "dst" to RacoType.LONG),
+            data = listOf(
+                mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
+            ),
+            expected = listOf()
+        ),
+/*
+query: Store(RelationKey('public','adhoc','newtable'), Apply([('dst', UnnamedAttributeRef(1, None))], Scan(RelationKey('public','adhoc','smallGraph'), Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), 10000, RepresentationProperties(frozenset([]), None, None))))
+ptree: PNode(name=Store, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=newtable)]), PNode(name=Apply, args=[PList(list=[PPair(left=PString(str=dst), right=PNode(name=UnnamedAttributeRef, args=[PLong(v=1), PNone]))]), PNode(name=Scan, args=[PNode(name=RelationKey, args=[PString(str=public), PString(str=adhoc), PString(str=smallGraph)]), PNode(name=Scheme, args=[PList(list=[PPair(left=PString(str=src), right=PString(str=LONG_TYPE)), PPair(left=PString(str=dst), right=PString(str=LONG_TYPE))])]), PLong(v=10000), PNode(name=RepresentationProperties, args=[PNode(name=frozenset, args=[PList(list=[])]), PNone, PNone])])])])
+racoOp: Store(relationKey=RelationKey(user=public, program=adhoc, relation=newtable), input=Apply(emitters=[(dst, UnnamedAttributeRef(position=1, debug_info=null))], input=Scan(relationKey=RelationKey(user=public, program=adhoc, relation=smallGraph), scheme=[(src, LONG), (dst, LONG)], cardinality=10000, partitioning=RepresentationProperties(hashPartition=[], sorted=[], grouped=[]))))
+
+ */
+        Params(
+            name = "store apply scan Unnamed",
+            query = "Store(RelationKey('public','adhoc','newtable'), " +
+                "Apply([('dst', UnnamedAttributeRef(1, None))], " +
                 "Scan(RelationKey('public','adhoc','smallGraph'), " +
                 "Scheme([('src', 'LONG_TYPE'), ('dst', 'LONG_TYPE')]), 10000, " +
                 "RepresentationProperties(frozenset([]), None, None))))",
