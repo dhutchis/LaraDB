@@ -67,7 +67,7 @@ data class UnaryExpr<S, out R>(
 ) : Expr<R>(expr, f.toObj()) {
   override val inputs: Set<TupleRef<*>> = expr.inputs
   override fun eval(tuples: List<Tuple>): R {
-    return f(expr.invoke(tuples))
+    return f(expr.eval(tuples))
   }
 }
 
@@ -78,7 +78,19 @@ data class BinaryExpr<S1, S2, out R>(
 ) : Expr<R>(e1, e2, f.toObj()) {
   override val inputs: Set<TupleRef<*>> = e1.inputs + e2.inputs
   override fun eval(tuples: List<Tuple>): R {
-    return f(e1.invoke(tuples), e2.invoke(tuples))
+    return f(e1.eval(tuples), e2.eval(tuples))
+  }
+}
+
+data class TernaryExpr<S1, S2, S3, out R>(
+    val e1: Expr<S1>,
+    val e2: Expr<S2>,
+    val e3: Expr<S3>,
+    val f: (S1, S2, S3) -> R
+) : Expr<R>(e1, e2, f.toObj()) {
+  override val inputs: Set<TupleRef<*>> = e1.inputs + e2.inputs
+  override fun eval(tuples: List<Tuple>): R {
+    return f(e1.eval(tuples), e2.eval(tuples), e3.eval(tuples))
   }
 }
 

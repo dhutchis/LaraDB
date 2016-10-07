@@ -136,14 +136,17 @@ data class ValueTypedExpr(
     val type: Type<*>
 )
 
-//
-//class OpApplyIterator(
-//    val source: Op<TupleIterator>,
+
+class OpApplyIterator(
+    val source: Op<TupleIterator>,
 //    val keyExprs: List<TypedExpr>,
 //    val famExpr: TypedExpr,
 //    val valExprs: List<ValueTypedExpr>
-//) : KeySchema, ValSchema, Op<TupleIterator>(source.toObj(), keyExprs.toObj(), famExpr.toObj(), valExprs.toObj()) {
-//
+    val keyExprs: List<Expr<ABS>>,
+    val famExpr: Expr<ABS>,
+    val valExprs: List<Pair<ABS,Expr<FullValue>>>
+) : Op<TupleIterator>(source.toObj(), keyExprs.toObj(), famExpr.toObj(), valExprs.toObj()) {
+
 //  override val keyNames: List<String>
 //  override val valNames: List<String>
 //
@@ -157,23 +160,26 @@ data class ValueTypedExpr(
 //    encodings = keyNames + valNames.toMap() + famName
 //    positions = keySchema.keyNames + __FAMILY__ + famName.map { it.key }
 //  }
-//
-//
-////  override val typeSchema: TypeSchema = object : TypeSchema {
-////    override val types: Map<Name, Type<*>> = this@OpApplyIterator.encodings
-////  }
-////  override val reducingSchema: ReducingSchema = source.reducingSchema
-////  override val positionSchema: PositionSchema = positions
-//
-//  override val unbound: List<Arg<*>> = source.unbound
-//
-//  override fun invoke(reqs: List<*>): TupleIterator {
+
+
+//  override val typeSchema: TypeSchema = object : TypeSchema {
+//    override val types: Map<Name, Type<*>> = this@OpApplyIterator.encodings
+//  }
+//  override val reducingSchema: ReducingSchema = source.reducingSchema
+//  override val positionSchema: PositionSchema = positions
+
+  override val unbound: List<Arg<*>> = source.unbound
+
+  override fun invoke(reqs: List<*>): TupleIterator {
 //    return ApplyIterator(
 //        source(reqs), keyExprs.map { it.expr }, famExpr.expr,
 //        valExprs.map { it.name to it.expr }
 //    )
-//  }
-//}
+    return ApplyIterator(
+        source(reqs), keyExprs, famExpr, valExprs
+    )
+  }
+}
 
 
 

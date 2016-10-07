@@ -3,6 +3,7 @@ package edu.washington.cs.laragraphulo.opt
 import edu.washington.cs.laragraphulo.Encode
 import edu.washington.cs.laragraphulo.opt.raco.*
 import org.apache.accumulo.core.data.ArrayByteSequence
+import java.util.*
 import java.util.concurrent.Callable
 
 
@@ -47,77 +48,75 @@ val defaultReducer = { list: List<FullValue> -> when (list.size) {
 fun racoExprToExpr(
     re: RacoExpression,
     ep: KVAccessPath
-): Expr<ArrayByteSequence> {
-  return when (re) {
+): Expr<ArrayByteSequence> = when (re) {
 //    is RacoExpression.Literal.StringLiteral -> Const(re.obj)
 //    is RacoExpression.Literal.BooleanLiteral -> Const(re.obj)
 //    is RacoExpression.Literal.DoubleLiteral -> Const(re.obj)
 //    is RacoExpression.Literal.LongLiteral -> Const(re.obj)
-    is RacoExpression.Literal<*> -> Const(re.toABS())
+  is RacoExpression.Literal<*> -> Const(re.toABS())
 
-    is RacoExpression.NamedAttributeRef -> {
-      convertAttributeRef(re.attributename, ep.allNames.indexOf(re.attributename), ep)
-    }
-    is RacoExpression.UnnamedAttributeRef -> {
-      convertAttributeRef(ep.allNames[re.position], re.position, ep)
-    }
+  is RacoExpression.NamedAttributeRef -> {
+    convertAttributeRef(re.attributename, ep.allNames.indexOf(re.attributename), ep)
+  }
+  is RacoExpression.UnnamedAttributeRef -> {
+    convertAttributeRef(ep.allNames[re.position], re.position, ep)
+  }
 
-    is RacoExpression.PLUS -> {
-      val t = re.getType(ep)
-      BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), { left: ArrayByteSequence, right: ArrayByteSequence ->
-        fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
-        when (t) {
-          Type.INT -> {
-            t as Type.INT // compiler ought to be able to infer this; report bug
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.INT_VARIABLE -> {
-            t as Type.INT_VARIABLE
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.BOOLEAN -> {
-            t as Type.BOOLEAN
-            t.encode(left.dec(t) || right.dec(t))
-          }
-          Type.LONG -> {
-            t as Type.LONG
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.LONG_VARIABLE -> {
-            t as Type.LONG_VARIABLE
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.DOUBLE -> {
-            t as Type.DOUBLE
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.DOUBLE_VARIABLE -> {
-            t as Type.DOUBLE_VARIABLE
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.FLOAT -> {
-            t as Type.FLOAT
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.FLOAT_VARIABLE -> {
-            t as Type.FLOAT
-            t.encode(left.dec(t) + right.dec(t))
-          }
-          Type.STRING -> {
-            t as Type.STRING
-            t.encode(left.dec(t) + right.dec(t)) // replace with concatenating the byte[] representation, without decoding?
-          }
-          Type.UNKNOWN -> {
+  is RacoExpression.PLUS -> {
+    val t = re.getType(ep)
+    BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), { left: ArrayByteSequence, right: ArrayByteSequence ->
+      fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
+      when (t) {
+        Type.INT -> {
+          t as Type.INT // compiler ought to be able to infer this; report bug
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.INT_VARIABLE -> {
+          t as Type.INT_VARIABLE
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.BOOLEAN -> {
+          t as Type.BOOLEAN
+          t.encode(left.dec(t) || right.dec(t))
+        }
+        Type.LONG -> {
+          t as Type.LONG
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.LONG_VARIABLE -> {
+          t as Type.LONG_VARIABLE
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.DOUBLE -> {
+          t as Type.DOUBLE
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.DOUBLE_VARIABLE -> {
+          t as Type.DOUBLE_VARIABLE
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.FLOAT -> {
+          t as Type.FLOAT
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.FLOAT_VARIABLE -> {
+          t as Type.FLOAT
+          t.encode(left.dec(t) + right.dec(t))
+        }
+        Type.STRING -> {
+          t as Type.STRING
+          t.encode(left.dec(t) + right.dec(t)) // replace with concatenating the byte[] representation, without decoding?
+        }
+        Type.UNKNOWN -> {
 //            t as Type.UNKNOWN
-            println("Warning! UNKNOWN type PLUS")
-            val bs = ByteArray(left.length()+right.length())
-            System.arraycopy(left.backingArray,left.offset(),bs,0,left.length())
-            System.arraycopy(right.backingArray,right.offset(),bs,left.length(),right.length())
-            bs
-          }
-        }.toABS()
-        })
-    }
+          println("Warning! UNKNOWN type PLUS")
+          val bs = ByteArray(left.length()+right.length())
+          System.arraycopy(left.backingArray,left.offset(),bs,0,left.length())
+          System.arraycopy(right.backingArray,right.offset(),bs,left.length(),right.length())
+          bs
+        }
+      }.toABS()
+      })
   }
 }
 
@@ -162,24 +161,96 @@ where S : KVSchema, S : TypeSchema {
 }
 
 
-//fun extract
+fun exprToFullValueExpr(
+    expr: Expr<ABS>,
+    visRef: Expr<ABS> = Const(EMPTY),
+    tsRef: Expr<Long> = Const(Long.MAX_VALUE)
+): Expr<FullValue> = TernaryExpr(expr, visRef, tsRef) { value, vis, ts -> FullValue(value, vis, ts) }
+
+fun nameToValueFirstVisRef(name: Name): Expr<ABS> =
+    UnaryExpr(TupleRef.RefVal(valName = name.toABS())) { it.first().visibility }
+
+fun nameToValueFirstTsRef(name: Name): Expr<Long> =
+    UnaryExpr(TupleRef.RefVal(valName = name.toABS())) { it.first().timestamp }
 
 
-fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema): Op<*> {
+fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema): Pair<Op<*>, SortedAccessPath> {
 
-  val x = when (ro) {
+  @Suppress("UNCHECKED_CAST")
+  return when (ro) {
 
 
     is Apply -> {
-      // todo make an ApplyOp
+      val (parent, parentSAP) = racoToAccumulo(ro.input, ep)
+      parent as Op<TupleIterator>
 
-      val parent = racoToAccumulo(ro.input, ep)
-      val emitters: List<Pair<Name, RacoExpression>> = ro.emitters
+      val emittersRaco0: List<Pair<Name, RacoExpression>> = ro.emitters
+      val exprInfos0: List<Triple<Name, Expr<ArrayByteSequence>, Type<*>>> = emittersRaco0.map {
+        Triple(it.first, racoExprToExpr(it.second, parentSAP), it.second.getType(parentSAP)) }
+      // take out family expression if it does not exist
+      val (exprInfos, famExpr) =  exprInfos0.find { it.first == __FAMILY__ }?.let {
+        (exprInfos0 - it) to it.second
+      } ?: exprInfos0 to TupleRef.RefFamily()
+      val emittersRaco = emittersRaco0.find { it.first == __FAMILY__ }?.let { emittersRaco0 - it } ?: emittersRaco0
+      val emittersType: List<Pair<Name, Type<*>>> = emittersRaco.map { it.first to it.second.getType(parentSAP) }
 
 
-//      OpApplyIterator(parent, keyExprs = , famExpr = , valExprs = , keySchema = )
+      val emittersScheme: AccessPath
+      val keyExprs: List<Expr<ABS>>
+      val valExprs: List< Pair<ABS,Expr<FullValue>> >
+      // if __DAP__ and/or __LAP__ were present as emitted attributes, then they are accounted for in emittersScheme
+      // if both were not present, then all attributes are in the DAP
+      val (dap, lap, cap) = if (emittersType.any() { it.first == __DAP__ }) {
+        emittersScheme = fromRacoScheme(emittersType)
+        val dap = emittersScheme.dapNames.map { dapName -> exprInfos.find { it.first == dapName }!! }
+        val lap = emittersScheme.lapNames.map { dapName -> exprInfos.find { it.first == dapName }!! }
+        val cap = emittersScheme.valNames.map { dapName -> exprInfos.find { it.first == dapName }!! }
+        Triple(dap,lap,cap)
+      } else {
+        // try to infer a good partitioning of attributes to dap/lap/cap
+        val trip = exprInfos.fold(Triple(ArrayList<Triple<Name,Expr<ABS>,Type<*>>>(),ArrayList<Triple<Name,Expr<ABS>,Type<*>>>(),ArrayList<Triple<Name,Expr<ABS>,Type<*>>>())) {
+          partitions, exprInfo ->
+          val (dap, lap, cap) = partitions
+          val (name, expr, type) = exprInfo
+          // 1. if the name is present in the parent schema, then put it in the same place
+          // 2. if the expression is constant, then put it in the value
+          // 3. if the expression's inputs are all keys in the parent schema, then put it in the dap if the inputs are all from the dap, or put it in the lap otherwise
+          // 4. put it in the cap
+          when {
+            parentSAP.dapNames.contains(name) -> dap
+            parentSAP.lapNames.contains(name) -> lap
+            parentSAP.valNames.contains(name) -> cap
+            expr.inputs.isEmpty() -> cap
+            expr.inputs.all { it is TupleRef.RefKey && it.keyNum < parentSAP.dapNames.size } -> dap
+            expr.inputs.all { it is TupleRef.RefKey } -> lap
+            else -> cap
+          }.add(exprInfo)
+          partitions
+        }
+        val (dap,lap,cap) = trip
+        emittersScheme = AccessPath.of(dap.map { it.first }, lap.map { it.first }, cap.map { it.first }, (dap+lap+cap).map { it.third })
+        trip
+      }
 
-      throw UnsupportedOperationException("nyi")
+      keyExprs = (dap+lap).map { it.second }
+      valExprs = cap.map { it ->
+        // If parent had the same value attribute defined, then pull the visibility and ts from it.
+        // Otherwise use the Empty visibility and Long.MAX_VALUE timestamp
+        if (parentSAP.valNames.contains(it.first)) {
+//            if (parentSAP.types[parentSAP.valNames.indexOf(it.first)] == it.third)
+          it.first.toABS() to exprToFullValueExpr(it.second, nameToValueFirstVisRef(it.first), nameToValueFirstTsRef(it.first))
+//            else
+//              it.first to exprToFullValueExpr(it.second)
+        } else
+          it.first.toABS() to exprToFullValueExpr(it.second)
+      }
+
+      // finally, calculate the sortedUpto
+      // todo - find the longest prefix of keys that were copied from the parent. Take the minimum of that length and the parent's sortedUpto.
+      val sortedUpto = 0
+      val sap = emittersScheme.withSortedUpto(sortedUpto)
+
+      OpApplyIterator(parent, keyExprs = keyExprs, famExpr = famExpr, valExprs = valExprs) to sap
     }
 
     is FileScan -> {
@@ -196,7 +267,11 @@ fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema): Op<*> {
         is PTree.PDouble -> sk.v.toInt()
         else -> throw RacoOperator.Companion.ParseRacoException("expected an int skip but got $sk")
       }
-      OpCSVScan(ro.file, encoders, types, skip = skip)
+
+      // assume input is un-sorted when scanning from a file; add a FileScan option to assume some sorting later
+      val sap: SortedAccessPath = fromRacoScheme(types).withSortedUpto(0)
+
+      OpCSVScan(ro.file, encoders, types, skip = skip) to sap
     }
 
     else -> throw UnsupportedOperationException("nyi")

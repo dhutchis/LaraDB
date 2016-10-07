@@ -456,6 +456,8 @@ sealed class AccessPath(
   val lapZipTypeWidth: List<NameTypeWidth>
     get() = keyZipTypeWidth.subList(dapNames.size,dapNames.size+lapNames.size)
 
+  fun withSortedUpto(sortedUpto: Int) = SortedAccessPath.of(dapNames, lapNames, valNames, sortedUpto, types, widths)
+
   override fun toString() = "AP(dap=$dapZipTypeWidth; lap=$lapZipTypeWidth; val=$valZipTypeWidth)"
 
   override fun equals(other: Any?): Boolean{

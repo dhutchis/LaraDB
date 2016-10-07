@@ -72,6 +72,8 @@ sealed class RacoExpression(args: List<Op<*>> = emptyList()): Op<Unit>(args) {
 sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
   constructor(vararg args: Op<*>): this(ImmutableList.copyOf(args))
 
+//  abstract val scheme: Scheme
+
   override val unbound: List<Arg<*>> = emptyList()
   override fun invoke(reqs: List<*>) {}
 
@@ -155,8 +157,6 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
             type
           }
         }
-
-
   }
 }
 
@@ -181,7 +181,11 @@ typealias Emitter = Pair<Name, RacoExpression>
 data class Apply(
     val emitters: List<Emitter>,
     val input: RacoOperator
-) : RacoOperator(emitters.toObj(), input)
+) : RacoOperator(emitters.toObj(), input) {
+
+
+
+}
 
 /*
 Dump(Apply([('src', NamedAttributeRef('src')), ('dst', NamedAttributeRef('dst'))], Scan(RelationKey(
