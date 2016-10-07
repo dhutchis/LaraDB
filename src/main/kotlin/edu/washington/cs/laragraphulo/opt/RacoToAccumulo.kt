@@ -174,14 +174,26 @@ fun nameToValueFirstTsRef(name: Name): Expr<Long> =
     UnaryExpr(TupleRef.RefVal(valName = name.toABS())) { it.first().timestamp }
 
 
-fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema): Pair<Op<*>, SortedAccessPath> {
+fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema, accumuloConfig: AccumuloConfig): Pair<Op<*>, SortedAccessPath> {
 
   @Suppress("UNCHECKED_CAST")
   return when (ro) {
 
+    is Store -> {
+      val tableName = ro.relationKey.sanitizeTableName()
+
+      val (parent, parentSAP) = racoToAccumulo(ro.input, ep, accumuloConfig)
+      parent as Op<TupleIterator>
+
+      val kvi = OpTupleToKeyValueIterator(parent, parentSAP, parentSAP)
+      val skvi = OpKeyValueToSkviAdapter(kvi)
+      val rwi = OpRWI(skvi, tableName, accumuloConfig)
+
+      rwi to parentSAP
+    }
 
     is Apply -> {
-      val (parent, parentSAP) = racoToAccumulo(ro.input, ep)
+      val (parent, parentSAP) = racoToAccumulo(ro.input, ep, accumuloConfig)
       parent as Op<TupleIterator>
 
       val emittersRaco0: List<Pair<Name, RacoExpression>> = ro.emitters
@@ -253,10 +265,21 @@ fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema): Pair<Op<*>, SortedAcc
       OpApplyIterator(parent, keyExprs = keyExprs, famExpr = famExpr, valExprs = valExprs) to sap
     }
 
+    is Scan -> {
+      val tableName = ro.relationKey.sanitizeTableName()
+
+      val types: List<Pair<Name, Type<*>>> = getTypesFromScheme(ro.scheme)
+      val ap: AccessPath = fromRacoScheme(types)
+      // fully sorted, since we are scanning from a table
+      val sortedUpto = ap.dapNames.size+ap.lapNames.size
+      val sap = ap.withSortedUpto(sortedUpto)
+
+      return OpAccumuloBase(sap, sap) to sap
+    }
+
     is FileScan -> {
       // get the encoders; ensure we store properly; might need to implement the getExpressionProperties on other operators
-      val scheme: List<Pair<Name, RacoType>> = ro.scheme
-      val types: List<Pair<Name, Type<*>>> = scheme.map { it.first to racoTypeToType(it.second) }
+      val types: List<Pair<Name, Type<*>>> = getTypesFromScheme(ro.scheme)
       val encoders: List<Encode<String>?> = types.map { it.second.encodeFromString } // because we force ArrayByteSequence, all are encoded according to the String encoder
 
       val sk = ro.options["skip"]
@@ -279,6 +302,12 @@ fun racoToAccumulo(ro: RacoOperator, ep: SortedKeySchema): Pair<Op<*>, SortedAcc
 
 
   throw UnsupportedOperationException("nyi")
+}
+
+
+private fun getTypesFromScheme(scheme: List<Pair<Name, RacoType>>): List<Pair<Name, Type<*>>> {
+  val ns: List<Pair<Name, RacoType>> = scheme
+  return ns.map { it.first to racoTypeToType(it.second) }
 }
 
 
@@ -313,7 +342,7 @@ sealed class APReq {
 /** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
 fun sanitizeTableName(table: String): String = table.replace(':','_')
 /** Accumulo tables only allow letters, numbers, and underscore. Convert ':' to '_'. */
-fun sanitizeTableName(rk: RelationKey): String = "${rk.user}_${rk.program}_${rk.relation}"
+fun RelationKey.sanitizeTableName(): String = "${this.user}_${this.program}_${this.relation}"
 
 
 //// inside a Sequence; probably a Store on top

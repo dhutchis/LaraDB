@@ -5,8 +5,7 @@ import edu.washington.cs.laragraphulo.opt.KeyValue
 import edu.washington.cs.laragraphulo.opt.KeyValueIterator
 import edu.washington.cs.laragraphulo.opt.SeekKey
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
-import org.apache.accumulo.core.data.Key
-import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import java.io.IOException
@@ -59,7 +58,30 @@ class SkviToKeyValueAdapter(
   }
 }
 
-//class KeyValueToSkviAdapter(
-//
-//): SortedKeyValueIterator<Key,Value>
+class KeyValueToSkviAdapter(
+    private val inner: KeyValueIterator
+): SortedKeyValueIterator<Key,Value> {
+  override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
+    @Suppress("UNCHECKED_CAST")
+    inner.seek(SeekKey(GraphuloUtil.rangeToGuavaRange(range), columnFamilies as Collection<ArrayByteSequence>, inclusive))
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
+    return KeyValueToSkviAdapter(inner.deepCopy(env))
+  }
+
+  override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment) {
+
+  }
+
+  override fun hasTop(): Boolean = inner.hasNext()
+
+  override fun next() {
+    inner.next()
+  }
+
+  override fun getTopKey(): Key = inner.peek().key
+
+  override fun getTopValue(): Value = inner.peek().value
+}
 

@@ -124,17 +124,24 @@ class CSVScan(
 
 
 
+class OpAccumuloBase(
+    val apKeySchema: APKeySchema,
+    val widthSchema: WidthSchema
+) : Op<TupleIterator>(apKeySchema.toObj(), widthSchema.toObj()) {
+  override val unbound: List<Arg<*>> = listOf(Arg("AccumuloBase_Skvi", SortedKeyValueIterator::class.java))
+  @Suppress("UNCHECKED_CAST")
+  override fun invoke(reqs: List<*>): TupleIterator {
+    require (reqs.size >= 1 && reqs[0] is SortedKeyValueIterator<*,*>) { "Bad argument passed to OpAccumuloBase invoke; expected an SKVI but got $reqs" }
+    val skvi = reqs[0] as SortedKeyValueIterator<Key,Value>
+    val kviter = SkviToKeyValueAdapter(skvi)
+    val titer = KeyValueToTupleIterator(kviter, apKeySchema, widthSchema)
+    return titer
+  }
+}
 
-data class TypedExpr(
-    val expr: Expr<ABS>,
-    val type: Type<*>
-)
 
-data class ValueTypedExpr(
-    val name: ABS,
-    val expr: Expr<FullValue>,
-    val type: Type<*>
-)
+
+
 
 
 class OpApplyIterator(
@@ -225,6 +232,7 @@ class ApplyIterator(
     if (topTuple != null && parent.hasNext()) {
       val t = parent.peek()
       // src_dst
+      // test code
 //      val src = t.vals[SRC]!!.first().value
 //      val dst = t.vals[DST]!!.first().value
 //      val result = ByteArray(src.length()+dst.length()+1)
@@ -233,6 +241,7 @@ class ApplyIterator(
 //      System.arraycopy(dst.backingArray, dst.offset(), result, src.length()+1, dst.length())
 //      topTuple = TupleImpl(t.keys, t.family,
 //          ImmutableListMultimap.of(RESULT, FullValue(ABS(result), EMPTY, Long.MAX_VALUE)))
+
       // todo - this implementation restricts Apply to return a single Tuple per input Tuple. Does not allow flatmap/ext.
       topTuple = applyToTuple(t)
     }
@@ -265,6 +274,26 @@ class ApplyIterator(
 }
 
 
+class OpTupleToKeyValueIterator(
+    val tupleIterator: Op<TupleIterator>,
+    val apKeySchema: APKeySchema,
+    val widthSchema: WidthSchema
+) : Op<KeyValueIterator>(tupleIterator, apKeySchema.toObj(), widthSchema.toObj()) {
+  override val unbound: List<Arg<*>> = tupleIterator.unbound
+  override fun invoke(reqs: List<*>): KeyValueIterator {
+    return TupleToKeyValueIterator(tupleIterator(reqs), apKeySchema, widthSchema)
+  }
+}
+
+
+class OpKeyValueToSkviAdapter(
+    val kvIter: Op<KeyValueIterator>
+) : Op<SKVI>(kvIter) {
+  override val unbound: List<Arg<*>> = kvIter.unbound
+  override fun invoke(reqs: List<*>): SKVI {
+    return KeyValueToSkviAdapter(kvIter(reqs))
+  }
+}
 
 
 
