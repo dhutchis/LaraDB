@@ -12,6 +12,8 @@ import java.util.*
 /**
  * Operates on a list of SKVIs and a Comparator
  * Aligns the SKVIs and calls a `collide` function when all of them are equal, according to the Comparator.
+ *
+ * Note: no no-args constructor. Not designed as a standalone Accumulo SKVI.
  */
 class MergeJoinIterator(
     val comparator: Comparator<Key>,

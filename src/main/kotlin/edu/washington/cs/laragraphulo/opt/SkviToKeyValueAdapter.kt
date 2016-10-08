@@ -58,6 +58,7 @@ class SkviToKeyValueAdapter(
   }
 }
 
+/** Note: no no-args constructor. This adapter is not designed as a standalone Accumulo SKVI. */
 class KeyValueToSkviAdapter(
     private val inner: KeyValueIterator
 ): SortedKeyValueIterator<Key,Value> {

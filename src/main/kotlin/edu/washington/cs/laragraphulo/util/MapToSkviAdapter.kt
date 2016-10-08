@@ -10,6 +10,8 @@ import java.util.*
 
 /**
  * For testing; an iterator that emits entries from a list of hardcoded data.
+ *
+ * Note: no no-args constructor. Not designed as a standalone Accumulo SKVI.
  */
 class MapToSkviAdapter(
     val origMap: SortedMap<Key, Value>

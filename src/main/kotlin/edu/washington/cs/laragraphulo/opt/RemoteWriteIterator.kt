@@ -443,7 +443,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
 
       if (numRejects >= REJECT_FAILURE_THRESHOLD) { // declare global failure after 10 rejects
         // last entry emitted declares failure
-        rowRangeIterator = Iterators.peekingIterator(Iterators.emptyIterator())
+        rowRangeIterator = Iterators.peekingIterator(Collections.emptyIterator())
         numRowRangesIterated = rowRanges.size()
         reducer = NOOP_REDUCER()
         return true

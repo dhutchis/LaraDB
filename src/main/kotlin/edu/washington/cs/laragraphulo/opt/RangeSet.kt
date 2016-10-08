@@ -54,7 +54,7 @@ class RangeSet {
       if (top == null && source.hasNext()) {
         top = seekRange.clip(source.next(), true)
         if (top == null) // stop early
-          source = Iterators.emptyIterator()
+          source = Collections.emptyIterator()
       }
     }
 
