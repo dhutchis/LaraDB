@@ -29,6 +29,7 @@ import org.apache.accumulo.core.security.Authorizations
 import java.io.IOException
 import java.io.Serializable
 import java.util.*
+import kotlin.reflect.KClass
 
 /** see [StackOverflow](http://stackoverflow.com/questions/19138212/how-to-implement-a-dag-like-scheduler-in-java) */
 class ExecutorTaskTree<T> {
@@ -180,114 +181,32 @@ interface Serializer<in I, out O> {
   fun deserializeFromString(str: String): O
 }
 
-data class AccumuloPipeline(
-    val skvi: SKVI,
-    val serializer: Serializer<SKVI,SKVI>,
+data class AccumuloPipeline<D>(
+    val data: D,
+    val serializer: Serializer<D,D>,
     val tableName: String
 )
 
-class AccumuloPipelineTask(
-    val accumuloPipeline: AccumuloPipeline,
-    val accumuloConfig: AccumuloConfig
+class AccumuloPipelineTask<D>(
+    val pipeline: AccumuloPipeline<D>,
+    val config: AccumuloConfig,
+    /** For Op<SKVI>, use [DeserializeInvokeIterator.Companion].
+     * For SKVI, use [DeserializeDelegateIterator.Companion] */
+    val setting: SerializerSetting<D>
 ) : Callable<LinkedHashMap<Key, Value>> {
 
   /**
    * @return entries received from the server, gathered into memory
    */
   override fun call(): LinkedHashMap<Key, Value> {
-    val connector = accumuloConfig.connector
-    val bs = connector.createBatchScanner(accumuloPipeline.tableName, Authorizations.EMPTY, 15)
+    val connector = config.connector
+    val bs = connector.createBatchScanner(pipeline.tableName, Authorizations.EMPTY, 15)
     val ranges = listOf(Range())
     bs.setRanges(ranges)
 
     val priority = 10
     // create a DynamicIterator
-    val itset = DeserializeDelegateIterator.iteratorSetting(accumuloPipeline.serializer, accumuloPipeline.skvi, priority)
-    bs.addScanIterator(itset)
-
-    val results = LinkedHashMap<Key, Value>()
-    for ((key, value) in bs) {
-      results.put(key, value)
-    }
-    return results
-  }
-}
-
-typealias SKVI = SortedKeyValueIterator<Key,Value>
-
-class DeserializeDelegateIterator : SKVI, OptionDescriber {
-  companion object {
-    const val OPT_SERIALIZED_SKVI = "serialized_skvi"
-    const val OPT_SERIALIZER_CLASS = "serializer_class"
-
-    fun iteratorSetting(serializer: Serializer<SKVI,SKVI>, skvi: SKVI, priority: Int = 10): IteratorSetting {
-      val serializer_class = skvi.javaClass
-      val serialized_skvi = serializer.serializeToString(skvi)
-      return IteratorSetting(priority, DeserializeDelegateIterator::class.java,
-          mapOf(OPT_SERIALIZER_CLASS to serializer_class.name,
-              OPT_SERIALIZED_SKVI to serialized_skvi))
-    }
-
-    fun deserializeFromOptions(options: Map<String,String>): SKVI {
-      val serializer_class = options[OPT_SERIALIZER_CLASS] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZER_CLASS")
-      val serialized_skvi = options[OPT_SERIALIZED_SKVI] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZED_SKVI")
-      @Suppress("UNCHECKED_CAST")
-      val serializer = GraphuloUtil.subclassNewInstance(serializer_class, Serializer::class.java) as Serializer<*,SKVI>
-      return serializer.deserializeFromString(serialized_skvi)
-    }
-  }
-
-  private lateinit var skvi: SKVI
-
-  override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment) {
-    skvi = deserializeFromOptions(options)
-    skvi.init(source, options, env)
-  }
-  override fun getTopValue() = skvi.topValue
-  override fun next() = skvi.next()
-  override fun deepCopy(env: IteratorEnvironment?) = skvi.deepCopy(env)
-  override fun hasTop() = skvi.hasTop()
-  override fun seek(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) = skvi.seek(range, columnFamilies, inclusive)
-  override fun getTopKey() = skvi.topKey
-
-  override fun describeOptions(): OptionDescriber.IteratorOptions {
-    return OptionDescriber.IteratorOptions("DeserializeAndDelegateIterator",
-        "de-serializes a Serializer<SKVI> and delegates all SKVI operations to it",
-        mapOf(OPT_SERIALIZED_SKVI to "the serialized SKVI",
-            OPT_SERIALIZER_CLASS to "the class that can deserialize the skvi; must have a no-args constructor"),
-        null)
-  }
-  override fun validateOptions(options: Map<String, String>): Boolean {
-    deserializeFromOptions(options)
-    return true
-  }
-}
-
-
-
-data class OpAccumuloPipeline(
-    val op: Op<SKVI>,
-    val serializer: Serializer<Op<SKVI>,Op<SKVI>>,
-    val tableName: String
-)
-
-data class OpAccumuloPipelineTask(
-    val accumuloPipeline: OpAccumuloPipeline,
-    val accumuloConfig: AccumuloConfig
-) : Callable<LinkedHashMap<Key, Value>> {
-
-  /**
-   * @return entries received from the server, gathered into memory
-   */
-  override fun call(): LinkedHashMap<Key, Value> {
-    val connector = accumuloConfig.connector
-    val bs = connector.createBatchScanner(accumuloPipeline.tableName, Authorizations.EMPTY, 15)
-    val ranges = listOf(Range())
-    bs.setRanges(ranges)
-
-    val priority = 10
-    // create a DynamicIterator
-    val itset = DeserializeInvokeIterator.iteratorSetting(accumuloPipeline.serializer, accumuloPipeline.op, priority)
+    val itset = setting.iteratorSetting(pipeline.serializer, pipeline.data, priority)
     bs.addScanIterator(itset)
 
     val results = LinkedHashMap<Key, Value>()
@@ -299,48 +218,23 @@ data class OpAccumuloPipelineTask(
 }
 
 
+class DeserializeInvokeIterator : DelegatingIterator(), OptionDescriber {
+  companion object : SerializerSetting<Op<SKVI>>(DeserializeInvokeIterator::class.java) {
 
-class DeserializeInvokeIterator : SKVI, OptionDescriber {
-  companion object {
-    const val OPT_SERIALIZED_OP = "serialized_op"
-    const val OPT_SERIALIZER_CLASS = "serializer_class"
-
-    fun iteratorSetting(serializer: Serializer<Op<SKVI>,Op<SKVI>>, op: Op<SKVI>, priority: Int = 10): IteratorSetting {
-      val serializer_class = op.javaClass
-      val serialized_skvi = serializer.serializeToString(op)
-      return IteratorSetting(priority, DeserializeInvokeIterator::class.java,
-          mapOf(OPT_SERIALIZER_CLASS to serializer_class.name,
-              OPT_SERIALIZED_OP to serialized_skvi))
-    }
-
-    fun deserializeFromOptions(options: Map<String,String>): Op<SKVI> {
-      val serializer_class = options[OPT_SERIALIZER_CLASS] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZER_CLASS")
-      val serialized_skvi = options[OPT_SERIALIZED_OP] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZED_OP")
-      @Suppress("UNCHECKED_CAST")
-      val serializer = GraphuloUtil.subclassNewInstance(serializer_class, Serializer::class.java) as Serializer<*,Op<SKVI>>
-      return serializer.deserializeFromString(serialized_skvi)
-    }
   }
 
-  private lateinit var skvi: SKVI
-
-  override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment) {
+  override fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
     val op = deserializeFromOptions(options)
-    skvi = op(listOf(source, options, env)) // !
+    val skvi = op(listOf(source, options, env)) // !
     skvi.init(source, options, env)
+    return skvi
   }
-  override fun getTopValue() = skvi.topValue
-  override fun next() = skvi.next()
-  override fun deepCopy(env: IteratorEnvironment?) = skvi.deepCopy(env)
-  override fun hasTop() = skvi.hasTop()
-  override fun seek(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) = skvi.seek(range, columnFamilies, inclusive)
-  override fun getTopKey() = skvi.topKey
 
   override fun describeOptions(): OptionDescriber.IteratorOptions {
     return OptionDescriber.IteratorOptions("DeserializeAndDelegateIterator",
         "de-serializes a Serializer<Op<SKVI>>, invokes it, and delegates all SKVI operations to it",
-        mapOf(OPT_SERIALIZED_OP to "the serialized SKVI",
-            OPT_SERIALIZER_CLASS to "the class that can deserialize the skvi; must have a no-args constructor"),
+        mapOf(SerializerSetting.OPT_SERIALIZED_DATA to "the serialized SKVI",
+            SerializerSetting.OPT_SERIALIZER_CLASS to "the class that can deserialize the skvi; must have a no-args constructor"),
         null)
   }
   override fun validateOptions(options: Map<String, String>): Boolean {
@@ -348,6 +242,94 @@ class DeserializeInvokeIterator : SKVI, OptionDescriber {
     return true
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+typealias SKVI = SortedKeyValueIterator<Key,Value>
+
+/**
+ * An iterator that delegates all methods to a delegate, computed when [init] is called.
+ */
+abstract class DelegatingIterator : SKVI {
+
+  abstract fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SKVI
+
+  private lateinit var skvi: SKVI
+
+  override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment) {
+    skvi = initDelegate(source, options, env)
+  }
+  override fun getTopValue(): Value = skvi.topValue
+  override fun next() = skvi.next()
+  override fun deepCopy(env: IteratorEnvironment?): SortedKeyValueIterator<Key,Value> = skvi.deepCopy(env)
+  override fun hasTop() = skvi.hasTop()
+  override fun seek(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) = skvi.seek(range, columnFamilies, inclusive)
+  override fun getTopKey(): Key = skvi.topKey
+}
+
+/**
+ * A template for the Companions of the Deserializing classes.
+ */
+abstract class SerializerSetting<D>(
+    val delegatingClass: Class<out SortedKeyValueIterator<Key,Value>>
+) {
+  companion object {
+    const val OPT_SERIALIZED_DATA = "serialized_data"
+    const val OPT_SERIALIZER_CLASS = "serializer_class"
+  }
+
+  fun <T : D>iteratorSetting(serializer: Serializer<T,T>, skvi: T, priority: Int = 10): IteratorSetting {
+    val serializer_class = serializer.javaClass.name
+    val serialized_skvi = serializer.serializeToString(skvi)
+    return IteratorSetting(priority, delegatingClass,
+        mapOf(OPT_SERIALIZER_CLASS to serializer_class, OPT_SERIALIZED_DATA to serialized_skvi))
+  }
+
+  fun deserializeFromOptions(options: Map<String,String>): D {
+    val serializer_class = options[OPT_SERIALIZER_CLASS] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZER_CLASS")
+    val serialized_skvi = options[OPT_SERIALIZED_DATA] ?: throw IllegalArgumentException("no option given for $OPT_SERIALIZED_DATA")
+    @Suppress("UNCHECKED_CAST")
+    val serializer = GraphuloUtil.subclassNewInstance(serializer_class, Serializer::class.java) as Serializer<*,D>
+    return serializer.deserializeFromString(serialized_skvi)
+  }
+}
+
+
+class DeserializeDelegateIterator : DelegatingIterator(), OptionDescriber {
+  companion object : SerializerSetting<SKVI>(DeserializeDelegateIterator::class.java) {
+
+  }
+
+  override fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
+    val skvi = deserializeFromOptions(options)
+    skvi.init(source, options, env)
+    return skvi
+  }
+
+  override fun describeOptions(): OptionDescriber.IteratorOptions =
+      OptionDescriber.IteratorOptions("DeserializeDelegateIterator",
+          "de-serializes a Serializer<SKVI> and delegates all SKVI operations to it",
+          mapOf(SerializerSetting.OPT_SERIALIZED_DATA to "the serialized SKVI",
+              SerializerSetting.OPT_SERIALIZER_CLASS to "the class that can deserialize the skvi; must have a no-args constructor"),
+          null)
+  override fun validateOptions(options: Map<String, String>): Boolean {
+    deserializeFromOptions(options)
+    return true
+  }
+}
+
+
+
 
 
 

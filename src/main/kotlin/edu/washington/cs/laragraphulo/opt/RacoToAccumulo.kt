@@ -195,7 +195,7 @@ fun skviOpToTask(
     accumuloConfig: AccumuloConfig,
     scanTable: String
 ): Callable<LinkedHashMap<Key, Value>> {
-  return OpAccumuloPipelineTask(OpAccumuloPipeline(op, opSerializer, scanTable), accumuloConfig)
+  return AccumuloPipelineTask(AccumuloPipeline(op, opSerializer, scanTable), accumuloConfig)
 }
 
 
