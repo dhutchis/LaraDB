@@ -107,6 +107,12 @@
       <artifactId>kotlin-reflect</artifactId>
       <version>RELEASE</version>
     </dependency>
+    <!-- Upgrading Guava from the version packaged with Accumulo. -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>19.0</version>
+    </dependency>
 
   </dependencies>
 
