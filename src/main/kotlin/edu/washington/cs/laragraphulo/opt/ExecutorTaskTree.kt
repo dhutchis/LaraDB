@@ -195,6 +195,28 @@ class AccumuloPipelineTask<D>(
     val setting: SerializerSetting<D>
 ) : Callable<LinkedHashMap<Key, Value>> {
 
+  companion object {
+    /** An alternative to the primary constructor for [AccumuloPipelineTask]
+     * that infers the appropriate [SerializerSetting] based on whether [D]
+     * is an [Op]<SKVI> or an [SKVI]. */
+    inline operator fun <reified D : Any> invoke(
+        pipeline: AccumuloPipeline<D>,
+        config: AccumuloConfig
+    ): AccumuloPipelineTask<D> {
+      val jc = D::class.java
+
+      val setting: SerializerSetting<out Any> = when {
+        Op::class.java.isAssignableFrom(jc) -> DeserializeInvokeIterator.Companion
+        SortedKeyValueIterator::class.java.isAssignableFrom(jc) -> DeserializeDelegateIterator.Companion
+        else -> throw Exception("I don't know what iterator setting to use for $jc when invoked with pipeline $pipeline")
+      }
+
+      @Suppress("UNCHECKED_CAST")
+      (setting as SerializerSetting<D>)
+      return AccumuloPipelineTask(pipeline, config, setting)
+    }
+  }
+
   /**
    * @return entries received from the server, gathered into memory
    */
