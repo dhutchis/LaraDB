@@ -122,6 +122,11 @@ class RacoConvertPrelimTest(
             name = "frozenset(['a'])",
             repr = "frozenset(['a'])",
             expected = PNode("frozenset", listOf(PList(listOf(PString("a")))))
+        ),
+        Params(
+            name = "long literal",
+            repr = "NumericLiteral(42)",
+            expected = PNode("NumericLiteral", listOf(PLong(42)))
         )
     )
 

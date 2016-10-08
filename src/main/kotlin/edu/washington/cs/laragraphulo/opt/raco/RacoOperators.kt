@@ -124,7 +124,17 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                   sorted = PPT(pa[1]) as List<String>,
                   grouped = PPT(pa[2]) as List<String>
               ) }
-              "frozenset" -> {AAL(1); (PPT(pa[0]) as List<String>)
+              "frozenset" -> {AAL(1); (PPT(pa[0]) as List<String>) }
+              "NumericLiteral" -> {AAL(1)
+                val lit = PPT(pa[0])
+                when (lit) {
+                  is Long -> RacoExpression.Literal.LongLiteral(lit)
+                  is Double -> RacoExpression.Literal.DoubleLiteral(lit)
+                  else -> throw ParseRacoException("unexpected inside NumbericLitera: $lit")
+                }
+              }
+              "StringLiteral" -> {AAL(1)
+                RacoExpression.Literal.StringLiteral(PPT(pa[0]) as String)
               }
               else -> throw ParseRacoException("unexpected node: ${ptree.name}")
             }

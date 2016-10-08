@@ -201,6 +201,36 @@ Callables : [CreateTableTask(tableName=public_adhoc_newtable, accumuloConfig=Acc
                 mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
             ),
             expected = listOf()
+        ),
+
+
+        Params(
+            name = "store apply scan Unnamed with manual DAP and __TS apply",
+            query = "Store(RelationKey('public','adhoc','newtable'), " +
+                "Apply([('dst', UnnamedAttributeRef(1, None)), ('dst__TS', NumericLiteral(42))], " +
+                "Scan(RelationKey('public','adhoc','smallGraph'), " +
+                "Scheme([('src', 'LONG_TYPE'), ('$__DAP__', 'STRING_TYPE'), ('dst', 'LONG_TYPE')]), 10000, " +
+                "RepresentationProperties(frozenset([]), None, None))))",
+            catalog = listOf("src" to RacoType.LONG, __DAP__ to RacoType.STRING, "dst" to RacoType.LONG),
+            data = listOf(
+                mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
+            ),
+            expected = listOf()
+        ),
+
+
+        Params(
+            name = "store apply scan Unnamed with manual DAP and __TS and __VIS apply",
+            query = "Store(RelationKey('public','adhoc','newtable'), " +
+                "Apply([('dst', UnnamedAttributeRef(1, None)), ('dst__TS', NumericLiteral(42)), ('dst__VIS', StringLiteral(''))], " +
+                "Scan(RelationKey('public','adhoc','smallGraph'), " +
+                "Scheme([('src', 'LONG_TYPE'), ('$__DAP__', 'STRING_TYPE'), ('dst', 'LONG_TYPE')]), 10000, " +
+                "RepresentationProperties(frozenset([]), None, None))))",
+            catalog = listOf("src" to RacoType.LONG, __DAP__ to RacoType.STRING, "dst" to RacoType.LONG),
+            data = listOf(
+                mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
+            ),
+            expected = listOf()
         )
 
 

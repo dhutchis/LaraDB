@@ -47,7 +47,7 @@ val defaultReducer = { list: List<FullValue> -> when (list.size) {
 
 
 /**
- * @param positionSchema The positions associated with each attribute, in the lens of raco. keySchema only includes the keys.
+ *
  */
 fun racoExprToExpr(
     re: RacoExpression,
@@ -249,6 +249,23 @@ fun racoToAccumulo(
       } ?: TupleRef.RefFamily()
 
       // todo - build a map of attribute names to visibility expressions, and another one for timestamp expressions
+      val map_VIS: Map<Name, Expr<ABS>> = emittersRaco.partition { it.first.endsWith(__VIS) }.let {
+        emittersRaco = it.second
+        it.first.map {
+          it.first.substring(0, it.first.length - __VIS.length) to
+              racoExprToExpr(it.second, pp.sap)
+        }.toMap()
+      }
+
+      val map_TS: Map<Name, Expr<Long>> = emittersRaco.partition { it.first.endsWith(__TS) }.let {
+        emittersRaco = it.second
+        it.first.map {
+          val type = it.second.getType(pp.sap)
+          it.first.substring(0, it.first.length - __TS.length) to
+              type.decodeToLong(racoExprToExpr(it.second, pp.sap))
+        }.toMap()
+      }
+
 
       val exprInfos: List<Triple<Name, Expr<ArrayByteSequence>, Type<*>>> = emittersRaco.map {
         Triple(it.first, racoExprToExpr(it.second, pp.sap), it.second.getType(pp.sap)) }
@@ -306,18 +323,22 @@ fun racoToAccumulo(
 
       keyExprs = (dap+lap).map { it.second }
       valExprs = cap.map { it ->
-        // todo - if we have an expression for the visibility or timestamp, use it!
+        val name = it.first
 
-
+        // If we have an expression for the visibility or timestamp, use it!
         // If parent had the same value attribute defined, then pull the visibility and ts from it.
         // Otherwise use the Empty visibility and Long.MAX_VALUE timestamp
-        if (pp.sap.valNames.contains(it.first)) {
-//            if (parentSAP.types[parentSAP.valNames.indexOf(it.first)] == it.third)
-          it.first.toABS() to exprToFullValueExpr(it.second, nameToValueFirstVisRef(it.first), nameToValueFirstTsRef(it.first))
-//            else
-//              it.first to exprToFullValueExpr(it.second)
-        } else
-          it.first.toABS() to exprToFullValueExpr(it.second)
+        val expr_VIS = when (name) {
+          in map_VIS -> map_VIS[name]!!
+          in pp.sap.valNames -> nameToValueFirstVisRef(name)
+          else -> Const(EMPTY)
+        }
+        val expr_TS = when (name) {
+          in map_TS -> map_TS[name]!!
+          in pp.sap.valNames -> nameToValueFirstTsRef(name)
+          else -> Const(Long.MAX_VALUE)
+        }
+        name.toABS() to exprToFullValueExpr(it.second, expr_VIS, expr_TS)
       }
 
       // finally, calculate the sortedUpto
