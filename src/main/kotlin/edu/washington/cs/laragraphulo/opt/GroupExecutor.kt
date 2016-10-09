@@ -22,6 +22,7 @@ import java.io.IOException
 import java.io.Serializable
 import java.util.*
 import java.util.concurrent.*
+import kotlin.reflect.jvm.javaField
 
 /**
  * Similar to an [ExecutorService]. Executes tasks submitted in parallel groups.
@@ -87,13 +88,17 @@ class GroupExecutor(
  * Lazily creates a [Connector] via the [connector] property.
  */
 class AccumuloConfig : Serializable {
-  @Transient var authenticationToken: AuthenticationToken
-    private set
+  @Transient val authenticationToken: AuthenticationToken
   private val authenticationTokenClass: Class<AuthenticationToken>
 
-  @Transient private var connectorLazy: Lazy<Connector>
+  @Transient private val connectorLazy: Lazy<Connector>
+  /** Lazily constructed Connector. Constructs the Connector (thereby connecting to the Accumulo DB) when this property is referenced. */
   val connector: Connector
     get() = connectorLazy.value
+  /** Whether [connector] is constructed; whether this is connected to an Accumulo DB. */
+  val connected: Boolean
+    get() = connectorLazy.isInitialized()
+
   val instanceName: String
   val zookeeperHosts: String
   val username: String
@@ -133,19 +138,22 @@ class AccumuloConfig : Serializable {
   @Throws(IOException::class, ClassNotFoundException::class)
   private fun readObject(`in`: java.io.ObjectInputStream) {
     `in`.defaultReadObject()
-    val p = GraphuloUtil.subclassNewInstance(authenticationTokenClass, AuthenticationToken::class.java)
-    p.readFields(`in`)
-    authenticationToken = p
 
-    // attempt to keep connectorLazy as a val, and set it by making it accessible
-//    val clProp = AccumuloConfig::connectorLazy
-//    clProp.isAccessible = true
+    val auth = GraphuloUtil.subclassNewInstance(authenticationTokenClass, AuthenticationToken::class.java)
+    auth.readFields(`in`)
+    // Safe to set the final field authenticationToken.
+    val authField = AccumuloConfig::authenticationToken.javaField!!
+    authField.isAccessible = true
+    authField.set(this, auth)
 
-    connectorLazy = lazy {
+    // Same approach for connectorLazy
+    val clField = AccumuloConfig::connectorLazy.javaField!!
+    clField.isAccessible = true
+    clField.set(this, lazy {
       val cc = ClientConfiguration.loadDefault().withInstance(instanceName).withZkHosts(zookeeperHosts)
       val instance = ZooKeeperInstance(cc)
       instance.getConnector(username, authenticationToken)
-    }
+    })
   }
 
 
