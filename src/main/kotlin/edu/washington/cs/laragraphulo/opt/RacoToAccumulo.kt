@@ -419,7 +419,7 @@ sealed class APReq {
 
 
 // a RootRacoOp
-//fun racoSequenceToExecutorTasks(sequence: RacoSequence): ExecutorTaskTree<*> {
+//fun racoSequenceToExecutorTasks(sequence: RacoSequence): GroupExecutor<*> {
 //
 //}
 

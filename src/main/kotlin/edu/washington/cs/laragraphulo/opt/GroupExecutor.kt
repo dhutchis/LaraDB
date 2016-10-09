@@ -1,15 +1,8 @@
 package edu.washington.cs.laragraphulo.opt
 
-import java.util.concurrent.Callable
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
-import java.util.concurrent.ThreadPoolExecutor
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.*
 
-import com.google.common.util.concurrent.AsyncFunction
-import com.google.common.util.concurrent.Futures
-import com.google.common.util.concurrent.ListenableFuture
-import com.google.common.util.concurrent.ListeningExecutorService
-import com.google.common.util.concurrent.MoreExecutors
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.ClientConfiguration
 import org.apache.accumulo.core.client.Connector
@@ -17,7 +10,6 @@ import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.ZooKeeperInstance
 import org.apache.accumulo.core.client.admin.NewTableConfiguration
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken
-import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Range
@@ -29,34 +21,63 @@ import org.apache.accumulo.core.security.Authorizations
 import java.io.IOException
 import java.io.Serializable
 import java.util.*
-import kotlin.reflect.KClass
+import java.util.concurrent.*
 
-/** see [StackOverflow](http://stackoverflow.com/questions/19138212/how-to-implement-a-dag-like-scheduler-in-java) */
-class ExecutorTaskTree<T> {
+/**
+ * Similar to an [ExecutorService]. Executes tasks submitted in parallel groups.
+ * @param daemon If true then the threads in the pool are marked daemon and are terminated after the main application terminates.
+ * */
+class GroupExecutor(
+    val daemon: Boolean
+) {
 
-  private val executor = MoreExecutors.listeningDecorator(
-      MoreExecutors.getExitingExecutorService(Executors.newCachedThreadPool() as ThreadPoolExecutor))
-  private val futureMap = HashMap<String, ListenableFuture<T>>()
-
-  fun addTask(name: String, callable: Callable<T>, vararg predecessorNames: String): ListenableFuture<T> {
-    if (futureMap.containsKey(name))
-      throw IllegalArgumentException("Task name exists: $name")
-
-    val predecessorFutures = ArrayList<ListenableFuture<T>>()
-    for (predecessorName in predecessorNames) {
-      val predecessorFuture = futureMap[predecessorName] ?: throw IllegalArgumentException("Predecessor task doesn't exist: $predecessorName")
-      predecessorFutures.add(predecessorFuture)
-    }
-
-    val future: ListenableFuture<T>
-    if (predecessorFutures.isEmpty()) {
-      future = executor.submit(callable)
-    } else {
-      future = Futures.transform<List<T>,T>(Futures.allAsList<T>(predecessorFutures), AsyncFunction<kotlin.collections.List<T>, T> { executor.submit(callable) }, executor)
-    }
-    futureMap.put(name, future)
-    return future
+  /** A pool that starts with 0 threads and spins up new ones as necessary.
+   * Old threads die if idle for 60s.
+   * If [daemon] is true then the threads in the pool are marked daemon and are terminated after the main application terminates. */
+  private val executor = (Executors.newCachedThreadPool() as ThreadPoolExecutor).let {
+    MoreExecutors.listeningDecorator(
+        if (daemon) MoreExecutors.getExitingExecutorService(it) else it)
   }
+  /** Memory of futures submitted, so that new futures run only once past ones finish. */
+  private val submittedFutures = LinkedList<ListenableFuture<*>>()
+
+  /**
+   * Run a list of tasks in parallel.
+   * The tasks wait until previously submitted tasks finish. Then they are all executed in parallel.
+   *
+   * After calling this method, you probably want to use [Futures.addCallback]
+   * to do something when the tasks complete, based on whether they succeed with a result or fail with an exception (or are cancelled).
+   * Or call [Future.get] on each future to wait for them to complete.
+   *
+   * @return A list of futures for the tasks, in the same order as the [tasks] argument.
+   */
+  @Synchronized
+  fun <T> addParallelTasks(tasks: List<Callable<T>>): List<ListenableFuture<T>> {
+    if (tasks.isEmpty()) return listOf()
+
+    // prune completed tasks from submittedFutures, while we copy over its contents
+    val builder = ImmutableList.builder<ListenableFuture<*>>()
+    submittedFutures.iterator().let { iter ->
+      while (iter.hasNext()) {
+        val sf = iter.next()
+        if (sf.isDone) iter.remove()
+        else builder.add(sf)
+      }
+    }
+    val pastRunningFutures = builder.build()
+
+    return tasks.map { task ->
+      val newsf = Futures.transformAsync(
+          Futures.allAsList<Any?>(pastRunningFutures),
+          AsyncFunction<List<Any?>, T> { executor.submit(task) },
+          executor)
+      submittedFutures.add(newsf)
+      newsf
+    }
+  }
+
+  /** Shortcut method to add a single task, to execute after previously submitted tasks finish. */
+  fun <T> addTask(task: Callable<T>): ListenableFuture<T> = addParallelTasks(listOf(task)).first()
 
 }
 
