@@ -49,6 +49,7 @@ class OpCSVScan(
 
 /**
  * The output schema places all attributes into the key attributes, in the order of the encoders.
+ * Todo - add parallel option: do every X lines at offset Y. Set # of splits accordingly. See Ranges in seek.
  */
 class CSVScan(
     val url: URL,
@@ -307,6 +308,7 @@ class OpRWI(
   override val unbound: List<Arg<*>> = input.unbound
 
   override fun invoke(reqs: List<*>): SortedKeyValueIterator<Key, Value> {
+    // todo - replace with a version that passes the accumuloConfig in directly. Then we can mock this in integration tests.
     val opts = accumuloConfig.basicRemoteOpts("", tableName, null, null)
     val skvi = RemoteWriteIterator()
     skvi.init(input(reqs), opts, object : IteratorEnvironment {
