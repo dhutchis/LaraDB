@@ -33,21 +33,52 @@ import kotlin.reflect.jvm.javaField
 class GroupExecutor(
     val daemon: Boolean
 ) {
-  /** If this is non-null, then a failure has occurred. Shutdown the GroupExecutor. */
-  @Volatile private var failure: Throwable? = null
+  /** If true, then the executor cannot accept further tasks and [failure] *might* be non-null.
+   * Otherwise the executor is happy and [failure] is null. */
+  @Volatile var shutdown = false
+    private set
+
+  /** If this is non-null, then a failure has occurred and the GroupExecutor is shut down. */
+  @Volatile var failure: Throwable? = null
+    private set
 
   /** Used to name each group executed by this executor. */
-  @Volatile private var groupNumber = 1
+  @Volatile private var groupsExecuted = 0
 
   /** A pool that starts with 0 threads and spins up new ones as necessary.
    * Old threads die if idle for 60s.
    * If [daemon] is true then the threads in the pool are marked daemon and are terminated after the main application terminates. */
-  private val executor = (Executors.newCachedThreadPool() as ThreadPoolExecutor).let {
+  private val executor: ListeningExecutorService = (Executors.newCachedThreadPool() as ThreadPoolExecutor).let {
     MoreExecutors.listeningDecorator(
         if (daemon) MoreExecutors.getExitingExecutorService(it) else it)
   }
-  /** Memory of futures submitted, so that new futures run only once past ones finish. */
-  private val submittedFutures = LinkedList<ListenableFuture<*>>()
+
+  /** Memory of the last future submitted, which has a binding to previously submitted futures,
+   * if they were running at the time this was submitted. */
+  @Volatile private var lastSubmittedFuture: ListenableFuture<*>? = null
+
+
+
+  fun isTerminated(): Boolean = shutdown && executor.isTerminated
+
+  /** [ExecutorService.shutdown] the service after all previously added tasks finished.
+   * No new tasks may be added. */
+  @Synchronized
+  fun shutdown() {
+    _shutdown(null, false)
+  }
+
+  /** See [ExecutorService.shutdownNow]. Cancels all past tasks immediately. */
+  @Synchronized
+  fun shutdownNow(): List<Runnable> {
+    return _shutdown(null, true)!!
+  }
+
+  /** See [ExecutorService.awaitTermination]. */
+  fun awaitTermination(timeout: Long, unit: TimeUnit): Boolean {
+    return executor.awaitTermination(timeout, unit)
+  }
+
 
   /**
    * Run a list of tasks in parallel.
@@ -60,77 +91,79 @@ class GroupExecutor(
    * @return A list of futures for the tasks, in the same order as the [tasks] argument.
    */
   @Synchronized
-  fun <T> submitParallelTasks(tasks0: List<Callable<T>>): List<ListenableFuture<T>> {
-    if (tasks0.isEmpty()) return listOf()
+  fun <T> submitParallelTasks(tasks: List<Callable<T>>): List<ListenableFuture<T>> {
+    if (tasks.isEmpty()) return listOf()
 
-    if (failure != null)
-      throw RejectedExecutionException("This GroupExecutor is shutdown due to", failure)
+    if (shutdown) {
+      if (failure != null)
+        throw RejectedExecutionException("This GroupExecutor is shutdown due to", failure)
+      else
+        throw RejectedExecutionException("The GroupExecutor was shut down previously.")
+    }
 
     // wrap each task with a Thread rename
-    val thisGroupNumber = groupNumber.toString()
-    val tasks = tasks0.mapIndexed { idx, callable -> threadRenaming(callable, "$thisGroupNumber.$idx") }
-    groupNumber++
+    groupsExecuted++
+    val thisGroupNumber = groupsExecuted.toString()
+    val ts = tasks.mapIndexed { idx, callable -> threadRenaming(callable, "$thisGroupNumber.$idx") }
 
-    // prune completed tasks from submittedFutures, while we copy over its contents
-    // most should not yet be completed
-    val allPastFuture = ImmutableList.builder<ListenableFuture<*>>().let { builder ->
-      submittedFutures.iterator().let { iter ->
-        while (iter.hasNext()) {
-          val sf = iter.next()
-          if (sf.isDone) iter.remove()
-          else builder.add(sf)
-        }
+    val lsf = lastSubmittedFuture // safe to cache because synchronized
+    @Suppress("UNCHECKED_CAST") // guaranteed by invokeAll contract
+    val newsfs = if (lsf == null || lsf.isDone) {
+      // this is the first task submitted
+      ts.map { executor.submit(it) }
+    } else {
+      // For each input task, submit a task to the executor that runs
+      // after the past tasks finish.
+      ts.map { t ->
+        Futures.transformAsync(
+            lsf,
+            AsyncFunction<Any?, T> { executor.submit(t) },
+            executor)
       }
-      Futures.allAsList<Any?>(builder.build())
     }
-
-    // For each input task, submit a task to the executor that runs
-    // after all the past tasks finish.
-    // Store the newly submitted task in submittedFutures.
-    val newsfs = tasks.map { task ->
-      val newsf = Futures.transformAsync(
-          allPastFuture,
-          AsyncFunction<List<Any?>, T> { executor.submit(task) },
-          executor)
-      submittedFutures.add(newsf)
-      newsf
-    }
-    val allNewFuture = Futures.allAsList<Any?>(newsfs)
+    val tmp = Futures.allAsList<Any?>(newsfs)
+    lastSubmittedFuture = tmp
 
     // Create a callback when allNewFuture finishes that
-    // 1) on success, removes all the old futures from submittedFutures or
-    // 2) on failure, marks the executor and shuts it down
+    // on failure, marks the executor and shuts it down
     // execute via directExecutor
-    Futures.addCallback(allNewFuture, object : FutureCallback<Any> {
-      override fun onSuccess(result: Any?) {
-        synchronized(this@GroupExecutor) {
-          submittedFutures.removeAll(newsfs)
-        }
-      }
-
+    Futures.addCallback(tmp, object : FutureCallback<Any> {
+      override fun onSuccess(result: Any?) { }
       override fun onFailure(t: Throwable?) {
-        synchronized(this@GroupExecutor) {
-          // if a failure already occurred, no need to record another failure
-          if (failure == null)
-            failure = t
-          submittedFutures.forEach {
-            if (!it.isDone)
-              it.cancel(true) // mayInterruptIfRunning
-          }
-          submittedFutures.clear()
-        }
+        _shutdown(t, true)
       }
     })
 
     return newsfs
   }
 
+  @Synchronized
+  private fun _shutdown(t: Throwable?, now: Boolean): List<Runnable>? {
+    shutdown = true
+    // if a failure already occurred, no need to record another failure
+    if (failure == null)
+      failure = t
+    // canceling the last submitted future propagates back and cancels them all
+    // if the last submitted future is null then nothing to cancel
+    lastSubmittedFuture?.cancel(true) // mayInterruptIfRunning
+    return when {
+      now -> executor.shutdownNow()
+      lastSubmittedFuture == null -> { executor.shutdown(); null }
+      else -> {
+        // directExecutor
+        Futures.transform(
+            Futures.allAsList<Any?>(lastSubmittedFuture),
+            com.google.common.base.Function<List<Any?>, Unit> { executor.shutdown() })
+        null
+      }
+    }
+  }
+
   /** Shortcut method to add a single task, to execute after previously submitted tasks finish. */
   fun <T> submitTask(task: Callable<T>): ListenableFuture<T> = submitParallelTasks(listOf(task)).first()
 
 
-  companion object {
-
+  private companion object {
     /** Adapted from [Callables.threadRenaming]:
      *
      * Wraps the given callable such that for the duration of [Callable.call] the thread that is
@@ -155,8 +188,7 @@ class GroupExecutor(
      *
      * Tries to set name of the given [Thread], returns true if successful.  */
     private fun trySetName(threadName: String, currentThread: Thread): Boolean = try {
-      currentThread.name = threadName
-      true
+      currentThread.name = threadName; true
     } catch (e: SecurityException) { false }
   }
 }
