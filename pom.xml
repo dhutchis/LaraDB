@@ -133,6 +133,14 @@
       <scope>test</scope>
     </dependency>
 
+    <!-- Nice lightweight logging to SLF4J -->
+    <!-- See https://github.com/MicroUtils/kotlin-logging/wiki -->
+    <dependency>
+      <groupId>io.github.microutils</groupId>
+      <artifactId>kotlin-logging</artifactId>
+      <version>1.3.3</version>
+    </dependency>
+
   </dependencies>
 
   <build>

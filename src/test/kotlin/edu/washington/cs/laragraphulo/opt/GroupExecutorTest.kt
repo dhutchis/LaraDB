@@ -1,13 +1,14 @@
 package edu.washington.cs.laragraphulo.opt
 
-import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.Uninterruptibles
+import mu.KLogging
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
 
 class GroupExecutorTest {
+  companion object: KLogging()
 
   /**
    * Tests that tasks added to a [GroupExecutor] *happen-before* tasks added afterward.
@@ -27,7 +28,7 @@ class GroupExecutorTest {
 
     class GetAndIncrementer(val id: Int): Callable<Int> {
       override fun call(): Int {
-        val c = counter.getAndIncrement(); println("id($id) saw($c)"); return c
+        val c = counter.getAndIncrement(); logger.debug{"id($id) saw($c)"}; return c
       }
     }
     val parallelFutures = ge.submitParallelTasks(listOf(
@@ -41,7 +42,7 @@ class GroupExecutorTest {
     // Due to timing (if failedFuture executed quickly), the GroupExecutor may reject this one.
     // Otherwise it will be accepted and get cancelled later on.
     val afterFailedFuture = try { ge.submitTask(GetAndIncrementer(5)) }
-    catch (e: RejectedExecutionException) { println("rejected"); null }
+    catch (e: RejectedExecutionException) { logger.debug("rejected"); null }
 
     assertEquals(0, firstFuture.get())
     assertEquals(setOf(0,1,2), parallelFutures.map { it.get() }.toSet())
