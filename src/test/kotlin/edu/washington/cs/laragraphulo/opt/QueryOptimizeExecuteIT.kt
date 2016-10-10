@@ -34,4 +34,12 @@ class QueryOptimizeExecuteIT(
     override fun toString(): String = name
   }
 
+  companion object {
+
+    val tests = {
+
+    }
+
+  }
+
 }

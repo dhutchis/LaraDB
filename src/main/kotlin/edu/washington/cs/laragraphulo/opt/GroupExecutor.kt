@@ -1,5 +1,7 @@
 package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.annotations.GwtIncompatible
+import com.google.common.base.Supplier
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.*
 
@@ -31,6 +33,11 @@ import kotlin.reflect.jvm.javaField
 class GroupExecutor(
     val daemon: Boolean
 ) {
+  /** If this is non-null, then a failure has occurred. Shutdown the GroupExecutor. */
+  @Volatile private var failure: Throwable? = null
+
+  /** Used to name each group executed by this executor. */
+  @Volatile private var groupNumber = 1
 
   /** A pool that starts with 0 threads and spins up new ones as necessary.
    * Old threads die if idle for 60s.
@@ -53,33 +60,105 @@ class GroupExecutor(
    * @return A list of futures for the tasks, in the same order as the [tasks] argument.
    */
   @Synchronized
-  fun <T> addParallelTasks(tasks: List<Callable<T>>): List<ListenableFuture<T>> {
-    if (tasks.isEmpty()) return listOf()
+  fun <T> submitParallelTasks(tasks0: List<Callable<T>>): List<ListenableFuture<T>> {
+    if (tasks0.isEmpty()) return listOf()
+
+    if (failure != null)
+      throw RejectedExecutionException("This GroupExecutor is shutdown due to", failure)
+
+    // wrap each task with a Thread rename
+    val thisGroupNumber = groupNumber.toString()
+    val tasks = tasks0.mapIndexed { idx, callable -> threadRenaming(callable, "$thisGroupNumber.$idx") }
+    groupNumber++
 
     // prune completed tasks from submittedFutures, while we copy over its contents
-    val builder = ImmutableList.builder<ListenableFuture<*>>()
-    submittedFutures.iterator().let { iter ->
-      while (iter.hasNext()) {
-        val sf = iter.next()
-        if (sf.isDone) iter.remove()
-        else builder.add(sf)
+    // most should not yet be completed
+    val allPastFuture = ImmutableList.builder<ListenableFuture<*>>().let { builder ->
+      submittedFutures.iterator().let { iter ->
+        while (iter.hasNext()) {
+          val sf = iter.next()
+          if (sf.isDone) iter.remove()
+          else builder.add(sf)
+        }
       }
+      Futures.allAsList<Any?>(builder.build())
     }
-    val pastRunningFutures = builder.build()
 
-    return tasks.map { task ->
+    // For each input task, submit a task to the executor that runs
+    // after all the past tasks finish.
+    // Store the newly submitted task in submittedFutures.
+    val newsfs = tasks.map { task ->
       val newsf = Futures.transformAsync(
-          Futures.allAsList<Any?>(pastRunningFutures),
+          allPastFuture,
           AsyncFunction<List<Any?>, T> { executor.submit(task) },
           executor)
       submittedFutures.add(newsf)
       newsf
     }
+    val allNewFuture = Futures.allAsList<Any?>(newsfs)
+
+    // Create a callback when allNewFuture finishes that
+    // 1) on success, removes all the old futures from submittedFutures or
+    // 2) on failure, marks the executor and shuts it down
+    // execute via directExecutor
+    Futures.addCallback(allNewFuture, object : FutureCallback<Any> {
+      override fun onSuccess(result: Any?) {
+        synchronized(this@GroupExecutor) {
+          submittedFutures.removeAll(newsfs)
+        }
+      }
+
+      override fun onFailure(t: Throwable?) {
+        synchronized(this@GroupExecutor) {
+          // if a failure already occurred, no need to record another failure
+          if (failure == null)
+            failure = t
+          submittedFutures.forEach {
+            if (!it.isDone)
+              it.cancel(true) // mayInterruptIfRunning
+          }
+          submittedFutures.clear()
+        }
+      }
+    })
+
+    return newsfs
   }
 
   /** Shortcut method to add a single task, to execute after previously submitted tasks finish. */
-  fun <T> addTask(task: Callable<T>): ListenableFuture<T> = addParallelTasks(listOf(task)).first()
+  fun <T> submitTask(task: Callable<T>): ListenableFuture<T> = submitParallelTasks(listOf(task)).first()
 
+
+  companion object {
+
+    /** Adapted from [Callables.threadRenaming]:
+     *
+     * Wraps the given callable such that for the duration of [Callable.call] the thread that is
+     * running will have the given name.
+     * @param callable The callable to wrap
+     * @param newName New thread name
+     */
+    private fun <T> threadRenaming(callable: Callable<T>, newName: String): Callable<T> = Callable {
+      val currentThread = Thread.currentThread()
+      val oldName = currentThread.name
+      val restoreName = trySetName(newName, currentThread)
+      try {
+        return@Callable callable.call()
+      } finally {
+        if (restoreName) {
+          trySetName(oldName, currentThread)
+        }
+      }
+    }
+
+    /** From [Callables.trySetName]:
+     *
+     * Tries to set name of the given [Thread], returns true if successful.  */
+    private fun trySetName(threadName: String, currentThread: Thread): Boolean = try {
+      currentThread.name = threadName
+      true
+    } catch (e: SecurityException) { false }
+  }
 }
 
 
