@@ -28,6 +28,16 @@ import kotlin.reflect.jvm.javaField
 
 /**
  * Similar to an [ExecutorService]. Executes tasks submitted in parallel groups.
+ * Tasks within a group execute in parallel; tasks in separate groups execute serially.
+ *
+ * Each task executes in a thread named "1.1", "1.2", etc. in the first group;
+ * "2.1", "2.2" in the second group; etc.
+ *
+ * When one task fails, all tasks halt / are cancelled, and this executor shuts down.
+ * The cause of the failure is recorded in [failure].
+ * It may be shut down manually before that; check [shutdown] to see if the executor is alive.
+ * Attempting to add a task after the executor shuts down results in a [RejectedExecutionException].
+ *
  * @param daemon If true then the threads in the pool are marked daemon and are terminated after the main application terminates.
  * */
 class GroupExecutor(
@@ -42,8 +52,10 @@ class GroupExecutor(
   @Volatile var failure: Throwable? = null
     private set
 
-  /** Used to name each group executed by this executor. */
-  @Volatile private var groupsExecuted = 0
+  /** How many groups were submitted to this executor so far.
+   * Used to name each group executed by this executor. */
+  @Volatile var groupsSubmitted = 0
+    private set
 
   /** A pool that starts with 0 threads and spins up new ones as necessary.
    * Old threads die if idle for 60s.
@@ -89,6 +101,7 @@ class GroupExecutor(
    * Or call [Future.get] on each future to wait for them to complete.
    *
    * @return A list of futures for the tasks, in the same order as the [tasks] argument.
+   * @throws RejectedExecutionException If the executor is [shutdown].
    */
   @Synchronized
   fun <T> submitParallelTasks(tasks: List<Callable<T>>): List<ListenableFuture<T>> {
@@ -102,9 +115,9 @@ class GroupExecutor(
     }
 
     // wrap each task with a Thread rename
-    groupsExecuted++
-    val thisGroupNumber = groupsExecuted.toString()
-    val ts = tasks.mapIndexed { idx, callable -> threadRenaming(callable, "$thisGroupNumber.$idx") }
+    groupsSubmitted++
+    val thisGroupNumber = groupsSubmitted.toString()
+    val ts = tasks.mapIndexed { idx, callable -> threadRenaming(callable, "GroupExecutor $thisGroupNumber.$idx") }
 
     val lsf = lastSubmittedFuture // safe to cache because synchronized
     @Suppress("UNCHECKED_CAST") // guaranteed by invokeAll contract
@@ -159,7 +172,8 @@ class GroupExecutor(
     }
   }
 
-  /** Shortcut method to add a single task, to execute after previously submitted tasks finish. */
+  /** Shortcut method to add a single task, to execute after previously submitted tasks finish.
+   * See [submitParallelTasks]. */
   fun <T> submitTask(task: Callable<T>): ListenableFuture<T> = submitParallelTasks(listOf(task)).first()
 
 
