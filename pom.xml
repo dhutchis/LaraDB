@@ -41,6 +41,14 @@
 
 
   <repositories>
+    <!-- For kotlinx-support-jdk8 -->
+    <repository>
+      <snapshots><enabled>false</enabled></snapshots>
+      <id>jcenter</id>
+      <name>bintray</name>
+      <url>http://jcenter.bintray.com</url>
+    </repository>
+
     <repository>
       <id>kotlin-eap-1.1</id>
       <name>Kotlin 1.1 EAP</name>
