@@ -156,11 +156,14 @@ class GroupExecutor(
     // if a failure already occurred, no need to record another failure
     if (failure == null)
       failure = t
-    // canceling the last submitted future propagates back and cancels them all
-    // if the last submitted future is null then nothing to cancel
-    lastSubmittedFuture?.cancel(true) // mayInterruptIfRunning
+
     return when {
-      now -> executor.shutdownNow()
+      now -> {
+        // canceling the last submitted future propagates back and cancels them all
+        // if the last submitted future is null then nothing to cancel
+        lastSubmittedFuture?.cancel(true) // mayInterruptIfRunning
+        executor.shutdownNow()
+      }
       lastSubmittedFuture == null -> { executor.shutdown(); null }
       else -> {
         // directExecutor

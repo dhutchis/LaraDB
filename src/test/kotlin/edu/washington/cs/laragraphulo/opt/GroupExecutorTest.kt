@@ -53,7 +53,7 @@ class GroupExecutorTest {
       // verify that no code runs after a task fails occurs
       // tasks submitted after a failure should be cancelled
       try { afterFailedFuture.get(); fail() }
-      catch (e: CancellationException) { }
+      catch (e: CancellationException) { logger.debug("cancelled") }
     }
     assertEquals(4, counter.get())
     assertTrue(ge.shutdown)
@@ -67,4 +67,34 @@ class GroupExecutorTest {
     catch (e: RejectedExecutionException) { }
   }
 
+  /** A [GroupExecutor] should not cancel tasks when called with [GroupExecutor.shutdown]. */
+  @Test
+  fun testGroupExecutorShutdown() {
+    val ge = GroupExecutor(false)
+    val t1 = ge.submitTask(Callable { Uninterruptibles.sleepUninterruptibly(200, TimeUnit.MILLISECONDS); 1 })
+    val t2 = ge.submitTask(Callable { 2 })
+    ge.shutdown()
+    try { ge.submitTask(Callable { -1 }); fail() }
+    catch (e: RejectedExecutionException) { }
+    assertEquals(1, t1.get())
+    assertEquals(2, t2.get())
+  }
+
+  /** A [GroupExecutor] should cancel tasks when called with [GroupExecutor.shutdownNow]. */
+  @Test
+  fun testGroupExecutorShutdownNow() {
+    val ge = GroupExecutor(false)
+    val t1 = ge.submitTask(Callable {
+      Uninterruptibles.sleepUninterruptibly(1, TimeUnit.SECONDS)
+      Thread.yield()
+      Uninterruptibles.sleepUninterruptibly(10, TimeUnit.SECONDS)
+      1
+    })
+    val t2 = ge.submitTask(Callable { 2 })
+    ge.shutdownNow()
+    try { t1.get(); fail() }
+    catch (e: CancellationException) { }
+    try { t2.get(); fail() }
+    catch (e: CancellationException) { }
+  }
 }
