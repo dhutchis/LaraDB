@@ -1,14 +1,17 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.util.concurrent.Uninterruptibles
-import mu.KLogging
+import edu.washington.cs.laragraphulo.*
 import org.junit.Assert.*
 import org.junit.Test
+import org.slf4j.Logger
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicInteger
 
 class GroupExecutorTest {
-  companion object: KLogging()
+  companion object: Loggable {
+    override val logger: Logger = logger<GroupExecutorTest>()
+  }
 
   /**
    * Tests that tasks added to a [GroupExecutor] *happen-before* tasks added afterward.

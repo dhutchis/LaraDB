@@ -4,6 +4,8 @@ import com.google.common.base.Preconditions
 import com.google.common.collect.BoundType
 import com.google.common.collect.ImmutableRangeSet
 import com.google.common.collect.RangeSet
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.opt.D4mRangeFilter
 import edu.washington.cs.laragraphulo.opt.DynamicIteratorSetting
 import org.apache.accumulo.core.client.*
@@ -17,6 +19,7 @@ import org.apache.accumulo.core.iterators.user.ColumnSliceFilter
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.WritableComparator
 import org.apache.log4j.LogManager
+import org.slf4j.Logger
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.*
@@ -39,8 +42,8 @@ data class SeekData (
 /**
  * Utility functions
  */
-object GraphuloUtil {
-  private val log = LogManager.getLogger(GraphuloUtil::class.java)
+object GraphuloUtil : Loggable {
+  override val logger: Logger = logger<GraphuloUtil>()
 
   val DEFAULT_SEP_D4M_STRING = '\t'
   private val EMPTY_TEXT = Text()
@@ -875,13 +878,13 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
       try {
         connector.tableOperations().create(table)
       } catch (e: AccumuloException) {
-        log.error("trouble creating " + table, e)
+        logger.error("trouble creating " + table, e)
         throw RuntimeException(e)
       } catch (e: AccumuloSecurityException) {
-        log.error("trouble creating " + table, e)
+        logger.error("trouble creating " + table, e)
         throw RuntimeException(e)
       } catch (e: TableExistsException) {
-        log.error("crazy", e)
+        logger.error("crazy", e)
         throw RuntimeException(e)
       }
 
@@ -891,7 +894,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
     try {
       bw = connector.createBatchWriter(table, bwc)
     } catch (e: TableNotFoundException) {
-      log.error("tried to write to a non-existant table " + table, e)
+      logger.error("tried to write to a non-existant table " + table, e)
       throw RuntimeException(e)
     }
 
@@ -906,13 +909,13 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
       }
 
     } catch (e: MutationsRejectedException) {
-      log.error("mutations rejected", e)
+      logger.error("mutations rejected", e)
       throw RuntimeException(e)
     } finally {
       try {
         bw.close()
       } catch (e: MutationsRejectedException) {
-        log.error("mutations rejected while trying to close BatchWriter", e)
+        logger.error("mutations rejected while trying to close BatchWriter", e)
       }
 
     }
@@ -926,10 +929,10 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
       val ss = TreeSet(splits)
       tops.addSplits(t2, ss)
     } catch (e: TableNotFoundException) {
-      log.error("cannot handle splits copying from $t1 to $t2", e)
+      logger.error("cannot handle splits copying from $t1 to $t2", e)
       throw RuntimeException(e)
     } catch (e: AccumuloSecurityException) {
-      log.error("cannot handle splits copying from $t1 to $t2", e)
+      logger.error("cannot handle splits copying from $t1 to $t2", e)
       throw RuntimeException(e)
     }
 
@@ -944,13 +947,13 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
         try {
           tops.delete(tn)
         } catch (e: AccumuloException) {
-          log.error("Problem deleing temporary table " + tn, e)
+          logger.error("Problem deleing temporary table " + tn, e)
           throw RuntimeException(e)
         } catch (e: AccumuloSecurityException) {
-          log.error("Problem deleing temporary table " + tn, e)
+          logger.error("Problem deleing temporary table " + tn, e)
           throw RuntimeException(e)
         } catch (e: TableNotFoundException) {
-          log.error("crazy", e)
+          logger.error("crazy", e)
           throw RuntimeException(e)
         }
 

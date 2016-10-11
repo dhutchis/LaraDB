@@ -160,7 +160,7 @@ class MergerTest(
 
 
   companion object {
-//    private val log = LogManager.getLogger(MergerTest::class.java)
+//    private val log = LogManager.logger(MergerTest::class.java)
 
     fun <T> assertIteratorsEqual(i1: Iterator<T>, i2: Iterator<T>) {
       while (i1.hasNext()) {

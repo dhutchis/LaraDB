@@ -135,7 +135,7 @@ where S : KVSchema, S : TypeSchema {
   // __TS
   // __FAMILY__
   val keyidx = ep.keyNames.indexOf(name)
-  val lexicoder = ep.types[allidx] ?: Type.STRING
+  val lexicoder = ep.types[allidx]
   return if (keyidx == -1) {
     // value attribute
     // use default reducer for now

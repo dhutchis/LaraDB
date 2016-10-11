@@ -264,7 +264,7 @@ open class EPropMap<L> {
       val (nlow, nhigh) = if (n1.backset.size < n2.backset.size) Pair(n1, n2) else Pair(n2, n1)
       nlow.ptr = nhigh// path compression: connect directly to end node, decrementing ranks of middle nodes
       nhigh.backset.addAll(nlow.backset)
-      if (nlow.content == null) ;
+      if (nlow.content == null)
       else if (nhigh.content == null) {
         nhigh.content = nlow.content
         nlow.content = null

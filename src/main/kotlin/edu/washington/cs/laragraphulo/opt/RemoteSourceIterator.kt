@@ -3,17 +3,11 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
-import org.apache.accumulo.core.client.AccumuloException
-import org.apache.accumulo.core.client.AccumuloSecurityException
-import org.apache.accumulo.core.client.ClientConfiguration
-import org.apache.accumulo.core.client.ClientSideIteratorScanner
-import org.apache.accumulo.core.client.Connector
-import org.apache.accumulo.core.client.Instance
-import org.apache.accumulo.core.client.IteratorSetting
+import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.Scanner
-import org.apache.accumulo.core.client.TableNotFoundException
-import org.apache.accumulo.core.client.ZooKeeperInstance
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.ByteSequence
@@ -24,15 +18,9 @@ import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.accumulo.core.iterators.user.WholeRowIterator
 import org.apache.accumulo.core.security.Authorizations
-import org.apache.log4j.LogManager
-import org.apache.log4j.Logger
-
 import java.io.IOException
 import java.nio.charset.StandardCharsets
-import java.util.Collections
-import java.util.HashMap
-import java.util.SortedSet
-import java.util.TreeSet
+import java.util.*
 
 /**
  * Reads from a remote Accumulo table.
@@ -107,7 +95,7 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
           ROWRANGES -> rowRanges = parseRanges(optionValue)
           COLFILTER -> colFilter = optionValue //GraphuloUtil.d4mRowToTexts(optionValue);
           DOCLIENTSIDEITERATORS -> doClientSideIterators = java.lang.Boolean.parseBoolean(optionValue)
-          else -> log.warn("Unrecognized option: " + optionEntry)
+          else -> logger.warn("Unrecognized option: " + optionEntry)
         }
       }
       //      log.trace("Option OK: " + optionEntry);
@@ -133,13 +121,13 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
   @Throws(IOException::class)
   override fun init(source: SortedKeyValueIterator<Key, Value>?, map: Map<String, String>, iteratorEnvironment: IteratorEnvironment) {
     if (source != null)
-      log.warn("RemoteSourceIterator ignores/replaces parent source passed in init(): " + source)
+      logger.warn("RemoteSourceIterator ignores/replaces parent source passed in init(): " + source)
     origOptions = HashMap(map) // defensive copy
 
     parseOptions(map)
     setupConnectorScanner()
 
-    log.debug("RemoteSourceIterator on table $tableName: init() succeeded")
+    logger.debug("RemoteSourceIterator on table $tableName: init() succeeded")
   }
 
   private fun setupConnectorScanner() {
@@ -151,17 +139,17 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
     try {
       connector = instance.getConnector(username, auth)
     } catch (e: AccumuloException) {
-      log.error("failed to connect to Accumulo instance " + instanceName!!, e)
+      logger.error("failed to connect to Accumulo instance " + instanceName!!, e)
       throw RuntimeException(e)
     } catch (e: AccumuloSecurityException) {
-      log.error("failed to connect to Accumulo instance " + instanceName!!, e)
+      logger.error("failed to connect to Accumulo instance " + instanceName!!, e)
       throw RuntimeException(e)
     }
 
     try {
       scanner = connector.createScanner(tableName, authorizations)
     } catch (e: TableNotFoundException) {
-      log.error(tableName + " does not exist in instance " + instanceName, e)
+      logger.error(tableName + " does not exist in instance " + instanceName, e)
       throw RuntimeException(e)
     }
 
@@ -182,6 +170,7 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
 
   }
 
+  @Suppress("ProtectedInFinal", "unused")
   @Throws(Throwable::class)
   protected fun finalize() {
     scanner!!.close()
@@ -189,7 +178,7 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
 
   @Throws(IOException::class)
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
-    log.debug("RemoteSourceIterator on table $tableName: seek(): $range")
+    logger.debug("RemoteSourceIterator on table $tableName: seek(): $range")
     /** configure Scanner to the first entry to inject after the start of the range.
      * Range comparison: infinite start first, then inclusive start, then exclusive start
      * [org.apache.accumulo.core.data.Range.compareTo]  */
@@ -256,15 +245,15 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
     try {
       copy.init(null, origOptions!!, iteratorEnvironment)
     } catch (e: IOException) {
-      log.error("Problem creating deepCopy of RemoteSourceIterator on table " + tableName!!, e)
+      logger.error("Problem creating deepCopy of RemoteSourceIterator on table " + tableName!!, e)
       throw RuntimeException(e)
     }
 
     return copy
   }
 
-  companion object {
-    private val log = LogManager.getLogger(RemoteSourceIterator::class.java)
+  companion object : Loggable {
+    override val logger: org.slf4j.Logger = logger<RemoteSourceIterator>()
 
     val ZOOKEEPERHOST = "zookeeperHost"
     val TIMEOUT = "timeout"

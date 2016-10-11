@@ -1,5 +1,7 @@
 package edu.washington.cs.laragraphulo.opt
 
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
@@ -38,7 +40,7 @@ class DynamicIterator : WrappingIterator() {
     if (doit)
       source = dis.loadIteratorStack(source, env)
     else
-      log.debug("Not applying this DynamicIterator " + dis.diName + "; scope " + env.iteratorScope + " is not permitted")
+      logger.debug("Not applying this DynamicIterator " + dis.diName + "; scope " + env.iteratorScope + " is not permitted")
     setSource(source)
   }
 
@@ -48,7 +50,7 @@ class DynamicIterator : WrappingIterator() {
     return copy
   }
 
-  companion object {
-    private val log = LogManager.getLogger(DynamicIterator::class.java)
+  companion object : Loggable {
+    override val logger: org.slf4j.Logger = logger<DynamicIterator>()
   }
 }

@@ -1,5 +1,7 @@
 package edu.washington.cs.laragraphulo.util
 
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.Connector
 import org.apache.accumulo.core.client.MutationsRejectedException
@@ -17,6 +19,7 @@ import org.apache.accumulo.core.security.Authorizations
 import org.apache.hadoop.io.Text
 import org.apache.log4j.LogManager
 import org.junit.Assert
+import org.slf4j.Logger
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.*
@@ -26,8 +29,8 @@ import java.util.*
 /**
  * Helper methods for testing.
  */
-object TestUtil {
-  private val log = LogManager.getLogger(TestUtil::class.java)
+object TestUtil : Loggable {
+  override val logger: Logger = logger<TestUtil>()
 
   fun <T> List<T>.checkSorted(comparator: Comparator<T>, msg: String = "The list is not sorted") {
     val sl = ArrayList(this)
@@ -77,7 +80,7 @@ object TestUtil {
         try {
           writer.close()
         } catch (e1: MutationsRejectedException) {
-          log.error("rejected mutations; last one added is " + m!!, e1)
+          logger.error("rejected mutations; last one added is " + m!!, e1)
         }
 
       }

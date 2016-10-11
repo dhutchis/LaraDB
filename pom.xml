@@ -133,19 +133,19 @@
       <scope>test</scope>
     </dependency>
 
-    <!-- Nice lightweight logging to SLF4J -->
-    <!-- See https://github.com/MicroUtils/kotlin-logging/wiki -->
-    <dependency>
-      <groupId>io.github.microutils</groupId>
-      <artifactId>kotlin-logging</artifactId>
-      <version>1.3.3</version>
-    </dependency>
-
     <!-- Override slf4j binding from Accumulo/Hadoop -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-log4j12</artifactId>
       <version>1.7.21</version>
+    </dependency>
+
+    <!-- For integration tests -->
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-minicluster</artifactId>
+      <version>${accumulo.version}</version>
+      <scope>test</scope>
     </dependency>
 
   </dependencies>

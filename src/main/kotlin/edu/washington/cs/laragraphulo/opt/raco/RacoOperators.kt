@@ -47,13 +47,13 @@ sealed class RacoExpression(args: List<Op<*>> = emptyList()): Op<Unit>(args) {
 
   data class NamedAttributeRef(val attributename: Name): RacoExpression(attributename.toObj()) {
     override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
-      val enc = props.types[props.allNames.indexOf(attributename)] ?: throw UnsupportedOperationException("no encoder / type information for attribute $attributename")
+      val enc = props.types[props.allNames.indexOf(attributename)]
       return enc
     }
   }
   data class UnnamedAttributeRef(val position: Int, val debug_info: Any?): RacoExpression(position.toObj(), debug_info.toObj()) {
     override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
-      val enc = props.types[position] ?: throw UnsupportedOperationException("no encoder / type information for attribute #$position")
+      val enc = props.types[position]
       return enc
     }
   }

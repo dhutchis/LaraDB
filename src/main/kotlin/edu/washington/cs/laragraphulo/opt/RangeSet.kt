@@ -91,8 +91,8 @@ class RangeSet {
       val iter = Iterators.peekingIterator(rowRanges.iterator())
       val seekRangeStart = seekRange.startKey
       if (seekRangeStart != null)
-        while (iter.hasNext() && !iter.peek().isInfiniteStopKey()
-            && (iter.peek().getEndKey().compareTo(seekRangeStart) < 0 || iter.peek().getEndKey().equals(seekRangeStart) && !seekRange.isEndKeyInclusive))
+        while (iter.hasNext() && !iter.peek().isInfiniteStopKey
+            && (iter.peek().endKey.compareTo(seekRangeStart) < 0 || iter.peek().endKey.equals(seekRangeStart) && !seekRange.isEndKeyInclusive))
           iter.next()
       return iter
     }

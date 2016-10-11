@@ -1,6 +1,8 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.ScannerBase
@@ -108,7 +110,7 @@ class DynamicIteratorSetting @JvmOverloads constructor(var diPriority: Int, diNa
     val map = HashMap<String, String>()
     map.put(pre + "0.diPriority", Integer.toString(diPriority)) // 0.diPriority -> 7
     map.put(pre + "0.diName", diName)                           // 0.diName -> DynamicIterator
-    map.put(pre + "0.diScopes", MyIteratorScope!!.scopesToD4mString(diScopes))
+    map.put(pre + "0.diScopes", MyIteratorScope.scopesToD4mString(diScopes))
     var prio = 1
     for (setting in iteratorSettingList) {
       val prefix = pre + prio + "." + setting.name + "."
@@ -171,8 +173,8 @@ class DynamicIteratorSetting @JvmOverloads constructor(var diPriority: Int, diNa
     return source
   }
 
-  companion object {
-    private val log = LogManager.getLogger(DynamicIteratorSetting::class.java)
+  companion object : Loggable {
+    override val logger: org.slf4j.Logger = logger<DynamicIteratorSetting>()
 
 
     /** Prefix is "".

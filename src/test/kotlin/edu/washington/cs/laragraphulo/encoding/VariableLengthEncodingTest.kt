@@ -39,10 +39,10 @@ class VariableLengthEncodingTest {
           ba2[0] = a.toByte()
           for (b in -3..3) {
             ba2[1] = b.toByte()
-            val c1 = WritableComparator.compareBytes(ba1,0,2,ba2,0,2);
+            val c1 = WritableComparator.compareBytes(ba1,0,2,ba2,0,2)
             val es1 = ByteBufferUtil.toBytes(escape(ba1))
             val es2 = ByteBufferUtil.toBytes(escape(ba2))
-            val c2 = WritableComparator.compareBytes(es1,0,es1.size,es2,0,es2.size);
+            val c2 = WritableComparator.compareBytes(es1,0,es1.size,es2,0,es2.size)
             val or1 = ByteBufferUtil.toBytes(unescape(es1))
             val or2 = ByteBufferUtil.toBytes(unescape(es2))
             Assert.assertArrayEquals(ba1, or1)

@@ -1,49 +1,26 @@
 package edu.washington.cs.laragraphulo.opt
 
 
-import com.google.common.base.Preconditions
 import com.google.common.base.Strings
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
-import org.apache.accumulo.core.client.AccumuloException
-import org.apache.accumulo.core.client.AccumuloSecurityException
-import org.apache.accumulo.core.client.BatchWriter
-import org.apache.accumulo.core.client.BatchWriterConfig
-import org.apache.accumulo.core.client.ClientConfiguration
-import org.apache.accumulo.core.client.Connector
-import org.apache.accumulo.core.client.Instance
-import org.apache.accumulo.core.client.MultiTableBatchWriter
-import org.apache.accumulo.core.client.MutationsRejectedException
-import org.apache.accumulo.core.client.TableNotFoundException
-import org.apache.accumulo.core.client.ZooKeeperInstance
+import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
-import org.apache.accumulo.core.data.ByteSequence
-import org.apache.accumulo.core.data.Key
-import org.apache.accumulo.core.data.Mutation
-import org.apache.accumulo.core.data.PartialKey
-import org.apache.accumulo.core.data.Range
-import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.OptionDescriber
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.hadoop.io.Text
-import org.apache.log4j.LogManager
-import org.apache.log4j.Logger
-
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util.Arrays
-import java.util.Collections
-import java.util.HashMap
-import java.util.LinkedHashMap
-import java.util.SortedSet
-import java.util.TreeSet
-import java.util.concurrent.atomic.AtomicInteger
-
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * SKVI that writes to an Accumulo table.
@@ -185,7 +162,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
         //            break;
 
           OPT_BATCHWRITERTHREADS -> batchWriterThreads = Integer.parseInt(optionValue)
-          else -> log.warn("Unrecognized option: " + optionEntry)
+          else -> logger.warn("Unrecognized option: " + optionEntry)
         }
       }
     }
@@ -246,10 +223,10 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
     try {
       connector = instance.getConnector(username, auth)
     } catch (e: AccumuloException) {
-      log.error("failed to connect to Accumulo instance " + instanceName!!, e)
+      logger.error("failed to connect to Accumulo instance " + instanceName!!, e)
       throw RuntimeException(e)
     } catch (e: AccumuloSecurityException) {
-      log.error("failed to connect to Accumulo instance " + instanceName!!, e)
+      logger.error("failed to connect to Accumulo instance " + instanceName!!, e)
       throw RuntimeException(e)
     }
 
@@ -268,21 +245,22 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
       if (tableNameTranspose != null)
         writerTranspose = if (writerAll == null) connector.createBatchWriter(tableNameTranspose, bwc) else writerAll!!.getBatchWriter(tableNameTranspose)
     } catch (e: TableNotFoundException) {
-      log.error("$tableName or $tableNameTranspose does not exist in instance $instanceName", e)
+      logger.error("$tableName or $tableNameTranspose does not exist in instance $instanceName", e)
       throw RuntimeException(e)
     } catch (e: AccumuloSecurityException) {
-      log.error("problem creating BatchWriters for $tableName and $tableNameTranspose")
+      logger.error("problem creating BatchWriters for $tableName and $tableNameTranspose")
       throw RuntimeException(e)
     } catch (e: AccumuloException) {
-      log.error("problem creating BatchWriters for $tableName and $tableNameTranspose")
+      logger.error("problem creating BatchWriters for $tableName and $tableNameTranspose")
       throw RuntimeException(e)
     }
 
   }
 
+  @Suppress("ProtectedInFinal", "unused")
   @Throws(Throwable::class)
   protected fun finalize() {
-    log.info("finalize() RemoteWriteIterator " + tableName!!)
+    logger.info("finalize() RemoteWriteIterator " + tableName!!)
     //    System.out.println("finalize() RemoteWriteIterator " + tableName);
     if (writerAll != null)
       writerAll!!.close()
@@ -296,7 +274,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
 
   @Throws(IOException::class)
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
-    log.debug("RemoteWrite on table $tableName / $tableNameTranspose seek(): $range")
+    logger.debug("RemoteWrite on table $tableName / $tableNameTranspose seek(): $range")
     //System.out.println("RW passed seek " + r + "(thread " + Thread.currentThread().getName() + ")");
 
     reducer.reset()
@@ -319,7 +297,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
       try {
         numToSkip = Integer.parseInt(String(rangeStartVis, UTF_8))
         if (numToSkip > 0)
-          log.info("Detected Iterator Recovery! Skipping $numToSkip ranges.")
+          logger.info("Detected Iterator Recovery! Skipping $numToSkip ranges.")
       } catch (ignored: NumberFormatException) {
       }
 
@@ -343,14 +321,14 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
         if (doSeekNext) {
           val thisTargetRange = rowRangeIterator!!.peek()
           assert(thisTargetRange.clip(seekRange, true) != null) {"problem with RangeSet iterator intersecting seekRange"}
-          if (thisTargetRange.getStartKey() != null && thisTargetRange.getStartKey().compareTo(lastSafeKey) > 0) {
+          if (thisTargetRange.startKey != null && thisTargetRange.startKey.compareTo(lastSafeKey) > 0) {
             // enforce timestamp == numRowRangesIterated
-            val sk = thisTargetRange.getStartKey()
-            lastSafeKey = Key(sk.getRow(), sk.getColumnFamily(), sk.getColumnQualifier(),
+            val sk = thisTargetRange.startKey
+            lastSafeKey = Key(sk.row, sk.columnFamily, sk.columnQualifier,
                 Text(Strings.padStart(Integer.toString(numRowRangesIterated), rowRangesSizeWidth, '0').toByteArray()))
           }
           //          System.out.println(thisInst+" changing lastSafeKey to: "+lastSafeKey);
-          log.debug("RemoteWrite actual seek " + thisTargetRange)// + "(thread " + Thread.currentThread().getName() + ")");
+          logger.debug("RemoteWrite actual seek " + thisTargetRange)// + "(thread " + Thread.currentThread().getName() + ")");
           // We could use the 10x next() heuristic here...
           //          if (!initialSeek)
           //          seekNextHeuristic(thisTargetRange);
@@ -381,7 +359,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
               writerTranspose!!.flush()
           }
         } catch (e: MutationsRejectedException) {
-          log.warn("ignoring rejected mutations; ", e)
+          logger.warn("ignoring rejected mutations; ", e)
         }
 
         //        finally {
@@ -417,7 +395,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
           writer!!.addMutation(m)
         } catch (e: MutationsRejectedException) {
           numRejects++
-          log.warn("rejected mutations #$numRejects; last one added is $m", e)
+          logger.warn("rejected mutations #$numRejects; last one added is $m", e)
         }
 
         //        finally {
@@ -433,7 +411,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
           writerTranspose!!.addMutation(m)
         } catch (e: MutationsRejectedException) {
           numRejects++
-          log.warn("rejected mutations #$numRejects; last one added is $m", e)
+          logger.warn("rejected mutations #$numRejects; last one added is $m", e)
         }
 
         //        finally {
@@ -544,15 +522,15 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
     try {
       copy.init(source!!.deepCopy(iteratorEnvironment), origOptions, iteratorEnvironment)
     } catch (e: IOException) {
-      log.error("Problem creating deepCopy of RemoteWriteIterator on table " + tableName!!, e)
+      logger.error("Problem creating deepCopy of RemoteWriteIterator on table " + tableName!!, e)
       throw RuntimeException(e)
     }
 
     return copy
   }
 
-  companion object {
-    private val log = LogManager.getLogger(RemoteWriteIterator::class.java)
+  companion object : Loggable {
+    override val logger: org.slf4j.Logger = logger<RemoteWriteIterator>()
 
     private val instCnt = AtomicInteger(0)
 
@@ -673,10 +651,10 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
       if (reducer != null && bb.hasRemaining()) {
         val rest = ByteArray(bb.remaining())
         if (Arrays.equals(REJECT_MESSAGE, rest)) {
-          log.error("mutations rejected at server!")
+          logger.error("mutations rejected at server!")
         } else {
           bb.get(rest)
-          reducer!!.combine(rest)
+          reducer.combine(rest)
         }
       }
       return numEntries

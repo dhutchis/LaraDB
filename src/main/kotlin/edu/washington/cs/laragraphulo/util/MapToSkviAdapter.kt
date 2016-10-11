@@ -2,10 +2,12 @@ package edu.washington.cs.laragraphulo.util
 
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
-import org.apache.log4j.LogManager
+import org.slf4j.Logger
 import java.util.*
 
 /**
@@ -17,18 +19,17 @@ class MapToSkviAdapter(
     val origMap: SortedMap<Key, Value>
 ) : SortedKeyValueIterator<Key, Value>
 {
-  private val log = LogManager.getLogger(MapToSkviAdapter::class.java)
 
-//  companion object {
-//    private val EMPTY_ITER = Iterators.peekingIterator<Map.Entry<Key,Value>>(Collections.emptyIterator())
-//  }
+  companion object : Loggable {
+    override val logger: Logger = logger<MapToSkviAdapter>()
+  }
 
   private lateinit var inner: PeekingIterator<Map.Entry<Key, Value>>
   private lateinit var seekData: SeekData
 
   override fun init(source: SortedKeyValueIterator<Key, Value>?, options: Map<String, String>, env: IteratorEnvironment) {
     if (source != null)
-      log.warn("MapToSkviAdapter ignores/replaces parent source passed in init(): " + source)
+      logger.warn("MapToSkviAdapter ignores/replaces parent source passed in init(): " + source)
   }
 
   override fun deepCopy(env: IteratorEnvironment): MapToSkviAdapter {
