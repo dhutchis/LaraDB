@@ -66,6 +66,15 @@ sealed class RacoExpression(args: List<Op<*>> = emptyList()): Op<Unit>(args) {
       return t
     }
   }
+
+  data class DIVIDE(val left: RacoExpression, val right: RacoExpression): RacoExpression(left, right) {
+    override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
+      val t = left.getType(props)
+      if (t != right.getType(props))
+        throw RuntimeException("types mismatch: $t and ${right.getType(props)}. This might be fixable by type upcasting")
+      return t
+    }
+  }
 }
 
 
@@ -108,6 +117,8 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                 RacoExpression.UnnamedAttributeRef(((pa[0] as PTree.PLong).v.toInt()),
                   debug_info = null
                 ) }
+              "PLUS" -> { AAL(2); RacoExpression.PLUS(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
+              "DIVIDE" -> { AAL(2); RacoExpression.DIVIDE(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
               "Scan" -> { AAL(4); Scan(
                   relationKey = PPT(pa[0]) as RelationKey,
                   scheme = (schemeToMap(pa[1] as PTree.PNode)),

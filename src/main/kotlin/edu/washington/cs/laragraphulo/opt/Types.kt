@@ -19,6 +19,26 @@ sealed class Type<T> : LexicoderPlus<T> {
   fun decodeToLong(expr: Expr<ABS>): Expr<Long> = // would this fail at compile-time or run-time?
       UnaryExpr(expr) { typeToLong(decode(it.backingArray, it.offset(), it.length())) }
 
+  /*
+  It is necessary to override equals()/hashCode(), even though every Type<> is a singleton object,
+  because the objects are serialized and transmitted to a foreign JVM.
+  In the foreign JVM the de-serialized objects are not necessarily identically equal to the singleton static objects.
+  equals() and hashCode() force them to.
+   */
+  override fun equals(other: Any?): Boolean{
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as Type<*>
+
+    return true
+  }
+
+  override fun hashCode(): Int{
+    return javaClass.hashCode()
+  }
+
+
   /**  */
   object UNKNOWN : Type<ABS>() {
     override fun encode(v: ABS): ByteArray = v.toArray()

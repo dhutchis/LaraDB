@@ -122,6 +122,68 @@ fun racoExprToExpr(
       }.toABS()
       })
   }
+
+  is RacoExpression.DIVIDE -> {
+    val t = re.getType(ep)
+    // use this when we are ready to implement type down-casting
+//    val tl = re.left.getType(ep)
+//    val tr = re.right.getType(ep)
+    BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), { left: ArrayByteSequence, right: ArrayByteSequence ->
+      fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
+      println("                 Type is $t, left is $left, right is $right")
+      System.err.println("                 Type is $t, left is $left, right is $right")
+      when (t) {
+        Type.INT -> {
+          t as Type.INT // compiler ought to be able to infer this; report bug
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.INT_VARIABLE -> {
+          t as Type.INT_VARIABLE
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.BOOLEAN -> {
+          t as Type.BOOLEAN
+          t.encode(left.dec(t) || right.dec(t))
+        }
+        Type.LONG -> {
+          t as Type.LONG
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.LONG_VARIABLE -> {
+          t as Type.LONG_VARIABLE
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.DOUBLE -> {
+          t as Type.DOUBLE
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.DOUBLE_VARIABLE -> {
+          t as Type.DOUBLE_VARIABLE
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.FLOAT -> {
+          t as Type.FLOAT
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.FLOAT_VARIABLE -> {
+          t as Type.FLOAT
+          t.encode(left.dec(t) / right.dec(t))
+        }
+        Type.STRING -> {
+          t as Type.STRING
+          throw IllegalArgumentException("Don't know how to divide strings")
+        }
+        Type.UNKNOWN -> {
+//            t as Type.UNKNOWN
+          println("Warning! UNKNOWN type PLUS")
+          val bs = ByteArray(left.length()+right.length())
+          System.arraycopy(left.backingArray,left.offset(),bs,0,left.length())
+          System.arraycopy(right.backingArray,right.offset(),bs,left.length(),right.length())
+          bs
+        }
+      }.toABS()
+    })
+  }
 }
 
 fun ByteArray.toABS() = ArrayByteSequence(this)

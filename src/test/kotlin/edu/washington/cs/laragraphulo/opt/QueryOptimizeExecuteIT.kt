@@ -111,7 +111,7 @@ class QueryOptimizeExecuteIT(
             "('sTos', 'INT_TYPE')," +
             "('dTos', 'INT_TYPE')," +
             "('TotPkts', 'INT_TYPE')," +
-            "('TotBytes', 'INT_TYPE')," +
+            "('TotBytes', 'DOUBLE_TYPE')," +
             "('SrcBytes', 'INT_TYPE')," +
             "('Label', 'STRING_TYPE')" +
             "]), {'skip': 1})"
@@ -138,7 +138,7 @@ class QueryOptimizeExecuteIT(
                     "('$__LAP__', NumericLiteral(0))," +
                     "('SrcAddr', NamedAttributeRef('DstAddr'))," +
                     "('DstAddr', NamedAttributeRef('DstAddr'))," +
-                    "('RATE', NamedAttributeRef('DstAddr'))," +
+                    "('RATE', DIVIDE(NamedAttributeRef('TotBytes'), NamedAttributeRef('Dur')))," +
                     "('Dur', NamedAttributeRef('Dur'))," +
                     "('Dir', NamedAttributeRef('Dir'))," +
                     "('Proto', NamedAttributeRef('Proto'))," +
