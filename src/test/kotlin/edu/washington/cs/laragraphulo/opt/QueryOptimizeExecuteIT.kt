@@ -38,7 +38,7 @@ class QueryOptimizeExecuteIT(
 
   data class Params (
       val name: String,
-      val query: String,
+      val query: List<String>,
       val beforeTasks: (AccumuloConfig) -> List<Callable<*>> = {listOf()},
       val afterTasks: (AccumuloConfig) -> List<Callable<*>> = {listOf()}
   ) {
@@ -51,40 +51,43 @@ class QueryOptimizeExecuteIT(
     println("TEST: ${params.name}")
     params.beforeTasks.invoke(tester.accumuloConfig).forEach { it.call() }
 
-    println("QUERY: ${params.query}")
-    val ptree = StringReader(params.query).use { PTree.parseRaco(it) }
-    println("PTREE: $ptree")
-    val racoOp = RacoOperator.parsePTreeToRacoTree(ptree)
-    println("RacoOp: $racoOp")
-    val callables = executorsRacoOnAccumulo(racoOp, tester.accumuloConfig)
-    println("Callables : $callables")
+    params.query.forEach { query ->
+      println("QUERY: $query")
+      val ptree = StringReader(query).use { PTree.parseRaco(it) }
+      println("PTREE: $ptree")
+      val racoOp = RacoOperator.parsePTreeToRacoTree(ptree)
+      println("RacoOp: $racoOp")
+      val callables = executorsRacoOnAccumulo(racoOp, tester.accumuloConfig)
+      println("Callables : $callables")
 
-    callables.forEachIndexed { i, callable ->
-      print("$i: ")
-      @Suppress("UNCHECKED_CAST")
-      when (callable) {
-        is CreateTableTask -> {
-          println("CreateTableTask(${callable.tableName})")
-          callable.call()
-        }
-        is AccumuloPipelineTask<*> -> {
-          val table = callable.pipeline.tableName
-          val serializer = callable.pipeline.serializer
-          val skvi = callable.pipeline.data
-          skvi as Op<SKVI>
-          serializer as Serializer<Op<SKVI>,Op<SKVI>>
+      callables.forEachIndexed { i, callable ->
+        print("$i: ")
+        @Suppress("UNCHECKED_CAST")
+        when (callable) {
+          is CreateTableTask -> {
+            println("CreateTableTask(${callable.tableName})")
+            callable.call()
+          }
+          is AccumuloPipelineTask<*> -> {
+            val table = callable.pipeline.tableName
+            val serializer = callable.pipeline.serializer
+            val skvi = callable.pipeline.data
+            skvi as Op<SKVI>
+            serializer as Serializer<Op<SKVI>, Op<SKVI>>
 
-          println("AccumuloPipelineTask($table): $skvi")
+            println("AccumuloPipelineTask($table): $skvi")
 //          println("dot:\n${skvi.generateDot()}")
 //          val serialized = serializer.serializeToString(skvi)
 //          val deserialized = serializer.deserializeFromString(serialized)
 
-          callable.call()
-        }
-        else -> {
-          println("???: $callable")
+            callable.call()
+          }
+          else -> {
+            println("???: $callable")
+          }
         }
       }
+      println()
     }
 
     params.afterTasks.invoke(tester.accumuloConfig).forEach { it.call() }
@@ -116,6 +119,28 @@ class QueryOptimizeExecuteIT(
             "('Label', 'STRING_TYPE')" +
             "]), {'skip': 1})"
 
+    val netflow_sample_scheme_daplap: String =
+        "Scheme([" +
+            "('TotBytes', 'DOUBLE_TYPE')," +
+            "('StartTime', 'STRING_TYPE'), " +
+            "('$__DAP__', 'STRING_TYPE'), " +
+            "('$__LAP__', 'STRING_TYPE'), " +
+            "('SrcAddr', 'STRING_TYPE')," +
+            "('DstAddr', 'STRING_TYPE')," +
+            "('RATE', 'DOUBLE_TYPE')," +
+            "('Dur', 'DOUBLE_TYPE')," +
+            "('Dir', 'STRING_TYPE')," +
+            "('Proto', 'STRING_TYPE')," +
+            "('Sport', 'STRING_TYPE')," +
+            "('Dport', 'STRING_TYPE')," +
+            "('State', 'STRING_TYPE')," +
+            "('sTos', 'INT_TYPE')," +
+            "('dTos', 'INT_TYPE')," +
+            "('TotPkts', 'INT_TYPE')," +
+            "('SrcBytes', 'INT_TYPE')," +
+            "('Label', 'STRING_TYPE')" +
+            "])"
+
     val tests: Array<Params>
 
     init {
@@ -131,7 +156,7 @@ class QueryOptimizeExecuteIT(
         tests = arrayOf<Params>(
             Params(
                 name = "store apply filescan Named",
-                query = "Store(RelationKey('public','adhoc','netflow_subset'), " +
+                query = listOf("Store(RelationKey('public','adhoc','netflow_subset'), " +
                     "Apply([('TotBytes', NamedAttributeRef('TotBytes'))," +
                     "('StartTime', NamedAttributeRef('StartTime'))," +
                     "('$__DAP__', NumericLiteral(0))," +
@@ -152,17 +177,27 @@ class QueryOptimizeExecuteIT(
                     "('Label', NamedAttributeRef('Label'))" +
                     "], " +
                     "$filescan))",
+
+                    "Store(RelationKey('public','adhoc','netflow_subset2'), " +
+                        "Scan(RelationKey('public','adhoc','netflow_subset')," +
+                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None)))"
+                ),
                 beforeTasks = { listOf() },
                 afterTasks = { config -> listOf(
                     Callable {
                       val stored_table = RelationKey("public","adhoc","netflow_subset").sanitizeTableName()
+                      val stored_table2 = RelationKey("public","adhoc","netflow_subset2").sanitizeTableName()
 
-                      config.connector.createScanner(stored_table, Authorizations.EMPTY).use {
-                        for ((key, value) in it) {
-                          println(key.toStringNoTime() + " --> " + value)
+                      listOf(stored_table, stored_table2).forEach { table ->
+                        config.connector.createScanner(table, Authorizations.EMPTY).use {
+                          for ((key, value) in it) {
+                            println(key.toStringNoTime() + " --> " + value)
+                          }
                         }
+                        DebugUtil.printTable(table, config.connector, table, 15)
+                        println()
+                        println()
                       }
-                      DebugUtil.printTable(stored_table, config.connector, stored_table, 15)
                     }
                 ) }
             )
