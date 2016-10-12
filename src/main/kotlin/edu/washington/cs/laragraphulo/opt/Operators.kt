@@ -3,6 +3,8 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableListMultimap
 import edu.washington.cs.laragraphulo.Encode
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.*
 import org.apache.accumulo.core.client.BatchWriter
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.sample.SamplerConfiguration
@@ -15,6 +17,7 @@ import org.apache.accumulo.core.security.Authorizations
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVRecord
+import org.slf4j.Logger
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.Serializable
@@ -42,7 +45,17 @@ class OpCSVScan(
   override val unbound: List<Arg<*>> = emptyList()
 
   override fun invoke(reqs: List<*>): TupleIterator {
+    logger.info{"Invoke op: $this"}
     return CSVScan(URL(url), encoders, skip, delimiter, quote, escape)
+  }
+
+  override fun toString(): String{
+    return "OpCSVScan(url='$url', encoders=$encoders, names=$names, skip=$skip, delimiter=$delimiter, quote=$quote, escape=$escape, unbound=$unbound)"
+  }
+
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpCSVScan>()
   }
 }
 
@@ -64,6 +77,10 @@ class CSVScan(
   private lateinit var iterator: Iterator<CSVRecord>
   private var linenumber: Int = 0
 
+  companion object : Loggable {
+    override val logger: Logger = logger<CSVScan>()
+  }
+
   fun init() {
     val parser = CSVParser(
         BufferedReader(InputStreamReader(url.openStream())),
@@ -75,6 +92,7 @@ class CSVScan(
   }
 
   override fun seek(seek: TupleSeekKey) {
+    logger.debug{"seek: $seek"}
     // start from scratch
     if (!seek.range.hasUpperBound()) {
       init()
@@ -90,19 +108,35 @@ class CSVScan(
   }
 
   private var top: Tuple? = null
+
   private fun findTop() {
-    if (top == null && iterator.hasNext()) {
+    while (top == null && iterator.hasNext()) {
       val csvRecord = iterator.next()
       if (csvRecord.size() != encoders.size) {
         throw RuntimeException("error parsing line $linenumber: expected ${encoders.size} attributes: $csvRecord")
       }
-      val attrs = csvRecord.zip(encoders).filter { it.second != null }.map { ArrayByteSequence(it.second!!.encode(it.first)) }
-      top = TupleImpl(attrs, EMPTY, ImmutableListMultimap.of())
+      class ParseException : RuntimeException()
+      try {
+        val attrs = csvRecord.zip(encoders).mapIndexed { i, pair ->
+          if (pair.second == null) null else {
+            try {
+              ArrayByteSequence(pair.second!!.encode(pair.first))
+            } catch (e: Exception) {
+              logger.warn("Skipping row $linenumber column $i. Type: ${pair.second}. Value: ${pair.first}", e)
+              throw ParseException()
+            }
+          }
+        }.filterNotNull()
+        top = TupleImpl(attrs, EMPTY, ImmutableListMultimap.of())
+      } catch (e: ParseException) {
+
+      }
       linenumber++
     }
   }
   override fun hasNext(): Boolean {
     findTop()
+    logger.debug{"hasNext: $top"}
     return top != null
   }
   override fun next(): Tuple {
@@ -132,11 +166,20 @@ class OpAccumuloBase(
   override val unbound: List<Arg<*>> = listOf(Arg("AccumuloBase_Skvi", SortedKeyValueIterator::class.java))
   @Suppress("UNCHECKED_CAST")
   override fun invoke(reqs: List<*>): TupleIterator {
+    logger.info{"Invoke op: $this"}
     require (reqs.size >= 1 && reqs[0] is SortedKeyValueIterator<*,*>) { "Bad argument passed to OpAccumuloBase invoke; expected an SKVI but got $reqs" }
     val skvi = reqs[0] as SortedKeyValueIterator<Key,Value>
     val kviter = SkviToKeyValueAdapter(skvi)
     val titer = KeyValueToTupleIterator(kviter, apKeySchema, widthSchema)
     return titer
+  }
+
+  override fun toString(): String{
+    return "OpAccumuloBase(apKeySchema=$apKeySchema, widthSchema=$widthSchema)"
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpAccumuloBase>()
   }
 }
 
@@ -179,6 +222,7 @@ class OpApplyIterator(
   override val unbound: List<Arg<*>> = source.unbound
 
   override fun invoke(reqs: List<*>): TupleIterator {
+    logger.info{"Invoke op: $this"}
 //    return ApplyIterator(
 //        source(reqs), keyExprs.map { it.expr }, famExpr.expr,
 //        valExprs.map { it.name to it.expr }
@@ -186,6 +230,10 @@ class OpApplyIterator(
     return ApplyIterator(
         source(reqs), keyExprs, famExpr, valExprs
     )
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpApplyIterator>()
   }
 }
 
@@ -215,6 +263,7 @@ class ApplyIterator(
 //  }
 
   override fun seek(seek: TupleSeekKey) {
+    logger.debug{"seek: $seek"}
     parent.seek(seek)
   }
 
@@ -226,11 +275,12 @@ class ApplyIterator(
         valExprs.fold(ImmutableListMultimap.builder<ABS,FullValue>()) {
           builder, it -> builder.put(it.first, it.second(input))
         }.build()
+    logger.trace{ "Apply from $input to ${TupleImpl(keys, fam, vals)}" }
     return TupleImpl(keys, fam, vals)
   }
 
   private fun prepTop() {
-    if (topTuple != null && parent.hasNext()) {
+    if (topTuple == null && parent.hasNext()) {
       val t = parent.peek()
       // src_dst
       // test code
@@ -262,7 +312,8 @@ class ApplyIterator(
   }
 
   override fun hasNext(): Boolean {
-    return parent.hasNext()
+    prepTop()
+    return topTuple != null
   }
 
   override fun serializeState(): ByteArray {
@@ -271,6 +322,10 @@ class ApplyIterator(
 
   override fun deepCopy(env: IteratorEnvironment): ApplyIterator {
     return ApplyIterator(parent.deepCopy(env), keyExprs, famExpr, valExprs)
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<ApplyIterator>()
   }
 }
 
@@ -282,7 +337,12 @@ class OpTupleToKeyValueIterator(
 ) : Op<KeyValueIterator>(tupleIterator, apKeySchema.toObj(), widthSchema.toObj()) {
   override val unbound: List<Arg<*>> = tupleIterator.unbound
   override fun invoke(reqs: List<*>): KeyValueIterator {
+    logger.info{"Invoke op: $this"}
     return TupleToKeyValueIterator(tupleIterator(reqs), apKeySchema, widthSchema)
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpTupleToKeyValueIterator>()
   }
 }
 
@@ -292,7 +352,12 @@ class OpKeyValueToSkviAdapter(
 ) : Op<SKVI>(kvIter) {
   override val unbound: List<Arg<*>> = kvIter.unbound
   override fun invoke(reqs: List<*>): SKVI {
+    logger.info{"Invoke op: $this"}
     return KeyValueToSkviAdapter(kvIter(reqs))
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpKeyValueToSkviAdapter>()
   }
 }
 
@@ -308,6 +373,7 @@ class OpRWI(
   override val unbound: List<Arg<*>> = input.unbound
 
   override fun invoke(reqs: List<*>): SortedKeyValueIterator<Key, Value> {
+    logger.info{"Invoke op: $this"}
     // todo - replace with a version that passes the accumuloConfig in directly. Then we can mock this in integration tests.
     val opts = accumuloConfig.basicRemoteOpts("", tableName, null, null)
     val skvi = RemoteWriteIterator()
@@ -351,7 +417,9 @@ class OpRWI(
     return skvi
   }
 
-  companion object {
+  companion object : Loggable {
+    override val logger = logger<OpRWI>()
+
     /**
      * This method shouldn't really be public, but it is useful for setting up some of the iterators.
 

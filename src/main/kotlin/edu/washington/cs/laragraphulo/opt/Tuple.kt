@@ -1,11 +1,13 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.*
+import edu.washington.cs.laragraphulo.*
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
+import org.slf4j.Logger
 import java.io.Serializable
 import java.lang.reflect.Constructor
 import java.util.*
@@ -403,7 +405,7 @@ class KeyValueToTupleIterator(
   }
 }
 
-val con: Constructor<KeyValueToTupleIterator>? = ::KeyValueToTupleIterator.javaConstructor
+//val con: Constructor<KeyValueToTupleIterator>? = ::KeyValueToTupleIterator.javaConstructor
 
 class TupleToKeyValueIterator(
     private val tupleIterator: TupleIterator,
@@ -412,23 +414,26 @@ class TupleToKeyValueIterator(
 ) : KeyValueIterator {
   private var iterFromLastTuple = Iterators.peekingIterator(Collections.emptyIterator<KeyValue>())
 
-  override fun hasNext(): Boolean {
-    return iterFromLastTuple.hasNext() || tupleIterator.hasNext()
-  }
-
-  override fun next(): KeyValue {
+  private fun findTop() {
     while (!iterFromLastTuple.hasNext() && tupleIterator.hasNext()) {
       iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apKeySchema).iterator())
     }
+  }
+
+  override fun hasNext(): Boolean {
+    findTop()
+    return iterFromLastTuple.hasNext()
+  }
+
+  override fun next(): KeyValue {
+    findTop()
     if (iterFromLastTuple.hasNext())
       return iterFromLastTuple.next()
     throw NoSuchElementException()
   }
 
   override fun peek(): KeyValue {
-    while (!iterFromLastTuple.hasNext() && tupleIterator.hasNext()) {
-      iterFromLastTuple = Iterators.peekingIterator(tupleIterator.next().toKeyValues(apKeySchema).iterator())
-    }
+    findTop()
     if (iterFromLastTuple.hasNext())
       return iterFromLastTuple.peek()
     throw NoSuchElementException()
@@ -439,6 +444,7 @@ class TupleToKeyValueIterator(
   }
 
   override fun seek(seek: SeekKey) {
+    logger.debug{"seek: $seek"}
     val tsk = seek.toTupleSeekKey(apKeySchema, widthSchema)
     tupleIterator.seek(tsk)
   }
@@ -446,6 +452,10 @@ class TupleToKeyValueIterator(
   override fun serializeState(): ByteArray? {
     // todo: return the last emitted
     return if (iterFromLastTuple.hasNext()) null else EMPTY_B
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<TupleToKeyValueIterator>()
   }
 }
 

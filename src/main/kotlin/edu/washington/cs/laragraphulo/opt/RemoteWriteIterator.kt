@@ -2,10 +2,10 @@ package edu.washington.cs.laragraphulo.opt
 
 
 import com.google.common.base.Strings
+import com.google.common.collect.Iterables
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
-import edu.washington.cs.laragraphulo.Loggable
-import edu.washington.cs.laragraphulo.logger
+import edu.washington.cs.laragraphulo.*
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken
@@ -275,6 +275,12 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
   @Throws(IOException::class)
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
     logger.debug("RemoteWrite on table $tableName / $tableNameTranspose seek(): $range")
+    logger.trace{
+      val iters = rowRanges.iteratorWithRangeMask(range)
+      val sb = StringBuilder()
+      iters.forEach { sb.append(it).append(' ') }
+      "Seek Ranges: ${sb.toString()}"
+    }
     //System.out.println("RW passed seek " + r + "(thread " + Thread.currentThread().getName() + ")");
 
     reducer.reset()
@@ -332,6 +338,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
           // We could use the 10x next() heuristic here...
           //          if (!initialSeek)
           //          seekNextHeuristic(thisTargetRange);
+          logger.trace("before seeking source, source is $source")
           source!!.seek(thisTargetRange, seekColumnFamilies, seekInclusive)
         }
         doSeekNext = true
@@ -380,6 +387,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
   private fun writeUntilSafeOrFinish(): Boolean {
     var m: Mutation
     //    Watch<Watch.PerfSpan> watch = Watch.getInstance();
+    logger.trace("checking hasTop of source: ${source!!.hasTop()}")
     while (source!!.hasTop()) {
       val k = source!!.topKey
       val v = source!!.topValue
@@ -387,6 +395,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
       reducer.update(k, v)
 
       if (writer != null) {
+        logger.trace("writing ${k.toStringNoTime()} -> $v")
         m = Mutation(k.rowData.toArray())
         m.put(k.columnFamilyData.toArray(), k.columnQualifierData.toArray(),
             k.columnVisibilityParsed, k.timestamp, v.get()) // no ts? System.currentTimeMillis()
@@ -454,6 +463,11 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
 
   override fun hasTop(): Boolean {
     //    System.out.println(thisInst+" hasTop(): entriesWritten=="+entriesWritten+" rowRangeIterator.hasNext()=="+rowRangeIterator.hasNext());
+    logger.debug("hasTop (entries: $entriesWritten): "+(numRejects != -1 && (numRejects >= REJECT_FAILURE_THRESHOLD ||
+        rowRangeIterator!!.hasNext() ||
+        entriesWritten > 0 ||
+        //source.hasTop() ||
+        reducer.hasTopForClient())))
     return numRejects != -1 && (numRejects >= REJECT_FAILURE_THRESHOLD ||
         rowRangeIterator!!.hasNext() ||
         entriesWritten > 0 ||
@@ -478,7 +492,8 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
         //        }
         writeWrapper(false)
       } else {
-        rowRangeIterator!!.next()
+        if (rowRangeIterator!!.hasNext())
+          rowRangeIterator!!.next()
         numRowRangesIterated++
         lastSafeKey = Key(lastSafeKey.row, lastSafeKey.columnFamily, lastSafeKey.columnQualifier,
             Text(Strings.padStart(Integer.toString(numRowRangesIterated), rowRangesSizeWidth, '0').toByteArray()))

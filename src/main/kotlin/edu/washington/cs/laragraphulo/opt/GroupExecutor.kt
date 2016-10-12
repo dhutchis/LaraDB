@@ -404,8 +404,10 @@ class DeserializeInvokeIterator : DelegatingIterator(), OptionDescriber {
 
   override fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
     val op = deserializeFromOptions(options)
-    val skvi = op(listOf(source, options, env)) // !
-    skvi.init(source, options, env)
+    // take out options related to serialization
+    val newopts = options.filterKeys { it != SerializerSetting.OPT_SERIALIZED_DATA || it != SerializerSetting.OPT_SERIALIZER_CLASS }
+    val skvi = op(listOf(source, newopts, env)) // !
+//    skvi.init(source, newopts, env)
     return skvi
   }
 

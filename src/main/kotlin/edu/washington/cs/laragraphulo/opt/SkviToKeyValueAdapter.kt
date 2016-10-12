@@ -1,6 +1,7 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.PeekingIterator
+import edu.washington.cs.laragraphulo.*
 import edu.washington.cs.laragraphulo.opt.KeyValue
 import edu.washington.cs.laragraphulo.opt.KeyValueIterator
 import edu.washington.cs.laragraphulo.opt.SeekKey
@@ -8,6 +9,7 @@ import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
+import org.slf4j.Logger
 import java.io.IOException
 import java.util.*
 
@@ -63,6 +65,7 @@ class KeyValueToSkviAdapter(
     private val inner: KeyValueIterator
 ): SortedKeyValueIterator<Key,Value> {
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
+    logger.debug{"seek: range: $range"}
     @Suppress("UNCHECKED_CAST")
     inner.seek(SeekKey(GraphuloUtil.rangeToGuavaRange(range), columnFamilies as Collection<ArrayByteSequence>, inclusive))
   }
@@ -84,5 +87,9 @@ class KeyValueToSkviAdapter(
   override fun getTopKey(): Key = inner.peek().key
 
   override fun getTopValue(): Value = inner.peek().value
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpCSVScan>()
+  }
 }
 

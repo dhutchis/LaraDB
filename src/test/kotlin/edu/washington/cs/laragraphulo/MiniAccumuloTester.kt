@@ -35,7 +35,17 @@ class MiniAccumuloTester(
     if (_ac == null) {
 //      val sw = StopWatch()
 //      sw.start()
-      tempDir = Files.createTempDirectory("tempMini", *arrayOf<FileAttribute<*>>()).toFile()
+
+//      val tmpdir = Files.createTempDirectory("tempMini").toFile()
+
+      // temporary override with custom directory
+      val tmpdir = File("target/mini")
+      tempDir = tmpdir
+      if (tmpdir.exists())
+        tmpdir.deleteRecursively()
+      tmpdir.mkdir()
+
+
       logger.info("Temp directory: " + tempDir!!.path)
 
       val mac = MiniAccumuloConfig(tempDir, PASSWORD).setNumTservers(numTservers)
@@ -102,7 +112,7 @@ class MiniAccumuloTester(
     }
   }
 
-  override fun toString(): String = "MiniAccumuloTester(numTservers=$numTservers, reuse=$reuse)"
+  override fun toString(): String = "MiniAccumuloTester(numTservers=$numTservers, reuse=$reuse, debug=$doDebug)"
 
 
   companion object : Loggable {

@@ -28,7 +28,7 @@
   </logger>
 
   <logger name="edu.washington.cs.laragraphulo">
-    <level value="DEBUG" />
+    <level value="TRACE" />
   </logger>
 
   <root>

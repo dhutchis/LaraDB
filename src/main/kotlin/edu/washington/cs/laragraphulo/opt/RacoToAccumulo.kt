@@ -178,8 +178,7 @@ fun nameToValueFirstTsRef(name: Name): Expr<Long> =
     UnaryExpr(TupleRef.RefVal(valName = name.toABS())) { it.first().timestamp }
 
 
-
-val opSerializer = object : Serializer<Op<SKVI>,Op<SKVI>> {
+class OpSerializer : Serializer<Op<SKVI>,Op<SKVI>> {
   override fun serializeToString(obj: Op<SortedKeyValueIterator<Key, Value>>): String {
     return SerializationUtil.serializeBase64(obj)
   }
@@ -188,14 +187,18 @@ val opSerializer = object : Serializer<Op<SKVI>,Op<SKVI>> {
   override fun deserializeFromString(str: String): Op<SortedKeyValueIterator<Key, Value>> {
     return SerializationUtil.deserializeBase64(str) as Op<SortedKeyValueIterator<Key, Value>>
   }
+  companion object {
+    val INSTANCE = OpSerializer()
+  }
 }
+
 
 fun skviOpToTask(
     op: Op<SKVI>,
     accumuloConfig: AccumuloConfig,
     scanTable: String
 ): Callable<LinkedHashMap<Key, Value>> {
-  return AccumuloPipelineTask(AccumuloPipeline(op, opSerializer, scanTable), accumuloConfig)
+  return AccumuloPipelineTask(AccumuloPipeline(op, OpSerializer.INSTANCE, scanTable), accumuloConfig)
 }
 
 
@@ -365,7 +368,10 @@ fun racoToAccumulo(
     is FileScan -> {
       // get the encoders; ensure we store properly; might need to implement the getExpressionProperties on other operators
       val types: List<Pair<Name, Type<*>>> = getTypesFromScheme(ro.scheme)
-      val encoders: List<Encode<String>?> = types.map { it.second.encodeFromString } // because we force ArrayByteSequence, all are encoded according to the String encoder
+      if (types.any { it.first == __DAP__ || it.first == __LAP__ })
+        throw IllegalArgumentException("The FileScan is not allowed to have special attribute names $__DAP__ or $__LAP__. Types: $types")
+      val encoders: List<Encode<String>?> = types.
+          map { it.second.encodeFromString } // because we force ArrayByteSequence, all are encoded according to the String encoder
 
       val sk = ro.options["skip"]
       val skip = when (sk) {

@@ -27,7 +27,7 @@ object TEST_CONFIG {
   val DEFAULT_TEST_CONFIG_FILE = "GraphuloTest.conf"
 
   init {
-    val s = System.getProperty("TEST_CONFIG") // environment variable
+    val s = System.getProperty("TEST_CONFIG") // environment variable // "miniDebug"//
     if (s == null && File(DEFAULT_TEST_CONFIG_FILE).exists()) {
       loadConfigFromFileOrSystem(DEFAULT_TEST_CONFIG_FILE)
       if (_accumuloTester == null)
