@@ -341,7 +341,8 @@ interface Serializer<in I, out O> {
 data class AccumuloPipeline<D>(
     val data: D,
     val serializer: Serializer<D,D>,
-    val tableName: String
+    val tableName: String,
+    val scanRange: Range // todo - make this a list of ranges
 )
 
 class AccumuloPipelineTask<D>(
@@ -380,7 +381,7 @@ class AccumuloPipelineTask<D>(
   override fun call(): LinkedHashMap<Key, Value> {
     val connector = config.connector
     val bs = connector.createBatchScanner(pipeline.tableName, Authorizations.EMPTY, 15)
-    val ranges = listOf(Range())
+    val ranges = listOf(pipeline.scanRange)
     bs.setRanges(ranges)
 
     val priority = 10

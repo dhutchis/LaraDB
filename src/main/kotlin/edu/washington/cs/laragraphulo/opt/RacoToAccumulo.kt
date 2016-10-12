@@ -4,8 +4,11 @@ import edu.washington.cs.laragraphulo.Encode
 import edu.washington.cs.laragraphulo.opt.raco.*
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Range
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
+import org.apache.hadoop.io.WritableComparable
+import org.apache.hadoop.io.WritableComparator
 import java.io.ObjectOutputStream
 import java.util.*
 import java.util.concurrent.Callable
@@ -143,7 +146,7 @@ fun racoExprToExpr(
         }
         Type.BOOLEAN -> {
           t as Type.BOOLEAN
-          t.encode(left.dec(t) || right.dec(t))
+          throw IllegalArgumentException("Don't know how to divide booleans")
         }
         Type.LONG -> {
           t as Type.LONG
@@ -155,7 +158,32 @@ fun racoExprToExpr(
         }
         Type.DOUBLE -> {
           t as Type.DOUBLE
-          t.encode(left.dec(t) / right.dec(t))
+          val l = re.left.getType(ep)
+          val r = re.right.getType(ep)
+          when (l) {
+            Type.DOUBLE -> {
+              when (r) {
+                Type.DOUBLE -> {
+                  l as Type.DOUBLE
+                  r as Type.DOUBLE
+                  t.encode(left.dec(l) / right.dec(r))
+                }
+                else -> throw UnsupportedOperationException("don't know how to divide type $l by $r")
+              }
+            }
+            Type.INT -> {
+              when (r) {
+                Type.DOUBLE -> {
+                  l as Type.INT
+                  r as Type.DOUBLE
+                  t.encode(left.dec(l).toDouble() / right.dec(r))
+                }
+                else -> throw UnsupportedOperationException("don't know how to divide type $l by $r")
+              }
+            }
+            else -> throw UnsupportedOperationException("don't know how to divide type $l by $r")
+          }
+
         }
         Type.DOUBLE_VARIABLE -> {
           t as Type.DOUBLE_VARIABLE
@@ -172,6 +200,63 @@ fun racoExprToExpr(
         Type.STRING -> {
           t as Type.STRING
           throw IllegalArgumentException("Don't know how to divide strings")
+        }
+        Type.UNKNOWN -> {
+//            t as Type.UNKNOWN
+          println("Warning! UNKNOWN type PLUS")
+          val bs = ByteArray(left.length()+right.length())
+          System.arraycopy(left.backingArray,left.offset(),bs,0,left.length())
+          System.arraycopy(right.backingArray,right.offset(),bs,left.length(),right.length())
+          bs
+        }
+      }.toABS()
+    })
+  }
+
+  is RacoExpression.GT -> {
+    val t = re.getType(ep)
+    BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), { left: ArrayByteSequence, right: ArrayByteSequence ->
+      fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
+      when (t) {
+        Type.INT -> {
+          t as Type.INT // compiler ought to be able to infer this; report bug
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.INT_VARIABLE -> {
+          t as Type.INT_VARIABLE
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.BOOLEAN -> {
+          t as Type.BOOLEAN
+          Type.BOOLEAN.encode(left.dec(t) && !right.dec(t)) // 1 > 0
+        }
+        Type.LONG -> {
+          t as Type.LONG
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.LONG_VARIABLE -> {
+          t as Type.LONG_VARIABLE
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.DOUBLE -> {
+          t as Type.DOUBLE
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.DOUBLE_VARIABLE -> {
+          t as Type.DOUBLE_VARIABLE
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.FLOAT -> {
+          t as Type.FLOAT
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.FLOAT_VARIABLE -> {
+          t as Type.FLOAT
+          Type.BOOLEAN.encode(left.dec(t) > right.dec(t))
+        }
+        Type.STRING -> {
+          t as Type.STRING
+          Type.BOOLEAN.encode(left.dec(t).compareTo(right.dec(t)) > 0) // replace with concatenating the byte[] representation, without decoding?
         }
         Type.UNKNOWN -> {
 //            t as Type.UNKNOWN
@@ -258,9 +343,10 @@ class OpSerializer : Serializer<Op<SKVI>,Op<SKVI>> {
 fun skviOpToTask(
     op: Op<SKVI>,
     accumuloConfig: AccumuloConfig,
-    scanTable: String
+    scanTable: String,
+    scanRange: Range
 ): Callable<LinkedHashMap<Key, Value>> {
-  return AccumuloPipelineTask(AccumuloPipeline(op, OpSerializer.INSTANCE, scanTable), accumuloConfig)
+  return AccumuloPipelineTask(AccumuloPipeline(op, OpSerializer.INSTANCE, scanTable, scanRange), accumuloConfig)
 }
 
 
@@ -270,6 +356,7 @@ data class AccumuloPlan(
     val op: Op<*>,
     val sap: SortedAccessPath,
     val scanTable: String?,
+    val scanRange: Range,
     val tasksBefore: List<Callable<*>>,
     val tasksAfter: List<Callable<*>>
 )
@@ -299,7 +386,7 @@ fun racoToAccumulo(
 
       val newtasks = pp.tasksBefore + CreateTableTask(tableName, accumuloConfig)
 
-      AccumuloPlan(rwi, pp.sap, pp.scanTable, newtasks, pp.tasksAfter)
+      AccumuloPlan(rwi, pp.sap, pp.scanTable, pp.scanRange, newtasks, pp.tasksAfter)
     }
 
     is Apply -> {
@@ -412,7 +499,97 @@ fun racoToAccumulo(
       val sap = emittersScheme.withSortedUpto(sortedUpto)
 
       AccumuloPlan(OpApplyIterator(pp.op, keyExprs = keyExprs, famExpr = famExpr, valExprs = valExprs), sap,
-          pp.scanTable, pp.tasksBefore, pp.tasksAfter)
+          pp.scanTable, pp.scanRange, pp.tasksBefore, pp.tasksAfter)
+    }
+
+    is Select -> {
+      val racoCondition = ro.condition
+      val (opParent, sapParent, scanTable, prevScanRange, tasksBefore, tasksAfter) = racoToAccumulo(ro.input, accumuloConfig, req)
+
+      if (opParent !is OpAccumuloBase)
+        throw UnsupportedOperationException("did not implement Select after something other than OpAccumuloBase: $opParent")
+
+      // check that the condition is on the prefix of the DAP
+//      val condition = racoExprToExpr(racoCondition, sapParent)
+      // need to reach inside the above and see that we have a GT or EQ or something
+      val range: Range
+      when (racoCondition) {
+
+        is RacoExpression.GT -> {
+          val left = racoCondition.left
+          val right = racoCondition.right
+          when (left) {
+            is RacoExpression.NamedAttributeRef -> {
+              // check that the attribute is at the prefix of the dap
+              if (sapParent.dapNames.indexOf(left.attributename) != 0)
+                throw UnsupportedOperationException("don't know how to compile a GT expression that refers to an attribute that is not the first in the DAP: attribute is ${left.attributename}, schema is $sapParent")
+            }
+            is RacoExpression.UnnamedAttributeRef -> {
+              if (left.position != 0)
+                throw UnsupportedOperationException("don't know how to compile a GT expression that refers to an attribute that is not the first in the DAP: attribute is at position ${left.position}, schema is $sapParent")
+            }
+          }
+          // get type of the left variable
+          val leftType = left.getType(sapParent)
+          // check that the right is a constant that matches the type of the left
+          when (leftType) {
+            Type.INT -> {
+              leftType as Type.INT
+              when (right) {
+                is RacoExpression.Literal.LongLiteral -> {
+                  val literalBytes = leftType.encode(right.obj.toInt())
+                  val startKey = Key(literalBytes)
+                  range = Range(startKey, false, null, false)
+                }
+                is RacoExpression.Literal.DoubleLiteral -> {
+                  val excl = Math.floor(right.obj) == right.obj
+                  val literalBytes = leftType.encode(right.obj.toInt())
+                  val startKey = Key(literalBytes)
+                  range = Range(startKey, !excl, null, false)
+                }
+                else -> throw UnsupportedOperationException("don't know how to handle $right when left is $left of type $leftType")
+              }
+            }
+            Type.LONG -> {
+              leftType as Type.LONG
+              when (right) {
+                is RacoExpression.Literal.LongLiteral -> {
+                  val literalBytes = leftType.encode(right.obj)
+                  val startKey = Key(literalBytes)
+                  range = Range(startKey, false, null, false)
+                }
+                is RacoExpression.Literal.DoubleLiteral -> {
+                  val excl = Math.floor(right.obj) == right.obj
+                  val literalBytes = leftType.encode(right.obj.toLong())
+                  val startKey = Key(literalBytes)
+                  range = Range(startKey, !excl, null, false)
+                }
+                else -> throw UnsupportedOperationException("don't know how to handle $right when left is $left of type $leftType")
+              }
+            }
+            Type.STRING -> {
+              leftType as Type.STRING
+              when (right) {
+                is RacoExpression.Literal.StringLiteral -> {
+                  val literalBytes = leftType.encode(right.obj)
+                  val startKey = Key(literalBytes)
+                  range = Range(startKey, false, null, false)
+                }
+                else -> throw UnsupportedOperationException("don't know how to handle $right when left is $left of type $leftType")
+              }
+            }
+            else -> throw UnsupportedOperationException("don't know how to handle selects on $racoCondition with leftType $leftType")
+          }
+        } // end GT
+
+        else -> {
+          throw UnsupportedOperationException("don't know how to select on: $racoCondition")
+        }
+      }
+
+      AccumuloPlan(opParent, sapParent, scanTable,
+          prevScanRange.clip(range),
+          tasksBefore, tasksAfter)
     }
 
     is Scan -> {
@@ -424,7 +601,7 @@ fun racoToAccumulo(
       val sortedUpto = ap.dapNames.size+ap.lapNames.size
       val sap = ap.withSortedUpto(sortedUpto)
 
-      AccumuloPlan(OpAccumuloBase(sap, sap), sap, tableName, listOf(), listOf())
+      AccumuloPlan(OpAccumuloBase(sap, sap), sap, tableName, Range(), listOf(), listOf())
     }
 
     is FileScan -> {
@@ -447,7 +624,7 @@ fun racoToAccumulo(
       // assume input is un-sorted when scanning from a file; add a FileScan option to assume some sorting later
       val sap: SortedAccessPath = fromRacoScheme(types).withSortedUpto(0)
 
-      AccumuloPlan(OpCSVScan(ro.file, encoders, types, skip = skip), sap, null, listOf(), listOf())
+      AccumuloPlan(OpCSVScan(ro.file, encoders, types, skip = skip), sap, null, Range(), listOf(), listOf())
     }
 
     else -> throw UnsupportedOperationException("unsupported in the raco-to-accumulo compiler: $ro")

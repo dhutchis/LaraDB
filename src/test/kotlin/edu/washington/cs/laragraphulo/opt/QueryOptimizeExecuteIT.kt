@@ -106,6 +106,29 @@ csv(schema(StartTime:string,Dur:float,Proto:string,SrcAddr:string,Sport:string,D
 T2 = select TotBytes, StartTime, __DAP__, __LAP__, SrcAddr, DstAddr, (TotBytes / Dur) / 1000.0 as RATE, Dur, Dir, Proto, Sport, Dport, State, sTos, dTos, TotPkts, SrcBytes, Label from T1;
 store(T2, netflow_subset);
 
+cd gits/raco/scripts
+git checkout repr-dump
+./myrial test.myl --catalog ../examples/catalog.py -L -r
+
+
+T1 = load("file://...<snip>....data/netflow/botnet-capture-20110810-neris.pcap.subset.txt",
+csv(schema(StartTime:string,Dur:float,Proto:string,SrcAddr:string,Sport:string,Dir:string,DstAddr:string,Dport:string,State:string,sTos:int,dTos:int,TotPkts:int,TotBytes:float,SrcBytes:int,Label:string,__DAP__:int,__LAP__:int),skip=1));
+T2 = select TotBytes, StartTime, __DAP__, __LAP__, SrcAddr, DstAddr, (TotBytes / Dur) / 1000.0 as RATE, Dur, Dir, Proto, Sport, Dport, State, sTos, dTos, TotPkts, SrcBytes, Label from T1
+where TotBytes > 250;
+store(T2, netflow_subset);
+
+
+Store(RelationKey('public','adhoc','netflow_subset'),
+ Apply([('TotBytes', NamedAttributeRef('TotBytes')), ('StartTime', NamedAttributeRef('StartTime')), ('__DAP__', NamedAttributeRef('__DAP__')), ('__LAP__', NamedAttributeRef('__LAP__')), ('SrcAddr', NamedAttributeRef('SrcAddr')), ('DstAddr', NamedAttributeRef('DstAddr')),
+ ('RATE', DIVIDE(DIVIDE(NamedAttributeRef('TotBytes'), NamedAttributeRef('Dur')), NumericLiteral(1000.0))),
+ ('Dur', NamedAttributeRef('Dur')), ('Dir', NamedAttributeRef('Dir')), ('Proto', NamedAttributeRef('Proto')), ('Sport', NamedAttributeRef('Sport')), ('Dport', NamedAttributeRef('Dport')), ('State', NamedAttributeRef('State')), ('sTos', NamedAttributeRef('sTos')), ('dTos', NamedAttributeRef('dTos')), ('TotPkts', NamedAttributeRef('TotPkts')), ('SrcBytes', NamedAttributeRef('SrcBytes')), ('Label', NamedAttributeRef('Label'))
+ ],
+  Select(GT(UnnamedAttributeRef(12, None), NumericLiteral(250)),
+   FileScan('file://...<snip>....data/netflow/botnet-capture-20110810-neris.pcap.subset.txt', 'CSV',
+    Scheme([('StartTime', 'STRING_TYPE'), ('Dur', 'DOUBLE_TYPE'), ('Proto', 'STRING_TYPE'), ('SrcAddr', 'STRING_TYPE'), ('Sport', 'STRING_TYPE'), ('Dir', 'STRING_TYPE'), ('DstAddr', 'STRING_TYPE'), ('Dport', 'STRING_TYPE'), ('State', 'STRING_TYPE'), ('sTos', 'LONG_TYPE'), ('dTos', 'LONG_TYPE'), ('TotPkts', 'LONG_TYPE'), ('TotBytes', 'DOUBLE_TYPE'), ('SrcBytes', 'LONG_TYPE'), ('Label', 'STRING_TYPE'), ('__DAP__', 'LONG_TYPE'), ('__LAP__', 'LONG_TYPE')]),
+    {'skip': 1}
+))))
+
 
      */
 
@@ -123,14 +146,14 @@ store(T2, netflow_subset);
             "('sTos', 'INT_TYPE')," +
             "('dTos', 'INT_TYPE')," +
             "('TotPkts', 'INT_TYPE')," +
-            "('TotBytes', 'DOUBLE_TYPE')," +
+            "('TotBytes', 'INT_TYPE')," +
             "('SrcBytes', 'INT_TYPE')," +
             "('Label', 'STRING_TYPE')" +
             "]), {'skip': 1})"
 
     val netflow_sample_scheme_daplap: String =
         "Scheme([" +
-            "('TotBytes', 'DOUBLE_TYPE')," +
+            "('TotBytes', 'INT_TYPE')," +
             "('StartTime', 'STRING_TYPE'), " +
             "('$__DAP__', 'STRING_TYPE'), " +
             "('$__LAP__', 'STRING_TYPE'), " +
@@ -188,8 +211,9 @@ store(T2, netflow_subset);
                     "$filescan))",
 
                     "Store(RelationKey('public','adhoc','netflow_subset2'), " +
+                        "Select(GT(NamedAttributeRef('TotBytes'), NumericLiteral(500)), " +
                         "Scan(RelationKey('public','adhoc','netflow_subset')," +
-                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None)))"
+                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None))))"
                 ),
                 beforeTasks = { listOf() },
                 afterTasks = { config -> listOf(

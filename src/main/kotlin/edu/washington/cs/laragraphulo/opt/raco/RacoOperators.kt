@@ -69,10 +69,27 @@ sealed class RacoExpression(args: List<Op<*>> = emptyList()): Op<Unit>(args) {
 
   data class DIVIDE(val left: RacoExpression, val right: RacoExpression): RacoExpression(left, right) {
     override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
+      val l = left.getType(props)
+      val r = right.getType(props)
+      return when (l) {
+        r -> l
+        Type.INT -> {
+          when (r) {
+            Type.DOUBLE -> Type.DOUBLE
+            else -> throw UnsupportedOperationException("did not implement other type conversions when l is an INT for $r")
+          }
+        }
+        else -> throw UnsupportedOperationException("types mismatch: $l and ${right.getType(props)}. This might be fixable by type upcasting")
+      }
+    }
+  }
+
+  data class GT(val left: RacoExpression, val right: RacoExpression): RacoExpression(left, right) {
+    override fun <P> getType(props: P): Type<*> where P : NameSchema, P : TypeSchema {
       val t = left.getType(props)
       if (t != right.getType(props))
         throw RuntimeException("types mismatch: $t and ${right.getType(props)}. This might be fixable by type upcasting")
-      return t
+      return Type.BOOLEAN
     }
   }
 }
@@ -112,6 +129,10 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                   scheme = (schemeToMap(pa[2] as PTree.PNode)),
                   options = ((pa[3] as PTree.PMap).map/*.mapValues { it.value }*/)
               ) }
+              "Select" -> { AAL(2); Select(
+                  PPT(pa[0]) as RacoExpression,
+                  PPT(pa[1]) as RacoOperator
+              ) }
               "NamedAttributeRef" -> { AAL(1); RacoExpression.NamedAttributeRef(((pa[0] as PTree.PString).str)) }
               "UnnamedAttributeRef" -> { AAL(2); val dbg = pa[1]; if (dbg != PTree.PNone) throw ParseRacoException("no support for non-None debug_info")
                 RacoExpression.UnnamedAttributeRef(((pa[0] as PTree.PLong).v.toInt()),
@@ -119,6 +140,7 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                 ) }
               "PLUS" -> { AAL(2); RacoExpression.PLUS(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
               "DIVIDE" -> { AAL(2); RacoExpression.DIVIDE(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
+              "GT" -> { AAL(2); RacoExpression.GT(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
               "Scan" -> { AAL(4); Scan(
                   relationKey = PPT(pa[0]) as RelationKey,
                   scheme = (schemeToMap(pa[1] as PTree.PNode)),
@@ -141,7 +163,7 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                 when (lit) {
                   is Long -> RacoExpression.Literal.LongLiteral(lit)
                   is Double -> RacoExpression.Literal.DoubleLiteral(lit)
-                  else -> throw ParseRacoException("unexpected inside NumbericLitera: $lit")
+                  else -> throw ParseRacoException("unexpected inside NumbericLiteral: $lit")
                 }
               }
               "StringLiteral" -> {AAL(1)
@@ -202,11 +224,12 @@ typealias Emitter = Pair<Name, RacoExpression>
 data class Apply(
     val emitters: List<Emitter>,
     val input: RacoOperator
-) : RacoOperator(emitters.toObj(), input) {
+) : RacoOperator(emitters.toObj(), input)
 
-
-
-}
+data class Select(
+    val condition: RacoExpression,
+    val input: RacoOperator
+) : RacoOperator(condition, input)
 
 /*
 Dump(Apply([('src', NamedAttributeRef('src')), ('dst', NamedAttributeRef('dst'))], Scan(RelationKey(

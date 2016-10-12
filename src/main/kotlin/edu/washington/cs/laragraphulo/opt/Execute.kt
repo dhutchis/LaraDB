@@ -20,16 +20,16 @@ fun executorsRacoOnAccumulo(
     racoOp: RacoOperator,
     accumuloConfig: AccumuloConfig
 ): List<Callable<*>> {
-  val (op, sap, scanTable, tasksBefore, tasksAfter) = racoToAccumulo(racoOp, accumuloConfig)
+  val (op, sap, scanTable, scanRange, tasksBefore, tasksAfter) = racoToAccumulo(racoOp, accumuloConfig)
   @Suppress("UNCHECKED_CAST")
   (op as Op<SKVI>)
 
   val tasks: List<Callable<*>>
   if (scanTable == null) {
     tasks = tasksBefore + listOf(CreateTableTask(hardcodedDefaultScanTable, accumuloConfig),
-        skviOpToTask(op, accumuloConfig, hardcodedDefaultScanTable)) + tasksAfter
+        skviOpToTask(op, accumuloConfig, hardcodedDefaultScanTable, scanRange)) + tasksAfter
   } else {
-    tasks = tasksBefore + skviOpToTask(op, accumuloConfig, scanTable) + tasksAfter
+    tasks = tasksBefore + skviOpToTask(op, accumuloConfig, scanTable, scanRange) + tasksAfter
   }
 
   return tasks
