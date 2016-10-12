@@ -338,7 +338,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
           // We could use the 10x next() heuristic here...
           //          if (!initialSeek)
           //          seekNextHeuristic(thisTargetRange);
-          logger.trace("before seeking source, source is $source")
+//          logger.trace("before seeking source, source is $source")
           source!!.seek(thisTargetRange, seekColumnFamilies, seekInclusive)
         }
         doSeekNext = true
@@ -387,7 +387,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
   private fun writeUntilSafeOrFinish(): Boolean {
     var m: Mutation
     //    Watch<Watch.PerfSpan> watch = Watch.getInstance();
-    logger.trace("checking hasTop of source: ${source!!.hasTop()}")
+//    logger.trace("checking hasTop of source: ${source!!.hasTop()}")
     while (source!!.hasTop()) {
       val k = source!!.topKey
       val v = source!!.topValue

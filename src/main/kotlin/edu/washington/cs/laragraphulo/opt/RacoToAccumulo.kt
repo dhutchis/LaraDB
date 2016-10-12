@@ -130,8 +130,8 @@ fun racoExprToExpr(
 //    val tr = re.right.getType(ep)
     BinaryExpr<ArrayByteSequence,ArrayByteSequence,ArrayByteSequence>(racoExprToExpr(re.left, ep), racoExprToExpr(re.right, ep), { left: ArrayByteSequence, right: ArrayByteSequence ->
       fun <T> ArrayByteSequence.dec(ty: Type<T>) = ty.decode(this.backingArray, this.offset(), this.length())
-      println("                 Type is $t, left is $left, right is $right")
-      System.err.println("                 Type is $t, left is $left, right is $right")
+//      println("                 Type is $t, left is $left, right is $right")
+//      System.err.println("                 Type is $t, left is $left, right is $right")
       when (t) {
         Type.INT -> {
           t as Type.INT // compiler ought to be able to infer this; report bug

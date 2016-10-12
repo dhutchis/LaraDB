@@ -108,6 +108,7 @@ class CSVScan(
   }
 
   private var top: Tuple? = null
+  private var badrowCount = 0
 
   private fun findTop() {
     while (top == null && iterator.hasNext()) {
@@ -123,6 +124,7 @@ class CSVScan(
               ArrayByteSequence(pair.second!!.encode(pair.first))
             } catch (e: Exception) {
               logger.warn("Skipping row $linenumber column $i. Type: ${pair.second}. Value: ${pair.first}", e)
+              badrowCount++
               throw ParseException()
             }
           }
@@ -136,7 +138,8 @@ class CSVScan(
   }
   override fun hasNext(): Boolean {
     findTop()
-    logger.debug{"hasNext: $top"}
+    if (top == null && badrowCount > 0)
+      logger.warn{"Number of bad rows discarded: $badrowCount"}
     return top != null
   }
   override fun next(): Tuple {
