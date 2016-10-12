@@ -100,6 +100,15 @@ class QueryOptimizeExecuteIT(
 
     val netflow_sample_file: File?
 
+    /*
+T1 = load("file://...<snip>....data/netflow/botnet-capture-20110810-neris.pcap.subset.txt",
+csv(schema(StartTime:string,Dur:float,Proto:string,SrcAddr:string,Sport:string,Dir:string,DstAddr:string,Dport:string,State:string,sTos:int,dTos:int,TotPkts:int,TotBytes:float,SrcBytes:int,Label:string,__DAP__:int,__LAP__:int),skip=1));
+T2 = select TotBytes, StartTime, __DAP__, __LAP__, SrcAddr, DstAddr, (TotBytes / Dur) / 1000.0 as RATE, Dur, Dir, Proto, Sport, Dport, State, sTos, dTos, TotPkts, SrcBytes, Label from T1;
+store(T2, netflow_subset);
+
+
+     */
+
     val netflow_sample_scheme: String =
         "Scheme([" +
             "('StartTime', 'STRING_TYPE'), " +
@@ -163,7 +172,7 @@ class QueryOptimizeExecuteIT(
                     "('$__LAP__', NumericLiteral(0))," +
                     "('SrcAddr', NamedAttributeRef('DstAddr'))," +
                     "('DstAddr', NamedAttributeRef('DstAddr'))," +
-                    "('RATE', DIVIDE(NamedAttributeRef('TotBytes'), NamedAttributeRef('Dur')))," +
+                    "('RATE', DIVIDE(DIVIDE(NamedAttributeRef('TotBytes'), NamedAttributeRef('Dur')), NumericLiteral(1000.0)))," +
                     "('Dur', NamedAttributeRef('Dur'))," +
                     "('Dir', NamedAttributeRef('Dir'))," +
                     "('Proto', NamedAttributeRef('Proto'))," +
