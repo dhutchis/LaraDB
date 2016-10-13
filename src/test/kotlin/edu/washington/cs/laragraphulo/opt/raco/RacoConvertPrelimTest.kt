@@ -127,6 +127,14 @@ class RacoConvertPrelimTest(
             name = "long literal",
             repr = "NumericLiteral(42)",
             expected = PNode("NumericLiteral", listOf(PLong(42)))
+        ),
+        Params(
+            name = "FileStore simple",
+            repr = "FileStore('file://abc', 'CSV', {'header': 'true'}, 'hi')",
+            expected = PNode("FileStore", listOf(
+                PString("file://abc"), PString("CSV"),
+                PMap(mapOf("header" to PString("true"))), PString("hi")
+            ))
         )
     )
 

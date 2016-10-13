@@ -16,11 +16,10 @@ import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
+import org.apache.commons.csv.CSVPrinter
 import org.apache.commons.csv.CSVRecord
 import org.slf4j.Logger
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.io.Serializable
+import java.io.*
 import java.net.URL
 import java.util.*
 
@@ -331,6 +330,122 @@ class ApplyIterator(
     override val logger: Logger = logger<ApplyIterator>()
   }
 }
+
+
+
+
+class OpFileStoreIterator(
+    val parent: Op<TupleIterator>,
+    val file: String,
+    val nameSchema: NameSchema,
+    val typeSchema: TypeSchema,
+    val header: Boolean,
+    val delimiter: Char = ',',
+    val quote: Char = '"',
+    val escape: Char? = null
+) : Op<TupleIterator>(parent, file.toObj(), nameSchema.toObj(), typeSchema.toObj(),
+    header.toObj(), delimiter.toObj(), quote.toObj(), escape.toObj()) {
+
+  override val unbound: List<Arg<*>> = parent.unbound
+
+  override fun invoke(reqs: List<*>): TupleIterator {
+    logger.info { "Invoke op: $this" }
+    return FileStoreIterator(parent.invoke(reqs), File(file), nameSchema, typeSchema, header, delimiter, quote, escape)
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpFileStoreIterator>()
+  }
+}
+
+
+class FileStoreIterator(
+    val parent: TupleIterator,
+    val file: File,
+    val nameSchema: NameSchema,
+    val typeSchema: TypeSchema,
+    val header: Boolean,
+    val delimiter: Char = ',',
+    val quote: Char = '"',
+    val escape: Char? = null
+) : TupleIterator {
+
+  override fun hasNext(): Boolean {
+    return false
+  }
+
+  override fun seek(seek: TupleSeekKey) {
+    parent.seek(seek)
+    writeAll()
+  }
+
+  fun writeAll() {
+
+    CSVPrinter(
+        BufferedWriter(FileWriter(file)),
+        CSVFormat.newFormat(delimiter).
+            withQuote(quote).withEscape(escape).
+            withRecordSeparator(System.lineSeparator())).use { printer ->
+
+      if (header) {
+        printer.printRecord(nameSchema.allNames)
+      }
+
+      while (parent.hasNext()) {
+        val tuple = parent.next()
+        // not printing family
+        val record = Array(nameSchema.allNames.size) { "" } // empty string for missing values
+        tuple.keys.forEachIndexed { idx, abs ->
+          record[idx] = typeSchema.types[idx].decode(abs).toString()
+        }
+        tuple.vals.asMap().forEach { abs, fullVals ->
+          if (fullVals.size > 1) {
+            logger.warn("Not writing tuple $tuple because the value attribute $abs has >1 values $fullVals")
+          } else {
+            val fullVal = fullVals.first()
+            val pos = nameSchema.allNames.indexOf(abs.toString())
+            if (pos == -1) {
+              logger.warn("Not writing tuple $tuple because the value attribute $abs is not in the name schema $nameSchema")
+            } else {
+              // not recording visibility or timestamp
+              record[pos] = typeSchema.types[pos].decode(fullVal.value).toString()
+            }
+          }
+        }
+        logger.trace { "Writing $tuple as ${Arrays.toString(record)}" }
+        printer.printRecord(*record)
+      }
+
+    }
+  }
+
+  override fun serializeState(): ByteArray {
+    throw UnsupportedOperationException("not implemented") //To change body of created functions use File | Settings | File Templates.
+  }
+
+  override fun next(): Tuple {
+    throw NoSuchElementException()
+  }
+
+  override fun peek(): Tuple {
+    throw NoSuchElementException()
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): TupleIterator {
+    return FileStoreIterator(parent.deepCopy(env), file, nameSchema, typeSchema, header, delimiter, quote, escape)
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<FileStoreIterator>()
+  }
+}
+
+
+
+
+
+
+
 
 
 class OpTupleToKeyValueIterator(

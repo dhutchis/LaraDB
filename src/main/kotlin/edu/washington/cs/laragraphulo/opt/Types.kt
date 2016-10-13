@@ -200,6 +200,8 @@ sealed class Type<T> : LexicoderPlus<T> {
     override fun toString() = "FLOAT_VARIABLE"
     override fun typeToLong(t: Float): Long = t.toLong()
   }
+
+
 //  object BYTE_ARRAY : Type<ByteArray>() {
 //
 //  }

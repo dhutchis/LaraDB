@@ -185,6 +185,8 @@ Store(RelationKey('public','adhoc','netflow_subset'),
         val fileurl = "file://"+netflow_sample_file.absolutePath
         val filescan = "FileScan('$fileurl', 'CSV', $netflow_sample_scheme)"
 
+        val fileStoreUrl = "${netflow_sample_file.absolutePath}.out.csv"
+
         tests = arrayOf<Params>(
             Params(
                 name = "store apply filescan Named",
@@ -213,6 +215,11 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                     "Store(RelationKey('public','adhoc','netflow_subset2'), " +
                         "Select(GT(NamedAttributeRef('TotBytes'), NumericLiteral(500)), " +
                         "Scan(RelationKey('public','adhoc','netflow_subset')," +
+                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None))))",
+
+                    "FileStore('$fileStoreUrl', 'CSV', {'header': 'true'}, " +
+                        "Select(GT(NamedAttributeRef('TotBytes'), NumericLiteral(500)), " +
+                        "Scan(RelationKey('public','adhoc','netflow_subset')," +
                         "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None))))"
                 ),
                 beforeTasks = { listOf() },
@@ -231,6 +238,13 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                         println()
                         println()
                       }
+
+                      val file = File(fileStoreUrl)
+                      assertTrue(file.exists())
+                      println("Reading $file:")
+                      file.reader().buffered().useLines { it.forEach { line ->
+                          println(line)
+                      } }
                     }
                 ) }
             )

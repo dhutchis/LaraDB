@@ -389,6 +389,22 @@ fun racoToAccumulo(
       AccumuloPlan(rwi, pp.sap, pp.scanTable, pp.scanRange, newtasks, pp.tasksAfter)
     }
 
+    is FileStore -> {
+      val pp = racoToAccumulo(ro.input, accumuloConfig, req)
+
+      val options = ro.options
+      val header = if (options.containsKey("header")) (options["header"]!! as PTree.PString).str.equals("true", true) else true
+
+      val op = OpFileStoreIterator(pp.op as Op<TupleIterator>,
+          ro.file, pp.sap, pp.sap, header)
+
+      // top-level conversion
+      val kvi = OpTupleToKeyValueIterator(op, pp.sap, pp.sap)
+      val skvi = OpKeyValueToSkviAdapter(kvi)
+
+      AccumuloPlan(skvi, pp.sap, pp.scanTable, pp.scanRange, pp.tasksBefore, pp.tasksAfter)
+    }
+
     is Apply -> {
       val pp = racoToAccumulo(ro.input, accumuloConfig, req)
       pp.op as Op<TupleIterator>

@@ -129,6 +129,12 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                   scheme = (schemeToMap(pa[2] as PTree.PNode)),
                   options = ((pa[3] as PTree.PMap).map/*.mapValues { it.value }*/)
               ) }
+              "FileStore" -> { AAL(4); FileStore(
+                  file = (pa[0] as PTree.PString).str,
+                  format = ((pa[1] as PTree.PString).str),
+                  options = ((pa[2] as PTree.PMap).map/*.mapValues { it.value }*/),
+                  input = PPT(pa[3]) as RacoOperator
+              ) }
               "Select" -> { AAL(2); Select(
                   PPT(pa[0]) as RacoExpression,
                   PPT(pa[1]) as RacoOperator
@@ -210,6 +216,13 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
 //}
 
 data class Store(val relationKey: RelationKey, val input: RacoOperator) : RacoOperator(relationKey, input)
+
+data class FileStore(
+    val file: String,
+    val format: String,
+    val options: Map<String, PTree>,
+    val input: RacoOperator
+) : RacoOperator(file.toObj(), format.toObj(), options.toObj(), input)
 
 //open class Join(
 //    condition: Op<RacoExpression<Boolean>>,
