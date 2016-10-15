@@ -24,7 +24,7 @@ class RacoConvertPrelimTest(
 
   @Test
   fun testPTreeParse() {
-    val inps = StringReader(params.repr).buffered()
+    val inps = StringReader(params.repr)
     val parsed = PTree.parseRaco(inps)
     Assert.assertEquals(params.expected, parsed)
   }
@@ -34,6 +34,11 @@ class RacoConvertPrelimTest(
         Params(
             name = "simple string",
             repr = "'hello world '",
+            expected = PString("hello world ")
+        ),
+        Params(
+            name = "unicode string",
+            repr = "u'hello world '",
             expected = PString("hello world ")
         ),
         Params(

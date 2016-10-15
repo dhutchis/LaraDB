@@ -49,18 +49,36 @@ sealed class PTree {
           else
             PTree.PLong(num.toLong())
         }
-        '\'', '"' -> PTree.PString(repr.readName(fc)) // string ends with matching ' or "
-        '[' -> PTree.PList(parseRacoArgs(repr, ']'))
+        '\'', '"' -> PString(repr.readName(fc)) // string ends with matching ' or "
+        '[' -> PList(parseRacoArgs(repr, ']'))
         '(' -> parseRacoOne(repr).let { // ignoring case of tuples with 3+ elements
           repr.readAssert(',')
           val it2 = parseRacoOne(repr)
           repr.readAssert(')')
-          PTree.PPair(it, it2)
+          PPair(it, it2)
         }
         '{' -> PTree.PMap(parseRacoMap(repr))
-        else -> repr.readName('(', fc).let {
-          if (it == "None") PNone
-          else PTree.PNode(it, parseRacoArgs(repr, ')')) // read NAME(ARG1,ARG2,...,ARGN)
+        else -> {
+          // if c is 'u', we might be starting a Unicode String. Otherwise 'u' is part of a name.
+          val unicodeStringFc: Char?
+          if (fc == 'u') {
+            val sci = repr.read()
+            val sc = sci.assertNoEOS()
+            when (sc) {
+              '\'', '"' -> unicodeStringFc = sc
+              else -> {
+                repr.unread(sci)
+                unicodeStringFc = null
+              }
+            }
+          } else unicodeStringFc = null
+          if (unicodeStringFc != null)
+            PString(repr.readName(unicodeStringFc))
+          else
+            repr.readName('(', fc).let {
+              if (it == "None") PNone
+              else PTree.PNode(it, parseRacoArgs(repr, ')')) // read NAME(ARG1,ARG2,...,ARGN)
+            }
         }
       }
     }
