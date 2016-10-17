@@ -226,17 +226,17 @@
                   <exclude>org.apache.zookeeper:*</exclude>
                 </excludes>
               </artifactSet>
-              <filters>
-                <filter>
-                  <artifact>org.apache.htrace:*</artifact>
-                  <includes>
-                    <include>**</include>
-                  </includes>
-                  <!--<excludes>-->
-                  <!--<exclude>org/junit/experimental/**</exclude>-->
-                  <!--</excludes>-->
-                </filter>
-              </filters>
+              <!--<filters>-->
+                <!--<filter>-->
+                  <!--<artifact>org.apache.htrace:*</artifact>-->
+                  <!--<includes>-->
+                    <!--<include>**</include>-->
+                  <!--</includes>-->
+                  <!--&lt;!&ndash;<excludes>&ndash;&gt;-->
+                  <!--&lt;!&ndash;<exclude>org/junit/experimental/**</exclude>&ndash;&gt;-->
+                  <!--&lt;!&ndash;</excludes>&ndash;&gt;-->
+                <!--</filter>-->
+              <!--</filters>-->
             </configuration>
           </execution>
         </executions>
@@ -244,5 +244,97 @@
 
     </plugins>
   </build>
+
+  <profiles>
+    <!--Bundle Everything, including Accumulo classes.-->
+    <!-- Creates an -all artifact useful for executing standalone programs. -->
+    <profile>
+      <id>BundleAll</id>
+      <activation>
+        <property>
+          <name>BundleAll</name>
+        </property>
+      </activation>
+
+      <dependencies>
+        <dependency>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-log4j12</artifactId>
+          <version>1.7.21</version>
+          <scope>runtime</scope>
+        </dependency>
+        <!--<dependency>-->
+          <!--<groupId>org.apache.htrace</groupId>-->
+          <!--<artifactId>htrace-zipkin</artifactId>-->
+          <!--<version>3.2.0-incubating</version>-->
+          <!--<scope>runtime</scope>-->
+        <!--</dependency>-->
+        <dependency>
+          <groupId>org.apache.htrace</groupId>
+          <artifactId>htrace-core</artifactId>
+          <version>3.2.0-incubating</version>
+          <scope>runtime</scope>
+        </dependency>
+
+      </dependencies>
+
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-shade-plugin</artifactId>
+            <version>2.4.3</version>
+            <executions>
+              <execution>
+                <id>all</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>shade</goal>
+                </goals>
+                <configuration>
+                  <shadedArtifactAttached>true</shadedArtifactAttached>
+                  <shadedClassifierName>all</shadedClassifierName>
+                  <minimizeJar>true</minimizeJar>
+                  <!--<keepDependenciesWithProvidedScope>true</keepDependenciesWithProvidedScope>-->
+                  <filters>
+                    <!--<filter>-->
+                      <!--<artifact>org.apache.htrace:htrace-zipkin</artifact>-->
+                      <!--<includes>-->
+                        <!--<include>**</include>-->
+                      <!--</includes>-->
+                    <!--</filter>-->
+                    <filter>
+                      <artifact>org.apache.htrace:htrace-core</artifact>
+                      <includes>
+                        <include>**</include>
+                      </includes>
+                    </filter>
+                    <filter>
+                      <artifact>commons-logging:commons-logging</artifact>
+                      <includes>
+                        <include>org/apache/commons/logging/**</include>
+                      </includes>
+                    </filter>
+                    <filter>
+                      <artifact>org.slf4j:slf4j-log4j12</artifact>
+                      <includes>
+                        <include>**</include>
+                      </includes>
+                    </filter>
+                    <filter>
+                      <artifact>log4j:log4j</artifact>
+                      <includes>
+                        <include>**</include>
+                      </includes>
+                    </filter>
+                  </filters>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 
 </project>

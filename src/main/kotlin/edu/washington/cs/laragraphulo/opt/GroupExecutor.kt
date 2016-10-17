@@ -424,6 +424,9 @@ class AccumuloPipelineTask<D>(
     }
     return results
   }
+
+  override fun toString(): String = "AccumuloPipelineTask($pipeline)"
+
 }
 
 
