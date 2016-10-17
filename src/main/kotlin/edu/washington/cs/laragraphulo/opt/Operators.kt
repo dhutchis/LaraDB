@@ -2,6 +2,7 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableListMultimap
+import com.google.common.collect.Range
 import edu.washington.cs.laragraphulo.Encode
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.*
@@ -331,6 +332,45 @@ class ApplyIterator(
   }
 }
 
+
+
+class OpRowRangeIterator(
+    val parent: Op<TupleIterator>,
+    val tupleKey: Range<TupleKey>
+) : Op<TupleIterator>(parent, tupleKey.toObj()) {
+
+  override val unbound: List<Arg<*>> = parent.unbound
+
+  override fun invoke(reqs: List<*>): TupleIterator {
+    logger.info { "Invoke op: $this" }
+    return RowRangeIterator(parent.invoke(reqs), tupleKey)
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<OpFileStoreIterator>()
+  }
+}
+
+
+class RowRangeIterator(
+    val parent: TupleIterator,
+    val tupleKey: Range<TupleKey>
+) : TupleIterator by parent {
+  override fun seek(seek: TupleSeekKey) {
+    val r = seek.range.intersection(tupleKey)
+    val tsk = TupleSeekKey(r, seek.families, seek.inclusive)
+    logger.debug { "Seeking to $tsk   (from $seek)" }
+    parent.seek(tsk)
+  }
+
+  override fun deepCopy(env: IteratorEnvironment): TupleIterator {
+    return RowRangeIterator(parent.deepCopy(env), tupleKey)
+  }
+
+  companion object : Loggable {
+    override val logger: Logger = logger<RowRangeIterator>()
+  }
+}
 
 
 

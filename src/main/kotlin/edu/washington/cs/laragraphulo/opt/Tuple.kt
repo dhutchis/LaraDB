@@ -85,7 +85,9 @@ open class TupleKeyImpl(
 
     // an optimization is possible whereby we check to see if the dapList's ArrayByteSequences
     // all reference the same array and form a contiguous block of the array
-    val (rowArr, rowOff, rowLen) = arrayFromParts(apKeySchema.dapRange)
+    val (rowArr, rowOff, rowLen) = try {
+      arrayFromParts(apKeySchema.dapRange)
+    } catch (e: IndexOutOfBoundsException) { throw IllegalStateException("index problem; schema is $apKeySchema; tuple is $keys", e) }
 
     // column qualifier prefix
     val (lapArr, lapOff, lapLen) = arrayFromParts(apKeySchema.lapRange)
@@ -273,7 +275,7 @@ class KeyValueToTuple(
         var p = 0
         for (i in off..off + len - 1) {
           var width = widthSchema.widths[i]
-          require(width != -1 || (allowVariableLast && i == off + len - 1)) { "Variable width not allowed here. Widths are ${widthSchema.widths}" }
+          require(width != -1 || (allowVariableLast && i == off + len - 1)) { "Variable width not allowed here. Widths are ${widthSchema.widths}. Schema is $apKeySchema" }
           if (width == -1) {
             width = bs.length() - p
           } else if (p + width > bs.length()) {
@@ -444,8 +446,8 @@ class TupleToKeyValueIterator(
   }
 
   override fun seek(seek: SeekKey) {
-    logger.debug{"seek: $seek"}
     val tsk = seek.toTupleSeekKey(apKeySchema, widthSchema)
+    logger.debug{"seek: $seek with schema: $apKeySchema to result in $tsk"}
     tupleIterator.seek(tsk)
   }
 

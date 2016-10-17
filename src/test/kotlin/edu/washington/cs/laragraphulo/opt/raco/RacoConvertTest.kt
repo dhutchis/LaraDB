@@ -61,8 +61,10 @@ class RacoConvertTest(
           skvi as Op<SKVI>
           serializer as Serializer<Op<SKVI>,Op<SKVI>>
 
-          println("AccumuloPipelineTask($table): $skvi")
+          println("AccumuloPipelineTask($table, ${callable.pipeline.scanRange}): $skvi")
           println("dot:\n${skvi.generateDot()}")
+
+
           val serialized = serializer.serializeToString(skvi)
           val deserialized = serializer.deserializeFromString(serialized)
 //          Assert.assertEquals("Serialization should match original object", callable.pipeline.data, deserialized)
@@ -238,6 +240,41 @@ Callables : [CreateTableTask(tableName=public_adhoc_newtable, accumuloConfig=Acc
             data = listOf(
                 mapOf("src" to 1L.toABS(), "dst" to 2L.toABS())
             ),
+            expected = listOf()
+        ),
+
+
+        Params(
+            name = "store apply scan Unnamed with manual DAP and __TS and __VIS apply",
+            query =
+              "FileStore('/home/dhutchis/gits/raco/raco/backends/federated/tests/V5407830105', 'CSV', {}, " +
+                "Apply([" +
+                    "('src_ip', NamedAttributeRef('SrcAddr')), " +
+                    "('dst_ip', NamedAttributeRef('SrcAddr')), " +
+                    "('value', NumericLiteral(1.0))], " +
+                  "Select(GT(UnnamedAttributeRef(0, None), NumericLiteral(500)), " +
+                    "Scan(RelationKey('public','adhoc','netflow'), " +
+                      "Scheme([(u'TotBytes', 'INT_TYPE'), " +
+                        "(u'StartTime', 'STRING_TYPE'), " +
+                        "(u'SrcAddr', 'STRING_TYPE'), " +
+                        "(u'DstAddr', 'STRING_TYPE'), " +
+                        "(u'RATE', 'DOUBLE_TYPE'), " +
+                        "(u'Dur', 'DOUBLE_TYPE'), " +
+                        "(u'Dir', 'STRING_TYPE'), " +
+                        "(u'Proto', 'STRING_TYPE'), " +
+                        "(u'Sport', 'STRING_TYPE'), " +
+                        "(u'Dport', 'STRING_TYPE'), " +
+                        "(u'State', 'STRING_TYPE'), " +
+                        "(u'sTos', 'LONG_TYPE'), " +
+                        "(u'dTos', 'LONG_TYPE'), " +
+                        "(u'TotPkts', 'LONG_TYPE'), " +
+                        "(u'SrcBytes', 'LONG_TYPE'), " +
+                        "(u'Label', 'STRING_TYPE')]), " +
+                      "(<raco.backends.myria.catalog.MyriaCatalog object at 0x7f207134fbd0>, 7), " +
+                      "RepresentationProperties(frozenset([]), None, None)" +
+                  "))))",
+            catalog = listOf(),
+            data = listOf(),
             expected = listOf()
         )
 

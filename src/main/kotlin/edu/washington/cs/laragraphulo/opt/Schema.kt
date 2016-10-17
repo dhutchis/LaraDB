@@ -2,6 +2,7 @@ package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
+import edu.washington.cs.laragraphulo.opt.raco.RepresentationProperties
 import org.apache.accumulo.core.data.ArrayByteSequence
 import java.io.Serializable
 import java.util.regex.Pattern
@@ -148,13 +149,24 @@ const val __LAP__ = "__LAP__"
 
 
 
-fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): AccessPath {
-  val (names, types) = scheme.unzip()
+fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>, partitioning: RepresentationProperties = RepresentationProperties()): AccessPath {
+//  val (names0, types) = scheme.unzip()
+
+  // if partitioning has some properties, ensure they are at the front of the dap
+//  require(names0.containsAll(partitioning.hashPartition)) {"hash partitioned attributes ${partitioning.hashPartition} are not present in the scheme $scheme"}
+  val (namesDapPre, typesDapPre) = partitioning.hashPartition.map { parName -> scheme.find { it.first == parName } ?: throw IllegalArgumentException("hash partitioned attributes ${partitioning.hashPartition} are not present in the scheme $scheme") }.unzip()
+  val (names, types) = scheme.filter { !partitioning.hashPartition.contains(it.first) }.unzip()
+
+
   val dapidx = names.indexOf(__DAP__)
   val daplen: Int
-  val namesNoDap: List<Name>
+  val namesNoDap: List<Name> // the names without the __DAP__
   val typesNoDap: List<Type<*>>
-  if (dapidx == -1) {
+  if (dapidx == -1 && namesDapPre.isNotEmpty()) {
+    daplen = 0
+    namesNoDap = names
+    typesNoDap = types
+  } else if (dapidx == -1) {
     daplen = names.size
     namesNoDap = names
     typesNoDap = types
@@ -165,9 +177,14 @@ fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): AccessPath {
   }
   val lapidx = namesNoDap.indexOf(__LAP__)
   val laplen: Int
-  val namesNoDapNoLap: List<Name>
+  val namesNoDapNoLap: List<Name> // the names without __DAP__ and __LAP__
   val typesNoDapNoLap: List<Type<*>>
-  if (lapidx == -1) {
+  if (dapidx == -1 && namesDapPre.isNotEmpty()) {
+    require(lapidx == -1) { "$__DAP__ does not appear but $__LAP__ does in $names" }
+    laplen = 0
+    namesNoDapNoLap = namesNoDap
+    typesNoDapNoLap = typesNoDap
+  } else if (lapidx == -1) {
     laplen = namesNoDap.size - daplen
     namesNoDapNoLap = namesNoDap
     typesNoDapNoLap = typesNoDap
@@ -179,12 +196,13 @@ fun fromRacoScheme(scheme: List<Pair<Name, Type<*>>>): AccessPath {
   }
   // this could be simplified; I converted the code
 
-//  return ImmutableUberSchema(
-//      namesNoDapNoLap, daplen, laplen,
-//      sortedUpto = 0, types = typesNoDapNoLap
-//  )
+  val final_names = namesDapPre + namesNoDapNoLap
+  val final_types = typesDapPre + typesNoDapNoLap
+  val final_daplen = daplen + namesDapPre.size
+  val final_laplen = laplen
+
 //  println("namesNoDapNoLap: $namesNoDapNoLap, daplen: $daplen, laplen: $laplen, typesNoDapNoLap: $typesNoDapNoLap, scheme: $scheme")
-  return AccessPath.of(namesNoDapNoLap, daplen, laplen, typesNoDapNoLap)
+  return AccessPath.of(final_names, final_daplen, final_laplen, final_types)
 }
 
 

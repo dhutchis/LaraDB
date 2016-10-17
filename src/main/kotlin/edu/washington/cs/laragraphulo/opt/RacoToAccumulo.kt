@@ -1,7 +1,9 @@
 package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.collect.ImmutableList
 import edu.washington.cs.laragraphulo.Encode
 import edu.washington.cs.laragraphulo.opt.raco.*
+import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Range
@@ -402,6 +404,8 @@ fun racoToAccumulo(
       val kvi = OpTupleToKeyValueIterator(op, pp.sap, pp.sap)
       val skvi = OpKeyValueToSkviAdapter(kvi)
 
+      // file store does not emit any entries - keeping sap here for the sake of seek
+
       AccumuloPlan(skvi, pp.sap, pp.scanTable, pp.scanRange, pp.tasksBefore, pp.tasksAfter)
     }
 
@@ -479,6 +483,8 @@ fun racoToAccumulo(
       }
 
       // if dap0 is empty and lap0 has an element, then upgrade the first element in lap to dap
+      // otherwise take an element from cap
+      // Warning: elements from cap may not be present
       if (dap.isEmpty() && lap.isNotEmpty()) {
         val first = lap.first()
         dap = listOf(first)
@@ -487,6 +493,24 @@ fun racoToAccumulo(
         val dapNames = listOf(firstName)
         val lapNames = emittersScheme.lapNames - firstName
         emittersScheme = AccessPath.of(dapNames, lapNames, emittersScheme.valNames, emittersScheme.types, emittersScheme.widths)
+      } else if (dap.isEmpty() && cap.isNotEmpty()) {
+        val first = cap.first()
+        dap = listOf(first)
+        cap -= first
+        val firstName = emittersScheme.valNames.first()
+        val dapNames = listOf(firstName)
+        val types = ImmutableList.builder<Type<*>>().
+            add(emittersScheme.types[emittersScheme.dapNames.size+emittersScheme.lapNames.size]).
+            addAll(emittersScheme.types.subList(0, emittersScheme.dapNames.size+emittersScheme.lapNames.size)).
+            addAll(emittersScheme.types.subList(emittersScheme.dapNames.size+emittersScheme.lapNames.size+1, emittersScheme.types.size)).
+            build()
+        val widths = ImmutableList.builder<Width>().
+            add(emittersScheme.widths[emittersScheme.dapNames.size+emittersScheme.lapNames.size]).
+            addAll(emittersScheme.widths.subList(0, emittersScheme.dapNames.size+emittersScheme.lapNames.size)).
+            addAll(emittersScheme.widths.subList(emittersScheme.dapNames.size+emittersScheme.lapNames.size+1, emittersScheme.types.size)).
+            build()
+        val valNames = emittersScheme.valNames - firstName
+        emittersScheme = AccessPath.of(dapNames, emittersScheme.lapNames, valNames, types, widths)
       }
 
       keyExprs = (dap+lap).map { it.second }
@@ -603,8 +627,12 @@ fun racoToAccumulo(
         }
       }
 
-      AccumuloPlan(opParent, sapParent, scanTable,
-          prevScanRange.clip(range),
+      // decided to filter the seek range inside the iterator rather than from the client BatchScanner
+      val tupleRange = GraphuloUtil.transform(GraphuloUtil.rangeToGuavaRange(range)) {it -> KeyValueToTuple.readKeyFromTop(sapParent, sapParent, it)!!}
+      val opRowRangeIter = OpRowRangeIterator(opParent, tupleRange)
+
+      AccumuloPlan(opRowRangeIter, sapParent, scanTable,
+          prevScanRange, // prevScanRange.clip(range)
           tasksBefore, tasksAfter)
     }
 
@@ -612,7 +640,7 @@ fun racoToAccumulo(
       val tableName = ro.relationKey.sanitizeTableName()
 
       val types: List<Pair<Name, Type<*>>> = getTypesFromScheme(ro.scheme)
-      val ap: AccessPath = fromRacoScheme(types)
+      val ap: AccessPath = fromRacoScheme(types, ro.partitioning)
       // fully sorted, since we are scanning from a table
       val sortedUpto = ap.dapNames.size+ap.lapNames.size
       val sap = ap.withSortedUpto(sortedUpto)

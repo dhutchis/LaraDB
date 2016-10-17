@@ -187,15 +187,79 @@ Store(RelationKey('public','adhoc','netflow_subset'),
 
         val fileStoreUrl = "${netflow_sample_file.absolutePath}.out.csv"
 
+        val fileStoreFederated = "/home/dhutchis/gits/raco/raco/backends/federated/tests/V5407830105"
+
         tests = arrayOf<Params>(
+//            Params(
+//                name = "store apply filescan Named",
+//                query = listOf("Store(RelationKey('public','adhoc','netflow_subset'), " +
+//                    "Apply([('TotBytes', NamedAttributeRef('TotBytes'))," +
+//                    "('StartTime', NamedAttributeRef('StartTime'))," +
+//                    "('$__DAP__', NumericLiteral(0))," +
+//                    "('$__LAP__', NumericLiteral(0))," +
+//                    "('SrcAddr', NamedAttributeRef('DstAddr'))," +
+//                    "('DstAddr', NamedAttributeRef('DstAddr'))," +
+//                    "('RATE', DIVIDE(DIVIDE(NamedAttributeRef('TotBytes'), NamedAttributeRef('Dur')), NumericLiteral(1000.0)))," +
+//                    "('Dur', NamedAttributeRef('Dur'))," +
+//                    "('Dir', NamedAttributeRef('Dir'))," +
+//                    "('Proto', NamedAttributeRef('Proto'))," +
+//                    "('Sport', NamedAttributeRef('Sport'))," +
+//                    "('Dport', NamedAttributeRef('Dport'))," +
+//                    "('State', NamedAttributeRef('State'))," +
+//                    "('sTos', NamedAttributeRef('sTos'))," +
+//                    "('dTos', NamedAttributeRef('dTos'))," +
+//                    "('TotPkts', NamedAttributeRef('TotPkts'))," +
+//                    "('SrcBytes', NamedAttributeRef('SrcBytes'))," +
+//                    "('Label', NamedAttributeRef('Label'))" +
+//                    "], " +
+//                    "$filescan))",
+//
+//                    "Store(RelationKey('public','adhoc','netflow_subset2'), " +
+//                        "Select(GT(NamedAttributeRef('TotBytes'), NumericLiteral(500)), " +
+//                        "Scan(RelationKey('public','adhoc','netflow_subset')," +
+//                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None))))",
+//
+//                    "FileStore('$fileStoreUrl', 'CSV', {'header': 'true'}, " +
+//                        "Select(GT(NamedAttributeRef('TotBytes'), NumericLiteral(500)), " +
+//                        "Scan(RelationKey('public','adhoc','netflow_subset')," +
+//                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None))))"
+//                ),
+//                beforeTasks = { listOf() },
+//                afterTasks = { config -> listOf(
+//                    Callable {
+//                      val stored_table = RelationKey("public","adhoc","netflow_subset").sanitizeTableName()
+//                      val stored_table2 = RelationKey("public","adhoc","netflow_subset2").sanitizeTableName()
+//
+//                      listOf(stored_table, stored_table2).forEach { table ->
+//                        config.connector.createScanner(table, Authorizations.EMPTY).use {
+//                          for ((key, value) in it) {
+//                            println(key.toStringNoTime() + " --> " + value)
+//                          }
+//                        }
+//                        DebugUtil.printTable(table, config.connector, table, 15)
+//                        println()
+//                        println()
+//                      }
+//
+//                      val file = File(fileStoreUrl)
+//                      assertTrue(file.exists())
+//                      println("Reading $file:")
+//                      file.reader().buffered().useLines { it.forEach { line ->
+//                          println(line)
+//                      } }
+//                    }
+//                ) }
+//            ),
+
             Params(
-                name = "store apply filescan Named",
-                query = listOf("Store(RelationKey('public','adhoc','netflow_subset'), " +
+                name = "from federated",
+                query = listOf(
+                    "Store(RelationKey('public','adhoc','netflow'), " +
                     "Apply([('TotBytes', NamedAttributeRef('TotBytes'))," +
                     "('StartTime', NamedAttributeRef('StartTime'))," +
                     "('$__DAP__', NumericLiteral(0))," +
                     "('$__LAP__', NumericLiteral(0))," +
-                    "('SrcAddr', NamedAttributeRef('DstAddr'))," +
+                    "('SrcAddr', NamedAttributeRef('SrcAddr'))," +
                     "('DstAddr', NamedAttributeRef('DstAddr'))," +
                     "('RATE', DIVIDE(DIVIDE(NamedAttributeRef('TotBytes'), NamedAttributeRef('Dur')), NumericLiteral(1000.0)))," +
                     "('Dur', NamedAttributeRef('Dur'))," +
@@ -212,23 +276,39 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                     "], " +
                     "$filescan))",
 
-                    "Store(RelationKey('public','adhoc','netflow_subset2'), " +
-                        "Select(GT(NamedAttributeRef('TotBytes'), NumericLiteral(500)), " +
-                        "Scan(RelationKey('public','adhoc','netflow_subset')," +
-                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None))))",
-
-                    "FileStore('$fileStoreUrl', 'CSV', {'header': 'true'}, " +
-                        "Select(GT(NamedAttributeRef('TotBytes'), NumericLiteral(500)), " +
-                        "Scan(RelationKey('public','adhoc','netflow_subset')," +
-                        "$netflow_sample_scheme_daplap, 500, RepresentationProperties(frozenset([]), None, None))))"
+                    "FileStore('$fileStoreFederated', 'CSV', {}, " +
+                        "Apply([" +
+                        "('src_ip', NamedAttributeRef('SrcAddr')), " +
+                        "('dst_ip', NamedAttributeRef('DstAddr')), " +
+                        "('value', NumericLiteral(1.0))], " +
+                        "Select(GT(UnnamedAttributeRef(0, None), NumericLiteral(500)), " +
+                        "Scan(RelationKey('public','adhoc','netflow'), " +
+                        "Scheme([(u'TotBytes', 'INT_TYPE'), " +
+                        "(u'StartTime', 'STRING_TYPE'), " +
+                        "(u'SrcAddr', 'STRING_TYPE'), " +
+                        "(u'DstAddr', 'STRING_TYPE'), " +
+                        "(u'RATE', 'DOUBLE_TYPE'), " +
+                        "(u'Dur', 'DOUBLE_TYPE'), " +
+                        "(u'Dir', 'STRING_TYPE'), " +
+                        "(u'Proto', 'STRING_TYPE'), " +
+                        "(u'Sport', 'STRING_TYPE'), " +
+                        "(u'Dport', 'STRING_TYPE'), " +
+                        "(u'State', 'STRING_TYPE'), " +
+                        "(u'sTos', 'LONG_TYPE'), " +
+                        "(u'dTos', 'LONG_TYPE'), " +
+                        "(u'TotPkts', 'LONG_TYPE'), " +
+                        "(u'SrcBytes', 'LONG_TYPE'), " +
+                        "(u'Label', 'STRING_TYPE')]), " +
+                        "(<raco.backends.myria.catalog.MyriaCatalog object at 0x7f207134fbd0>, 7), " +
+                        "RepresentationProperties(frozenset(['TotBytes', 'StartTime']), None, None)" +
+                        "))))"
                 ),
                 beforeTasks = { listOf() },
                 afterTasks = { config -> listOf(
                     Callable {
-                      val stored_table = RelationKey("public","adhoc","netflow_subset").sanitizeTableName()
-                      val stored_table2 = RelationKey("public","adhoc","netflow_subset2").sanitizeTableName()
+                      val stored_table = RelationKey("public","adhoc","netflow").sanitizeTableName()
 
-                      listOf(stored_table, stored_table2).forEach { table ->
+                      listOf(stored_table).forEach { table ->
                         config.connector.createScanner(table, Authorizations.EMPTY).use {
                           for ((key, value) in it) {
                             println(key.toStringNoTime() + " --> " + value)
@@ -239,12 +319,13 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                         println()
                       }
 
-                      val file = File(fileStoreUrl)
+                      val file = File(fileStoreFederated)
                       assertTrue(file.exists())
                       println("Reading $file:")
                       file.reader().buffered().useLines { it.forEach { line ->
                           println(line)
                       } }
+                      println()
                     }
                 ) }
             )

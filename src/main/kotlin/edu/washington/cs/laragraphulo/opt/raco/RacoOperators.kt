@@ -150,7 +150,7 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
               "Scan" -> { AAL(4); Scan(
                   relationKey = PPT(pa[0]) as RelationKey,
                   scheme = (schemeToMap(pa[1] as PTree.PNode)),
-                  cardinality = ((pa[2] as PTree.PLong).v),
+                  cardinality = 10000, //((pa[2] as PTree.PLong).v), // ignore cardinality while there is a Raco scan repr bug
                   partitioning = PPT(pa[3]) as RepresentationProperties
               ) }
               "RelationKey" -> { AAL(3); RelationKey(
@@ -185,6 +185,7 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
           is PTree.PDouble -> ptree.v
           is PTree.PString -> ptree.str
           PTree.PNone -> listOf<String>()
+          is PTree.PObj -> ptree.content // don't know how to handle objects right now; just parse as string
         }
 
     private fun schemeToMap(pscheme: PTree.PNode): Scheme {
@@ -269,9 +270,9 @@ data class RelationKey(
 ) : RacoOperator(user.toObj(), program.toObj(), relation.toObj())
 
 data class RepresentationProperties(
-    val hashPartition: List<String>,
-    val sorted: List<String>,
-    val grouped: List<String>
+    val hashPartition: List<Name> = listOf(),
+    val sorted: List<Name> = listOf(),
+    val grouped: List<Name> = listOf()
 ) : RacoOperator(hashPartition.toObj(), sorted.toObj(), grouped.toObj())
 
 data class Scan(

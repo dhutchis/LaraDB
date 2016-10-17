@@ -22,6 +22,7 @@ sealed class PTree {
   object PNone : PTree() {
     override fun toString(): String = "PNone"
   }
+  data class PObj(val content: String) : PTree() // <...>
 
   companion object {
     class ParsePythonException(msg: String) : Exception(msg)
@@ -58,6 +59,7 @@ sealed class PTree {
           PPair(it, it2)
         }
         '{' -> PTree.PMap(parseRacoMap(repr))
+        '<' -> PTree.PObj(repr.readName('>'))
         else -> {
           // if c is 'u', we might be starting a Unicode String. Otherwise 'u' is part of a name.
           val unicodeStringFc: Char?
@@ -179,4 +181,6 @@ sealed class PTree {
     }
 
   }
+
+
 }
