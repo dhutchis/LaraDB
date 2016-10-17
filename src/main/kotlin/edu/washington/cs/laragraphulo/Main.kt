@@ -55,7 +55,7 @@ class Main {
       logger.info{"Accumulo Config: $config"}
 
       val ret = doQuery(query, config)
-      logger.info{"Exit with status $ret"}
+      logger.debug{"Exit with status $ret"}
       System.exit(ret)
     }
 
@@ -73,13 +73,13 @@ class Main {
 
     private fun doQuery(query: String, config: AccumuloConfig): Int {
       val racoOpPTree = PTree.Companion.parseRaco(query)
-      logger.info{"PTree Raco: $racoOpPTree"}
+      logger.debug{"PTree Raco: $racoOpPTree"}
 
       val racoOp = RacoOperator.parsePTreeToRacoTree(racoOpPTree)
-      logger.info{"Full  Raco: $racoOp"}
+      logger.debug{"Full  Raco: $racoOp"}
 
       val callables = executorsRacoOnAccumulo(racoOp, config)
-      logger.info{"Callables : $callables"}
+      logger.debug{"Callables : $callables"}
 
       System.currentTimeMillis().let {
         executeTasksSerial(callables).mapIndexed { i, res -> logger.info{"result $i: $res"} }

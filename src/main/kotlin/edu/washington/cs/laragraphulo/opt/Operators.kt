@@ -39,7 +39,7 @@ class OpCSVScan(
   override val unbound: List<Arg<*>> = emptyList()
 
   override fun invoke(reqs: List<*>): TupleIterator {
-    logger.info{"Invoke op: $this"}
+    logger.debug{"Invoke op: $this"}
     return CSVScan(URL(url), encoders, skip, delimiter, quote, escape)
   }
 
@@ -165,7 +165,7 @@ class OpAccumuloBase(
   override val unbound: List<Arg<*>> = listOf(Arg("AccumuloBase_Skvi", SortedKeyValueIterator::class.java))
   @Suppress("UNCHECKED_CAST")
   override fun invoke(reqs: List<*>): TupleIterator {
-    logger.info{"Invoke op: $this"}
+    logger.debug{"Invoke op: $this"}
     require (reqs.size >= 1 && reqs[0] is SortedKeyValueIterator<*,*>) { "Bad argument passed to OpAccumuloBase invoke; expected an SKVI but got $reqs" }
     val skvi = reqs[0] as SortedKeyValueIterator<Key,Value>
     val kviter = SkviToKeyValueAdapter(skvi)
@@ -221,7 +221,7 @@ class OpApplyIterator(
   override val unbound: List<Arg<*>> = source.unbound
 
   override fun invoke(reqs: List<*>): TupleIterator {
-    logger.info{"Invoke op: $this"}
+    logger.debug{"Invoke op: $this"}
 //    return ApplyIterator(
 //        source(reqs), keyExprs.map { it.expr }, famExpr.expr,
 //        valExprs.map { it.name to it.expr }
@@ -338,7 +338,7 @@ class OpRowRangeIterator(
   override val unbound: List<Arg<*>> = parent.unbound
 
   override fun invoke(reqs: List<*>): TupleIterator {
-    logger.info { "Invoke op: $this" }
+    logger.debug { "Invoke op: $this" }
     return RowRangeIterator(parent.invoke(reqs), tupleKey)
   }
 
@@ -385,7 +385,7 @@ class OpFileStoreIterator(
   override val unbound: List<Arg<*>> = parent.unbound
 
   override fun invoke(reqs: List<*>): TupleIterator {
-    logger.info { "Invoke op: $this" }
+    logger.debug { "Invoke op: $this" }
     return FileStoreIterator(parent.invoke(reqs), File(file), nameSchema, typeSchema, header, delimiter, quote, escape)
   }
 
@@ -491,7 +491,7 @@ class OpTupleToKeyValueIterator(
 ) : Op<KeyValueIterator>(tupleIterator, apKeySchema.toObj(), widthSchema.toObj()) {
   override val unbound: List<Arg<*>> = tupleIterator.unbound
   override fun invoke(reqs: List<*>): KeyValueIterator {
-    logger.info{"Invoke op: $this"}
+    logger.debug{"Invoke op: $this"}
     return TupleToKeyValueIterator(tupleIterator(reqs), apKeySchema, widthSchema)
   }
 
@@ -506,7 +506,7 @@ class OpKeyValueToSkviAdapter(
 ) : Op<SKVI>(kvIter) {
   override val unbound: List<Arg<*>> = kvIter.unbound
   override fun invoke(reqs: List<*>): SKVI {
-    logger.info{"Invoke op: $this"}
+    logger.debug{"Invoke op: $this"}
     return KeyValueToSkviAdapter(kvIter(reqs))
   }
 
@@ -527,7 +527,7 @@ class OpRWI(
   override val unbound: List<Arg<*>> = input.unbound
 
   override fun invoke(reqs: List<*>): SortedKeyValueIterator<Key, Value> {
-    logger.info{"Invoke op: $this"}
+    logger.debug{"Invoke op: $this"}
     // todo - replace with a version that passes the accumuloConfig in directly. Then we can mock this in integration tests.
     val opts = accumuloConfig.basicRemoteOpts("", tableName, null, null)
     val skvi = RemoteWriteIterator()
