@@ -245,7 +245,7 @@ Callables : [CreateTableTask(tableName=public_adhoc_newtable, accumuloConfig=Acc
 
 
         Params(
-            name = "store apply scan Unnamed with manual DAP and __TS and __VIS apply",
+            name = "testing raco federated parse",
             query =
               "FileStore('/home/dhutchis/gits/raco/raco/backends/federated/tests/V5407830105', 'CSV', {}, " +
                 "Apply([" +

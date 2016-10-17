@@ -147,23 +147,36 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
               "PLUS" -> { AAL(2); RacoExpression.PLUS(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
               "DIVIDE" -> { AAL(2); RacoExpression.DIVIDE(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
               "GT" -> { AAL(2); RacoExpression.GT(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
-              "Scan" -> { AAL(4); Scan(
+              "Scan" -> { AAL(4);
+
+                val scheme = schemeToMap(pa[1] as PTree.PNode)
+                val partUnparsed = PPT(pa[3]) as RepresentationPropertiesUnparsed
+                val hpNames = partUnparsed.hashPartition.map { when(it) {
+                  is String -> it
+                  is RacoExpression.NamedAttributeRef -> it.attributename
+                  is RacoExpression.UnnamedAttributeRef -> scheme[it.position].first
+                  else -> throw ParseRacoException("did not expect in the representation properties $it; ptree is $ptree")
+                } }
+                val rep = RepresentationProperties(hpNames, partUnparsed.sorted, partUnparsed.grouped)
+
+                Scan(
                   relationKey = PPT(pa[0]) as RelationKey,
-                  scheme = (schemeToMap(pa[1] as PTree.PNode)),
+                  scheme = scheme,
                   cardinality = 10000, //((pa[2] as PTree.PLong).v), // ignore cardinality while there is a Raco scan repr bug
-                  partitioning = PPT(pa[3]) as RepresentationProperties
+                  partitioning = rep
               ) }
               "RelationKey" -> { AAL(3); RelationKey(
                   user = ((pa[0] as PTree.PString).str),
                   program = ((pa[1] as PTree.PString).str),
                   relation = ((pa[2] as PTree.PString).str)
               ) }
-              "RepresentationProperties" -> { AAL(3); RepresentationProperties(
-                  hashPartition = (PPT(pa[0]) as List<String>),
+              "RepresentationProperties" -> { AAL(3);
+                RepresentationPropertiesUnparsed(
+                  hashPartition = (PPT(pa[0]) as List<*>),
                   sorted = PPT(pa[1]) as List<String>,
                   grouped = PPT(pa[2]) as List<String>
               ) }
-              "frozenset" -> {AAL(1); (PPT(pa[0]) as List<String>) }
+              "frozenset" -> {AAL(1); (PPT(pa[0]) as List<*>) }
               "NumericLiteral" -> {AAL(1)
                 val lit = PPT(pa[0])
                 when (lit) {
@@ -268,6 +281,12 @@ data class RelationKey(
     val program: String,
     val relation: String
 ) : RacoOperator(user.toObj(), program.toObj(), relation.toObj())
+
+data class RepresentationPropertiesUnparsed(
+    val hashPartition: List<*> = listOf<String>(),
+    val sorted: List<Name> = listOf(),
+    val grouped: List<Name> = listOf()
+)
 
 data class RepresentationProperties(
     val hashPartition: List<Name> = listOf(),

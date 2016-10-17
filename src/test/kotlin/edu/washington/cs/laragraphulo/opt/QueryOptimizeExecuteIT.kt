@@ -300,7 +300,7 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                         "(u'SrcBytes', 'LONG_TYPE'), " +
                         "(u'Label', 'STRING_TYPE')]), " +
                         "(<raco.backends.myria.catalog.MyriaCatalog object at 0x7f207134fbd0>, 7), " +
-                        "RepresentationProperties(frozenset(['TotBytes', 'StartTime']), None, None)" +
+                        "RepresentationProperties(frozenset([UnnamedAttributeRef(0, None), UnnamedAttributeRef(1, None)]), None, None)" +
                         "))))"
                 ),
                 beforeTasks = { listOf() },

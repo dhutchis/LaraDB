@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.opt
 
+import com.google.common.collect.BoundType
 import com.google.common.collect.ImmutableList
 import edu.washington.cs.laragraphulo.Encode
 import edu.washington.cs.laragraphulo.opt.raco.*
@@ -553,6 +554,7 @@ fun racoToAccumulo(
 //      val condition = racoExprToExpr(racoCondition, sapParent)
       // need to reach inside the above and see that we have a GT or EQ or something
       val range: Range
+      val tupleRange: com.google.common.collect.Range<TupleKey>
       when (racoCondition) {
 
         is RacoExpression.GT -> {
@@ -580,12 +582,16 @@ fun racoToAccumulo(
                   val literalBytes = leftType.encode(right.obj.toInt())
                   val startKey = Key(literalBytes)
                   range = Range(startKey, false, null, false)
+                  val startTuple = TupleKeyImpl(Array<ABS>(sapParent.dapNames.size) { if (it == 0) literalBytes.toABS() else EMPTY}.asList())
+                  tupleRange = com.google.common.collect.Range.greaterThan(startTuple)
                 }
                 is RacoExpression.Literal.DoubleLiteral -> {
                   val excl = Math.floor(right.obj) == right.obj
                   val literalBytes = leftType.encode(right.obj.toInt())
                   val startKey = Key(literalBytes)
                   range = Range(startKey, !excl, null, false)
+                  val startTuple = TupleKeyImpl(Array<ABS>(sapParent.dapNames.size) { if (it == 0) literalBytes.toABS() else EMPTY}.asList())
+                  tupleRange = com.google.common.collect.Range.downTo(startTuple, if (excl) BoundType.OPEN else BoundType.CLOSED)
                 }
                 else -> throw UnsupportedOperationException("don't know how to handle $right when left is $left of type $leftType")
               }
@@ -597,12 +603,16 @@ fun racoToAccumulo(
                   val literalBytes = leftType.encode(right.obj)
                   val startKey = Key(literalBytes)
                   range = Range(startKey, false, null, false)
+                  val startTuple = TupleKeyImpl(Array<ABS>(sapParent.dapNames.size) { if (it == 0) literalBytes.toABS() else EMPTY}.asList())
+                  tupleRange = com.google.common.collect.Range.greaterThan(startTuple)
                 }
                 is RacoExpression.Literal.DoubleLiteral -> {
                   val excl = Math.floor(right.obj) == right.obj
                   val literalBytes = leftType.encode(right.obj.toLong())
                   val startKey = Key(literalBytes)
                   range = Range(startKey, !excl, null, false)
+                  val startTuple = TupleKeyImpl(Array<ABS>(sapParent.dapNames.size) { if (it == 0) literalBytes.toABS() else EMPTY}.asList())
+                  tupleRange = com.google.common.collect.Range.downTo(startTuple, if (excl) BoundType.OPEN else BoundType.CLOSED)
                 }
                 else -> throw UnsupportedOperationException("don't know how to handle $right when left is $left of type $leftType")
               }
@@ -614,6 +624,8 @@ fun racoToAccumulo(
                   val literalBytes = leftType.encode(right.obj)
                   val startKey = Key(literalBytes)
                   range = Range(startKey, false, null, false)
+                  val startTuple = TupleKeyImpl(Array<ABS>(sapParent.dapNames.size) { if (it == 0) literalBytes.toABS() else EMPTY}.asList())
+                  tupleRange = com.google.common.collect.Range.greaterThan(startTuple)
                 }
                 else -> throw UnsupportedOperationException("don't know how to handle $right when left is $left of type $leftType")
               }
@@ -628,7 +640,6 @@ fun racoToAccumulo(
       }
 
       // decided to filter the seek range inside the iterator rather than from the client BatchScanner
-      val tupleRange = GraphuloUtil.transform(GraphuloUtil.rangeToGuavaRange(range)) {it -> KeyValueToTuple.readKeyFromTop(sapParent, sapParent, it)!!}
       val opRowRangeIter = OpRowRangeIterator(opParent, tupleRange)
 
       AccumuloPlan(opRowRangeIter, sapParent, scanTable,

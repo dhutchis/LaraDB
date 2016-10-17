@@ -39,7 +39,7 @@ interface TupleKey : Comparable<TupleKey>, Serializable {
 
 open class TupleKeyImpl(
     keys: List<ArrayByteSequence>,
-    override val family: ArrayByteSequence
+    override val family: ArrayByteSequence = EMPTY
 ) : TupleKey {
   override val keys: List<ArrayByteSequence> = ImmutableList.copyOf(keys)
 
