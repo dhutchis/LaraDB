@@ -138,8 +138,10 @@ class CSVScan(
   }
   override fun hasNext(): Boolean {
     findTop()
-    if (top == null && badrowCount > 0)
+    if (top == null && badrowCount > 0) {
       logger.warn{"Number of bad rows discarded: $badrowCount"}
+      badrowCount = 0 // reset count to prevent multiple logging
+    }
     return top != null
   }
   override fun next(): Tuple {

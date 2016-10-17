@@ -12,7 +12,6 @@ import java.io.Serializable
 import java.lang.reflect.Constructor
 import java.util.*
 import kotlin.comparisons.compareBy
-import kotlin.reflect.jvm.javaConstructor
 
 data class KeyValue(val key: Key, val value: Value) : Serializable {
   constructor(kv: Pair<Key,Value>): this(kv.first, kv.second)

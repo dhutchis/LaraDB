@@ -31,7 +31,7 @@ import java.util.concurrent.Callable
  * Start with a Raco query, compile it, and execute the result.
  */
 @RunWith(Parameterized::class)
-class QueryOptimizeExecuteIT(
+class QueryOptimizeExecuteTest(
     val params: Params
 ) : AccumuloTestBase() {
 
@@ -96,7 +96,7 @@ class QueryOptimizeExecuteIT(
 
 
   companion object : Loggable {
-    override val logger: Logger = logger<QueryOptimizeExecuteIT>()
+    override val logger: Logger = logger<QueryOptimizeExecuteTest>()
 
     val netflow_sample_file: File?
 

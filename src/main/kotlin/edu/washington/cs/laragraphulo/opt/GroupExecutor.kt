@@ -1,8 +1,5 @@
 package edu.washington.cs.laragraphulo.opt
 
-import com.google.common.annotations.GwtIncompatible
-import com.google.common.base.Supplier
-import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.*
 
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
@@ -24,7 +21,6 @@ import java.io.IOException
 import java.io.Serializable
 import java.util.*
 import java.util.concurrent.*
-import kotlin.reflect.jvm.javaField
 
 /**
  * Similar to an [ExecutorService]. Executes tasks submitted in parallel groups.
@@ -243,7 +239,9 @@ class FakeAccumuloConfig : AccumuloConfig {
  * Lazily creates a [Connector] via the [connector] property.
  */
 class AccumuloConfigImpl : AccumuloConfig {
-  @Transient override val authenticationToken: AuthenticationToken
+  @Transient private val _authenticationToken: AuthenticationToken
+  override val authenticationToken: AuthenticationToken
+    get() = _authenticationToken
   private val authenticationTokenClass: Class<AuthenticationToken>
 
   @Transient private val connectorLazy: Lazy<Connector>
@@ -262,7 +260,7 @@ class AccumuloConfigImpl : AccumuloConfig {
               zookeeperHosts: String,
               username: String,
               authenticationToken: AuthenticationToken) {
-    this.authenticationToken = authenticationToken
+    this._authenticationToken = authenticationToken
     this.authenticationTokenClass = authenticationToken.javaClass
     connectorLazy = lazy {
       val cc = ClientConfiguration.loadDefault().withInstance(instanceName).withZkHosts(zookeeperHosts)
@@ -276,7 +274,7 @@ class AccumuloConfigImpl : AccumuloConfig {
 
   constructor(connector: Connector,
               authenticationToken: AuthenticationToken) {
-    this.authenticationToken = authenticationToken
+    this._authenticationToken = authenticationToken
     this.authenticationTokenClass = authenticationToken.javaClass
     connectorLazy = lazyOf(connector)
     instanceName = connector.instance.instanceName
@@ -287,7 +285,7 @@ class AccumuloConfigImpl : AccumuloConfig {
   @Throws(IOException::class)
   private fun writeObject(stream: java.io.ObjectOutputStream) {
     stream.defaultWriteObject()
-    authenticationToken.write(stream)
+    _authenticationToken.write(stream)
   }
 
   @Throws(IOException::class, ClassNotFoundException::class)
@@ -297,17 +295,21 @@ class AccumuloConfigImpl : AccumuloConfig {
     val auth = GraphuloUtil.subclassNewInstance(authenticationTokenClass, AuthenticationToken::class.java)
     auth.readFields(`in`)
     // Safe to set the final field authenticationToken.
-    val authField = AccumuloConfigImpl::authenticationToken.javaField!!
+
+    // Use Java reflection, not Kotlin reflection
+    val authField = AccumuloConfigImpl::class.java.declaredFields.find { it.name == "_authenticationToken" }!!
+        //AccumuloConfigImpl::_authenticationToken.javaField!!
     authField.isAccessible = true
     authField.set(this, auth)
 
     // Same approach for connectorLazy
-    val clField = AccumuloConfigImpl::connectorLazy.javaField!!
+    val clField = AccumuloConfigImpl::class.java.declaredFields.find { it.name == "connectorLazy" }!!
+        //AccumuloConfigImpl::connectorLazy.javaField!!
     clField.isAccessible = true
     clField.set(this, lazy {
       val cc = ClientConfiguration.loadDefault().withInstance(instanceName).withZkHosts(zookeeperHosts)
       val instance = ZooKeeperInstance(cc)
-      instance.getConnector(username, authenticationToken)
+      instance.getConnector(username, _authenticationToken)
     })
   }
 
@@ -322,9 +324,9 @@ class AccumuloConfigImpl : AccumuloConfig {
     if (this === other) return true
     if (other?.javaClass != javaClass) return false
 
-    other as AccumuloConfig
+    other as AccumuloConfigImpl
 
-    if (authenticationToken != other.authenticationToken) return false
+    if (_authenticationToken != other._authenticationToken) return false
     if (instanceName != other.instanceName) return false
     if (zookeeperHosts != other.zookeeperHosts) return false
     if (username != other.username) return false
@@ -333,7 +335,7 @@ class AccumuloConfigImpl : AccumuloConfig {
   }
 
   override fun hashCode(): Int{
-    var result = authenticationToken.hashCode()
+    var result = _authenticationToken.hashCode()
     result = 31 * result + instanceName.hashCode()
     result = 31 * result + zookeeperHosts.hashCode()
     result = 31 * result + username.hashCode()
@@ -411,7 +413,7 @@ class AccumuloPipelineTask<D>(
     val ranges = listOf(pipeline.scanRange)
     bs.setRanges(ranges)
 
-    val priority = 10
+    val priority = 25 // after the Versioning Iterator
     // create a DynamicIterator
     val itset = setting.iteratorSetting(pipeline.serializer, pipeline.data, priority)
     bs.addScanIterator(itset)
