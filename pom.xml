@@ -201,6 +201,47 @@
           </dependency>
         </dependencies>
       </plugin>
+
+      <!-- Shade up an uber-jar that contains all dependencies EXCEPT those related to Accumulo. -->
+      <!-- For placement in the Accumulo server $ACCUMULO_HOME/lib/ext -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>2.4.3</version>
+        <executions>
+          <execution>
+            <id>alldeps</id>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>tserver</shadedClassifierName>
+              <minimizeJar>true</minimizeJar>
+              <artifactSet>
+                <excludes>
+                  <exclude>org.apache.accumulo:*</exclude>
+                  <exclude>org.apache.hadoop:*</exclude>
+                  <exclude>org.apache.zookeeper:*</exclude>
+                </excludes>
+              </artifactSet>
+              <filters>
+                <filter>
+                  <artifact>org.apache.htrace:*</artifact>
+                  <includes>
+                    <include>**</include>
+                  </includes>
+                  <!--<excludes>-->
+                  <!--<exclude>org/junit/experimental/**</exclude>-->
+                  <!--</excludes>-->
+                </filter>
+              </filters>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
     </plugins>
   </build>
 
