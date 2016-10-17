@@ -1,11 +1,7 @@
 package edu.washington.cs.laragraphulo.opt
 
-import edu.washington.cs.laragraphulo.opt.raco.PTree
 import edu.washington.cs.laragraphulo.opt.raco.RacoOperator
-import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import java.util.concurrent.Callable
-
-
 
 
 const val hardcodedDefaultScanTable = "RunnerTable"

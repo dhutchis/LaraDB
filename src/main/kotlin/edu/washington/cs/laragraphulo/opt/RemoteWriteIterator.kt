@@ -2,10 +2,11 @@ package edu.washington.cs.laragraphulo.opt
 
 
 import com.google.common.base.Strings
-import com.google.common.collect.Iterables
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
-import edu.washington.cs.laragraphulo.*
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
+import edu.washington.cs.laragraphulo.trace
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken

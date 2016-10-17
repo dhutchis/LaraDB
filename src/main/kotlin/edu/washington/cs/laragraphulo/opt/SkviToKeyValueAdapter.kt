@@ -1,10 +1,9 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.PeekingIterator
-import edu.washington.cs.laragraphulo.*
-import edu.washington.cs.laragraphulo.opt.KeyValue
-import edu.washington.cs.laragraphulo.opt.KeyValueIterator
-import edu.washington.cs.laragraphulo.opt.SeekKey
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.debug
+import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment

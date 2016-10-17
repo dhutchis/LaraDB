@@ -7,18 +7,13 @@ import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
-import org.apache.accumulo.core.data.Range
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.Filter
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.OptionDescriber
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
-
 import java.io.IOException
-import java.util.Arrays
-import java.util.Collections
-import java.util.SortedSet
-import java.util.TreeSet
+import java.util.*
 
 /**
  * Only emit entries whose column appears in the given collection of ranges.

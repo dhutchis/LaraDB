@@ -4,27 +4,21 @@ package edu.washington.cs.laragraphulo.opt
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.logger
-import edu.washington.cs.laragraphulo.opt.*
-import edu.washington.cs.laragraphulo.opt.raco.*
-import edu.washington.cs.laragraphulo.opt.raco.RacoConvertTest.Companion.toABS
-import org.apache.accumulo.core.data.ArrayByteSequence
-import org.junit.Assert.*
+import edu.washington.cs.laragraphulo.opt.raco.PTree
+import edu.washington.cs.laragraphulo.opt.raco.RacoOperator
+import edu.washington.cs.laragraphulo.opt.raco.RelationKey
+import edu.washington.cs.laragraphulo.util.DebugUtil
+import kotlinx.support.jdk7.use
+import org.apache.accumulo.core.security.Authorizations
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
-import java.io.StringReader
-import java.nio.ByteBuffer
-import edu.washington.cs.laragraphulo.opt.viz.generateDot
-import edu.washington.cs.laragraphulo.util.DebugUtil
-import edu.washington.cs.laragraphulo.util.GraphuloUtil
-import edu.washington.cs.laragraphulo.util.TestUtil
-import kotlinx.support.jdk7.use
-import org.apache.accumulo.core.security.Authorizations
-import org.junit.Assume.*
 import org.slf4j.Logger
 import java.io.File
-import java.net.URL
+import java.io.StringReader
 import java.util.concurrent.Callable
+
 //import edu.washington.cs.laragraphulo.*
 
 /**

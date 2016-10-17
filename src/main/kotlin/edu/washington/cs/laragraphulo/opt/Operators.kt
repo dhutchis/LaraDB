@@ -1,16 +1,13 @@
 package edu.washington.cs.laragraphulo.opt
 
-import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableListMultimap
 import com.google.common.collect.Range
-import edu.washington.cs.laragraphulo.Encode
-import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.*
-import org.apache.accumulo.core.client.BatchWriter
-import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.sample.SamplerConfiguration
 import org.apache.accumulo.core.conf.AccumuloConfiguration
-import org.apache.accumulo.core.data.*
+import org.apache.accumulo.core.data.ArrayByteSequence
+import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.IteratorUtil
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
@@ -23,9 +20,6 @@ import org.slf4j.Logger
 import java.io.*
 import java.net.URL
 import java.util.*
-
-
-
 
 
 class OpCSVScan(

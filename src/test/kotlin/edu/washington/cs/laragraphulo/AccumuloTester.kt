@@ -2,8 +2,6 @@
 package edu.washington.cs.laragraphulo
 
 import edu.washington.cs.laragraphulo.opt.AccumuloConfig
-import org.apache.accumulo.core.client.Connector
-import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.junit.rules.TestRule
 
 /**

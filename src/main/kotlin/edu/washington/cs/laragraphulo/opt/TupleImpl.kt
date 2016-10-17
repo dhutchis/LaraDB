@@ -1,24 +1,15 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.base.Preconditions
-import com.google.common.collect.*
-import com.google.common.collect.Range
-import edu.washington.cs.laragraphulo.LexicoderPlus
+import com.google.common.collect.ImmutableList
+import com.google.common.collect.Iterators
+import com.google.common.collect.PeekingIterator
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
-import org.apache.accumulo.core.data.*
+import org.apache.accumulo.core.data.ArrayByteSequence
+import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.iterators.IteratorEnvironment
-import java.io.Serializable
 import java.util.*
 import java.util.function.Function
-import java.util.regex.Pattern
-import kotlin.comparisons.compareBy
-
-
-
-
-
-
-
 
 
 // later this will need to be a full interface, so that subclasses can maintain state

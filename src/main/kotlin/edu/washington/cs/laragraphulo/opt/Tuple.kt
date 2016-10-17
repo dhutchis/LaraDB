@@ -1,7 +1,9 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.*
-import edu.washington.cs.laragraphulo.*
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.debug
+import edu.washington.cs.laragraphulo.logger
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
@@ -9,7 +11,6 @@ import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.slf4j.Logger
 import java.io.Serializable
-import java.lang.reflect.Constructor
 import java.util.*
 import kotlin.comparisons.compareBy
 

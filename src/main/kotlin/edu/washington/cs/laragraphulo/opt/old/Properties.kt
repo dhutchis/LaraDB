@@ -1,8 +1,6 @@
 package old
 
-import com.google.common.collect.ImmutableList
 import com.google.common.collect.ImmutableSortedMap
-import edu.washington.cs.laragraphulo.opt.*
 import edu.washington.cs.laragraphulo.opt.old.Contradiction
 
 /**

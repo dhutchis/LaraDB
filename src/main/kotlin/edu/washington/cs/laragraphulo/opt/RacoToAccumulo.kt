@@ -4,15 +4,11 @@ import com.google.common.collect.BoundType
 import com.google.common.collect.ImmutableList
 import edu.washington.cs.laragraphulo.Encode
 import edu.washington.cs.laragraphulo.opt.raco.*
-import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.data.ArrayByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Range
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
-import org.apache.hadoop.io.WritableComparable
-import org.apache.hadoop.io.WritableComparator
-import java.io.ObjectOutputStream
 import java.util.*
 import java.util.concurrent.Callable
 

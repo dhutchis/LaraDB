@@ -1,6 +1,5 @@
 package edu.washington.cs.laragraphulo.util
 
-import com.google.common.base.Preconditions
 import com.google.common.collect.BoundType
 import com.google.common.collect.ImmutableRangeSet
 import com.google.common.collect.RangeSet
@@ -18,7 +17,6 @@ import org.apache.accumulo.core.iterators.system.ColumnQualifierFilter
 import org.apache.accumulo.core.iterators.user.ColumnSliceFilter
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.WritableComparator
-import org.apache.log4j.LogManager
 import org.slf4j.Logger
 import java.io.IOException
 import java.nio.charset.StandardCharsets

@@ -17,13 +17,11 @@ import org.apache.accumulo.core.iterators.IteratorUtil
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.accumulo.core.security.Authorizations
 import org.apache.hadoop.io.Text
-import org.apache.log4j.LogManager
 import org.junit.Assert
 import org.slf4j.Logger
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.*
-
 
 
 /**

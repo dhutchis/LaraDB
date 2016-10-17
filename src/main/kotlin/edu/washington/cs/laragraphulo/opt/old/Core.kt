@@ -1,7 +1,6 @@
 package edu.washington.cs.laragraphulo.opt.old
 
 import com.google.common.collect.ImmutableList
-import java.util.*
 
 /** Thrown if Drools concludes contradictory facts */
 class Contradiction(vararg objs: Any) : RuntimeException(objs.joinToString(separator = "\n\t"))

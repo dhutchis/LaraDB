@@ -1,7 +1,6 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.collect.ImmutableList
-import edu.washington.cs.laragraphulo.opt.KeyValueToTupleIterator
 import java.io.Serializable
 import java.lang.reflect.Constructor
 import kotlin.reflect.KFunction

@@ -11,16 +11,8 @@ import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.IteratorUtil
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
-import org.apache.log4j.LogManager
-import org.apache.log4j.Logger
-
 import java.io.IOException
-import java.util.ArrayList
-import java.util.Deque
-import java.util.EnumSet
-import java.util.HashMap
-import java.util.LinkedHashMap
-import java.util.LinkedList
+import java.util.*
 
 /**
  * Solves the problem of running out of iterator priority spaces.

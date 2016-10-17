@@ -1,16 +1,14 @@
 package edu.washington.cs.laragraphulo.opt.raco
 
 import edu.washington.cs.laragraphulo.opt.*
+import edu.washington.cs.laragraphulo.opt.viz.generateDot
 import org.apache.accumulo.core.data.ArrayByteSequence
-import org.junit.Assert
+import org.junit.Assume
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 import java.io.StringReader
 import java.nio.ByteBuffer
-import edu.washington.cs.laragraphulo.opt.raco.PTree.*
-import edu.washington.cs.laragraphulo.opt.viz.generateDot
-import org.junit.Assume
 
 
 @RunWith(Parameterized::class)

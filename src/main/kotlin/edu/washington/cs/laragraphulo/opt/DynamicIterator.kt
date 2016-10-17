@@ -8,11 +8,7 @@ import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.IteratorUtil
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.accumulo.core.iterators.WrappingIterator
-import org.apache.log4j.LogManager
-import org.apache.log4j.Logger
-
 import java.io.IOException
-import java.util.EnumSet
 
 /**
  * Solves the problem of running out of iterator priority spaces.

@@ -2,17 +2,13 @@ package edu.washington.cs.laragraphulo
 
 import edu.washington.cs.laragraphulo.opt.AccumuloConfig
 import edu.washington.cs.laragraphulo.opt.AccumuloConfigImpl
-import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.minicluster.MiniAccumuloCluster
 import org.apache.accumulo.minicluster.MiniAccumuloConfig
 import org.junit.rules.ExternalResource
 import org.slf4j.Logger
-
 import java.io.File
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.attribute.FileAttribute
 
 /**
  * Provides a MiniAccumuloCluster for use in testing.

@@ -1,6 +1,5 @@
 package edu.washington.cs.laragraphulo.iter
 
-import com.google.common.collect.Iterators
 import edu.washington.cs.laragraphulo.iter.MergeJoinTest.Companion.parameters
 import edu.washington.cs.laragraphulo.util.MapToSkviAdapter
 import edu.washington.cs.laragraphulo.util.SeekData

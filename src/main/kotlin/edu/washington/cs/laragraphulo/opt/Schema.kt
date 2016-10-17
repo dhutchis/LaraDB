@@ -3,7 +3,6 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.base.Preconditions
 import com.google.common.collect.ImmutableList
 import edu.washington.cs.laragraphulo.opt.raco.RepresentationProperties
-import org.apache.accumulo.core.data.ArrayByteSequence
 import java.io.Serializable
 import java.util.regex.Pattern
 
