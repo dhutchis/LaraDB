@@ -147,8 +147,7 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
               "PLUS" -> { AAL(2); RacoExpression.PLUS(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
               "DIVIDE" -> { AAL(2); RacoExpression.DIVIDE(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
               "GT" -> { AAL(2); RacoExpression.GT(PPT(pa[0]) as RacoExpression, PPT(pa[1]) as RacoExpression)}
-              "Scan" -> { AAL(4);
-
+              "Scan" -> { AAL(4)
                 val scheme = schemeToMap(pa[1] as PTree.PNode)
                 val partUnparsed = PPT(pa[3]) as RepresentationPropertiesUnparsed
                 val hpNames = partUnparsed.hashPartition.map { when(it) {
@@ -170,7 +169,7 @@ sealed class RacoOperator(args: List<Op<*>> = emptyList()) : Op<Unit>(args) {
                   program = ((pa[1] as PTree.PString).str),
                   relation = ((pa[2] as PTree.PString).str)
               ) }
-              "RepresentationProperties" -> { AAL(3);
+              "RepresentationProperties" -> { AAL(3)
                 RepresentationPropertiesUnparsed(
                   hashPartition = (PPT(pa[0]) as List<*>),
                   sorted = PPT(pa[1]) as List<String>,

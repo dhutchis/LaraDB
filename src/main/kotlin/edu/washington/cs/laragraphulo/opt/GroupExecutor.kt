@@ -211,25 +211,52 @@ class GroupExecutor(
 }
 
 
-/**
- * Holds the information to create a [Connector], plus also the [AuthenticationToken].
- * Lazily creates a [Connector] via the [connector] property.
- */
-class AccumuloConfig : Serializable {
-  @Transient val authenticationToken: AuthenticationToken
-  private val authenticationTokenClass: Class<AuthenticationToken>
-
-  @Transient private val connectorLazy: Lazy<Connector>
-  /** Lazily constructed Connector. Constructs the Connector (thereby connecting to the Accumulo DB) when this property is referenced. */
+interface AccumuloConfig : Serializable {
   val connector: Connector
-    get() = connectorLazy.value
-  /** Whether [connector] is constructed; whether this is connected to an Accumulo DB. */
   val connected: Boolean
-    get() = connectorLazy.isInitialized()
 
   val instanceName: String
   val zookeeperHosts: String
   val username: String
+
+  val authenticationToken: AuthenticationToken
+}
+
+class FakeAccumuloConfig : AccumuloConfig {
+  override val connector: Connector
+    get() = throw UnsupportedOperationException()
+  override val connected: Boolean
+    get() = throw UnsupportedOperationException()
+  override val instanceName: String
+    get() = throw UnsupportedOperationException()
+  override val zookeeperHosts: String
+    get() = throw UnsupportedOperationException()
+  override val username: String
+    get() = throw UnsupportedOperationException()
+  override val authenticationToken: AuthenticationToken
+    get() = throw UnsupportedOperationException()
+}
+
+
+/**
+ * Holds the information to create a [Connector], plus also the [AuthenticationToken].
+ * Lazily creates a [Connector] via the [connector] property.
+ */
+class AccumuloConfigImpl : AccumuloConfig {
+  @Transient override val authenticationToken: AuthenticationToken
+  private val authenticationTokenClass: Class<AuthenticationToken>
+
+  @Transient private val connectorLazy: Lazy<Connector>
+  /** Lazily constructed Connector. Constructs the Connector (thereby connecting to the Accumulo DB) when this property is referenced. */
+  override val connector: Connector
+    get() = connectorLazy.value
+  /** Whether [connector] is constructed; whether this is connected to an Accumulo DB. */
+  override val connected: Boolean
+    get() = connectorLazy.isInitialized()
+
+  override val instanceName: String
+  override val zookeeperHosts: String
+  override val username: String
 
   constructor(instanceName: String,
               zookeeperHosts: String,
@@ -270,12 +297,12 @@ class AccumuloConfig : Serializable {
     val auth = GraphuloUtil.subclassNewInstance(authenticationTokenClass, AuthenticationToken::class.java)
     auth.readFields(`in`)
     // Safe to set the final field authenticationToken.
-    val authField = AccumuloConfig::authenticationToken.javaField!!
+    val authField = AccumuloConfigImpl::authenticationToken.javaField!!
     authField.isAccessible = true
     authField.set(this, auth)
 
     // Same approach for connectorLazy
-    val clField = AccumuloConfig::connectorLazy.javaField!!
+    val clField = AccumuloConfigImpl::connectorLazy.javaField!!
     clField.isAccessible = true
     clField.set(this, lazy {
       val cc = ClientConfiguration.loadDefault().withInstance(instanceName).withZkHosts(zookeeperHosts)

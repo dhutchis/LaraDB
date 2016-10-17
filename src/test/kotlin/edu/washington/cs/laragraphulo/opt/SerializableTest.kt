@@ -25,7 +25,7 @@ class SerializableTest {
 
   @Test
   fun testAccumuloConfig() {
-    val ac = AccumuloConfig("instance", "localhost:2181", "root", PasswordToken("secret"))
+    val ac = AccumuloConfigImpl("instance", "localhost:2181", "root", PasswordToken("secret"))
     val newac = testSerialize(ac)
     // make sure the final fields set correctly
     assertEquals(ac.authenticationToken, newac.authenticationToken)

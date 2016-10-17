@@ -49,8 +49,8 @@ object DebugUtil {
       while (iter.hasNext()) {
         val entry = iter.next()
         val k = entry.key
-        val row = k.getRow().toString()
-        val col = k.getColumnQualifier().toString()
+        val row = k.row.toString()
+        val col = k.columnQualifier.toString()
 
         columnSet.add(col)
         if (row != curRow) {

@@ -43,7 +43,7 @@ class RacoConvertTest(
       Assume.assumeFalse("Dump is not implemented; skipping the compile part of this test", true)
 
     // testCompile()
-    val callables = executorsRacoOnAccumulo(racoOp, hardcodedAccumuloConfig)
+    val callables = executorsRacoOnAccumulo(racoOp, FakeAccumuloConfig())
     println("Callables : $callables")
 
     // testSerialize()

@@ -1,6 +1,7 @@
 package edu.washington.cs.laragraphulo
 
 import edu.washington.cs.laragraphulo.opt.AccumuloConfig
+import edu.washington.cs.laragraphulo.opt.AccumuloConfigImpl
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.junit.rules.ExternalResource
@@ -15,7 +16,7 @@ class RealAccumuloTester(instanceName: String, zookeeperHost: String,
     logger.debug { "Using parameters from $cc" }
   }
 
-  override val accumuloConfig: AccumuloConfig = AccumuloConfig(
+  override val accumuloConfig: AccumuloConfig = AccumuloConfigImpl(
       cc.get(ClientConfiguration.ClientProperty.INSTANCE_NAME),
       cc.get(ClientConfiguration.ClientProperty.INSTANCE_ZK_HOST),
       username, password)

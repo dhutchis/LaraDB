@@ -1,6 +1,7 @@
 package edu.washington.cs.laragraphulo
 
 import edu.washington.cs.laragraphulo.opt.AccumuloConfig
+import edu.washington.cs.laragraphulo.opt.AccumuloConfigImpl
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.minicluster.MiniAccumuloCluster
@@ -66,7 +67,7 @@ class MiniAccumuloTester(
         Thread.sleep(10000)
       }
 
-      _ac = AccumuloConfig(ma.instanceName, ma.zooKeepers, USER, PasswordToken(PASSWORD))
+      _ac = AccumuloConfigImpl(ma.instanceName, ma.zooKeepers, USER, PasswordToken(PASSWORD))
 //      sw.stop()
       logger.debug("MiniAccumulo created instance: ${ma.instanceName} ")//- creation time: ${sw.getTime() / 1000.0}s")
     } else
