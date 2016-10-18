@@ -416,6 +416,7 @@ class FileStoreIterator(
   }
 
   fun writeAll() {
+    logger.debug{"Writing all. Name schema is $nameSchema. Type schema is $typeSchema."}
 
     CSVPrinter(
         BufferedWriter(FileWriter(file)),

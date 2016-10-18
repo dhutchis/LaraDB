@@ -171,10 +171,11 @@ Store(RelationKey('public','adhoc','netflow_subset'),
 
     init {
       val resourcePath = "data/netflow/botnet-capture-20110810-neris.pcap.subset.txt"
-      netflow_sample_file = Thread.currentThread().contextClassLoader.
-          getResource(resourcePath)?.let {
-        File(it.path)
-      } ?: null
+      netflow_sample_file = File("/home/dhutchis/gits/raco/examples/fed_accumulo_spark_c/capture50000")
+//          Thread.currentThread().contextClassLoader.
+//          getResource(resourcePath)?.let {
+//        File(it.path)
+//      } ?: null
       if (netflow_sample_file != null) {
         val fileurl = "file://"+netflow_sample_file.absolutePath
         val filescan = "FileScan('$fileurl', 'CSV', $netflow_sample_scheme)"
@@ -275,7 +276,7 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                         "('src_ip', NamedAttributeRef('SrcAddr')), " +
                         "('dst_ip', NamedAttributeRef('DstAddr')), " +
                         "('value', NumericLiteral(1.0))], " +
-                        "Select(GT(UnnamedAttributeRef(0, None), NumericLiteral(500)), " +
+                        "Select(GT(UnnamedAttributeRef(0, None), NumericLiteral(5120)), " +
                         "Scan(RelationKey('public','adhoc','netflow'), " +
                         "Scheme([(u'TotBytes', 'INT_TYPE'), " +
                         "(u'StartTime', 'STRING_TYPE'), " +
@@ -302,16 +303,16 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                     Callable {
                       val stored_table = RelationKey("public","adhoc","netflow").sanitizeTableName()
 
-                      listOf(stored_table).forEach { table ->
-                        config.connector.createScanner(table, Authorizations.EMPTY).use {
-                          for ((key, value) in it) {
-                            println(key.toStringNoTime() + " --> " + value)
-                          }
-                        }
-                        DebugUtil.printTable(table, config.connector, table, 15)
-                        println()
-                        println()
-                      }
+//                      listOf(stored_table).forEach { table ->
+//                        config.connector.createScanner(table, Authorizations.EMPTY).use {
+//                          for ((key, value) in it) {
+//                            println(key.toStringNoTime() + " --> " + value)
+//                          }
+//                        }
+//                        DebugUtil.printTable(table, config.connector, table, 15)
+//                        println()
+//                        println()
+//                      }
 
                       val file = File(fileStoreFederated)
                       assertTrue(file.exists())
