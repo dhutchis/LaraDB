@@ -170,10 +170,10 @@ fun racoExprToExpr(
                 else -> throw UnsupportedOperationException("don't know how to divide type $l by $r")
               }
             }
-            Type.INT -> {
+            Type.LONG -> {
               when (r) {
                 Type.DOUBLE -> {
-                  l as Type.INT
+                  l as Type.LONG
                   r as Type.DOUBLE
                   t.encode(left.dec(l).toDouble() / right.dec(r))
                 }

@@ -73,7 +73,7 @@ sealed class RacoExpression(args: List<Op<*>> = emptyList()): Op<Unit>(args) {
       val r = right.getType(props)
       return when (l) {
         r -> l
-        Type.INT -> {
+        Type.LONG -> {
           when (r) {
             Type.DOUBLE -> Type.DOUBLE
             else -> throw UnsupportedOperationException("did not implement other type conversions when l is an INT for $r")

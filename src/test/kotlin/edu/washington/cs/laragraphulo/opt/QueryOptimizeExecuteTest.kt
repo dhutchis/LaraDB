@@ -137,17 +137,17 @@ Store(RelationKey('public','adhoc','netflow_subset'),
             "('DstAddr', 'STRING_TYPE')," +
             "('Dport', 'STRING_TYPE')," +
             "('State', 'STRING_TYPE')," +
-            "('sTos', 'INT_TYPE')," +
-            "('dTos', 'INT_TYPE')," +
-            "('TotPkts', 'INT_TYPE')," +
-            "('TotBytes', 'INT_TYPE')," +
-            "('SrcBytes', 'INT_TYPE')," +
+            "('sTos', 'LONG_TYPE')," +
+            "('dTos', 'LONG_TYPE')," +
+            "('TotPkts', 'LONG_TYPE')," +
+            "('TotBytes', 'LONG_TYPE')," +
+            "('SrcBytes', 'LONG_TYPE')," +
             "('Label', 'STRING_TYPE')" +
             "]), {'skip': 1})"
 
     val netflow_sample_scheme_daplap: String =
         "Scheme([" +
-            "('TotBytes', 'INT_TYPE')," +
+            "('TotBytes', 'LONG_TYPE')," +
             "('StartTime', 'STRING_TYPE'), " +
             "('$__DAP__', 'STRING_TYPE'), " +
             "('$__LAP__', 'STRING_TYPE'), " +
@@ -160,10 +160,10 @@ Store(RelationKey('public','adhoc','netflow_subset'),
             "('Sport', 'STRING_TYPE')," +
             "('Dport', 'STRING_TYPE')," +
             "('State', 'STRING_TYPE')," +
-            "('sTos', 'INT_TYPE')," +
-            "('dTos', 'INT_TYPE')," +
-            "('TotPkts', 'INT_TYPE')," +
-            "('SrcBytes', 'INT_TYPE')," +
+            "('sTos', 'LONG_TYPE')," +
+            "('dTos', 'LONG_TYPE')," +
+            "('TotPkts', 'LONG_TYPE')," +
+            "('SrcBytes', 'LONG_TYPE')," +
             "('Label', 'STRING_TYPE')" +
             "])"
 
@@ -171,7 +171,8 @@ Store(RelationKey('public','adhoc','netflow_subset'),
 
     init {
       val resourcePath = "data/netflow/botnet-capture-20110810-neris.pcap.subset.txt"
-      netflow_sample_file = File("/home/dhutchis/gits/raco/examples/fed_accumulo_spark_c/capture50000")
+      netflow_sample_file =
+          File("/home/dhutchis/gits/raco/examples/fed_accumulo_spark_c/captureSmall")
 //          Thread.currentThread().contextClassLoader.
 //          getResource(resourcePath)?.let {
 //        File(it.path)
@@ -276,9 +277,9 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                         "('src_ip', NamedAttributeRef('SrcAddr')), " +
                         "('dst_ip', NamedAttributeRef('DstAddr')), " +
                         "('value', NumericLiteral(1.0))], " +
-                        "Select(GT(UnnamedAttributeRef(0, None), NumericLiteral(5120)), " +
+                        "Select(GT(UnnamedAttributeRef(0, None), NumericLiteral(100)), " +
                         "Scan(RelationKey('public','adhoc','netflow'), " +
-                        "Scheme([(u'TotBytes', 'INT_TYPE'), " +
+                        "Scheme([(u'TotBytes', 'LONG_TYPE'), " +
                         "(u'StartTime', 'STRING_TYPE'), " +
                         "(u'SrcAddr', 'STRING_TYPE'), " +
                         "(u'DstAddr', 'STRING_TYPE'), " +
