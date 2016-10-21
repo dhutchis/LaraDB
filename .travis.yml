@@ -3,6 +3,10 @@ language: java
 jdk:
   - oraclejdk8
 
+script: mvn test -DTEST_CONFIG=mini
+
+after_failure: find ./target/mini/logs -name "TabletServer*.out" -exec ls -l {} \; -exec cat {} \;
+
 #before_install:
 #  #- git clone -b 1.8 --single-branch https://github.com/apache/accumulo.git accumulo
 #  - wget https://github.com/apache/accumulo/archive/1.8.zip
