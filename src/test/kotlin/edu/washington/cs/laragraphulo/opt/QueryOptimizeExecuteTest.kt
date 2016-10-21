@@ -183,7 +183,7 @@ Store(RelationKey('public','adhoc','netflow_subset'),
 
         val fileStoreUrl = "${netflow_sample_file.absolutePath}.out.csv"
 
-        val fileStoreFederated = "/home/dhutchis/gits/raco/raco/backends/federated/tests/V5407830105"
+//        val fileStoreFederated = "/home/dhutchis/gits/raco/raco/backends/federated/tests/V5407830105"
 
         tests = arrayOf<Params>(
 //            Params(
@@ -272,7 +272,7 @@ Store(RelationKey('public','adhoc','netflow_subset'),
                     "], " +
                     "$filescan))",
 
-                    "FileStore('$fileStoreFederated', 'CSV', {}, " +
+                    "FileStore('$fileStoreUrl', 'CSV', {}, " +
                         "Apply([" +
                         "('src_ip', NamedAttributeRef('SrcAddr')), " +
                         "('dst_ip', NamedAttributeRef('DstAddr')), " +
@@ -315,7 +315,7 @@ Store(RelationKey('public','adhoc','netflow_subset'),
 //                        println()
 //                      }
 
-                      val file = File(fileStoreFederated)
+                      val file = File(fileStoreUrl)
                       assertTrue(file.exists())
                       println("Reading $file:")
                       file.reader().buffered().useLines { it.forEach { line ->

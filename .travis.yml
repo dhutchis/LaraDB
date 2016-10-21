@@ -1,8 +1,7 @@
 language: java
-
 jdk:
   - oraclejdk8
-
+sudo: false
 script: mvn test -DTEST_CONFIG=mini
 
 after_failure: find ./target/mini/logs -name "TabletServer*.out" -exec ls -l {} \; -exec cat {} \;
