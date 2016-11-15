@@ -5,6 +5,7 @@ import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.info
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.opt.old.reduceWithDefault
+import org.apache.accumulo.core.client.AccumuloException
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.mapreduce.AccumuloMultiTableInputFormat
 import org.apache.accumulo.core.client.mapreduce.AccumuloOutputFormat
@@ -23,7 +24,6 @@ import org.apache.hadoop.mapreduce.Mapper
 import org.apache.hadoop.mapreduce.Reducer
 import org.apache.hadoop.util.Tool
 import org.apache.hadoop.util.ToolRunner
-import org.apache.log4j.Level
 import org.slf4j.Logger
 import java.io.DataInput
 import java.io.DataOutput
@@ -53,7 +53,7 @@ insert y '' s 7
  */
 class MatMulJob : Configured(), Tool {
 
-//  data class RowQual(
+/*  data class RowQual(
 //      val row: Text,
 //      val qual: Text
 //  ) : WritableComparable<RowQual> {
@@ -71,7 +71,7 @@ class MatMulJob : Configured(), Tool {
 //      return row.compareTo(other.row).let { if (it == 0) it else qual.compareTo(other.qual) }
 //    }
 //  }
-
+*/
   data class QualValue(
       /** false from the input table that is less, lexicographically; true for the other */
       var tag: String = "",
@@ -109,7 +109,7 @@ class MatMulJob : Configured(), Tool {
       val tableName = split.getTableName()
 
       key.rowData.let { r -> temp.set(r.backingArray, r.offset(), r.length()) }
-      logger.info{"$temp -> ${QualValue(tableName, key, value)}"}
+//      logger.info{"$temp -> ${QualValue(tableName, key, value)}"}
       context.write(temp, QualValue(tableName, key, value))
     }
  }
@@ -123,16 +123,16 @@ class MatMulJob : Configured(), Tool {
         values.add(QualValue(tag, Text(qual), Value(value)))
       }
 
-      val quals = values.map { it.tag }.distinct().sorted() // TODO: the first table may not be the lexicographically lower one - pass information to the reducer and mapper
+      val quals = values.map { it.tag }.distinct().sorted().reversed() // TODO: the first table may not be the lexicographically lower one - pass information to the reducer and mapper
       require(quals.size <= 2) { "Too many input table tags: $quals" }
-      logger.info{"$key -> values $values"}
-      logger.info{"$key -> quals $quals"}
+//      logger.info{"$key -> values $values"}
+//      logger.info{"$key -> quals $quals"}
 //      println("$key -> $quals")
       if (quals.size <= 1) return
 
       val t1 = quals.first()
       val (l1, l2) = values.partition { it.tag == t1 }
-      logger.info{"$key -> l1 $l1 l2 $l2"}
+//      logger.info{"$key -> l1 $l1 l2 $l2"}
 
       // initial size guess
       val guess = l2.map {
@@ -149,7 +149,11 @@ class MatMulJob : Configured(), Tool {
         for ((tag2, qual2, value2) in l2) {
 
           val v2 = value2.toString().toLong()
-          logger.info{"$qual1, $qual2 -> ${v1*v2}"}
+
+//          logger.info{"$qual1, $qual2 -> ${v1*v2}"}
+//          if (qual1.toString() == "1" && qual2.toString() == "1009")
+//            logger.info{"$key: $qual1, $qual2 -> ${v1*v2}"}
+
           val v = Value((v1*v2).toString().toByteArray())
           m.put(EMPTY, qual2, v)
 
@@ -163,9 +167,11 @@ class MatMulJob : Configured(), Tool {
 //    @Parameter(names = arrayOf("--output"), description = "output directory")
 //    var output: String? = null
     @Parameter(names = arrayOf("--reducers"), description = "number of reducers to use", required = true)
-    var reducers: Int = 0
+    var reducers: Int = 1
 //    @Parameter(names = arrayOf("--offline"), description = "run against an offline table")
 //    var offline = false
+    @Parameter(names = arrayOf("--noDelete"), description = "don't delete the result table")
+    var noDelete = false
   }
 
   @Throws(Exception::class)
@@ -186,13 +192,21 @@ class MatMulJob : Configured(), Tool {
 
     // delete output table if it exists, create it, add combiner
     val conn = opts.connector
-    if (conn.tableOperations().exists(opts.tableOut))
+    if (!opts.noDelete && conn.tableOperations().exists(opts.tableOut))
       conn.tableOperations().delete(opts.tableOut)
-    conn.tableOperations().create(opts.tableOut)
+    if (!opts.noDelete || !conn.tableOperations().exists(opts.tableOut))
+      conn.tableOperations().create(opts.tableOut)
+
     val itset = IteratorSetting(15, SummingCombiner::class.java)
     LongCombiner.setEncodingType(itset, LongCombiner.Type.STRING)
     LongCombiner.setCombineAllColumns(itset, true)
-    conn.tableOperations().attachIterator(opts.tableOut, itset) // all scopes
+    try {
+      conn.tableOperations().attachIterator(opts.tableOut, itset) // all scopes
+    } catch (e: AccumuloException) {
+      logger.warn("problem setting SummingCombiner $itset", e)
+      if (!opts.noDelete)
+        throw e
+    }
 
 
 //    if (opts.offline) {
@@ -219,14 +233,16 @@ class MatMulJob : Configured(), Tool {
 //    job.setCombinerClass(MatMulReducer::class.java)
     job.setReducerClass(MatMulReducer::class.java)
 
-    job.numReduceTasks = 1
+    job.numReduceTasks = opts.reducers
 
     job.setOutputFormatClass(AccumuloOutputFormat::class.java)
     job.outputKeyClass = Text::class.java
     job.outputValueClass = Mutation::class.java
-    AccumuloOutputFormat.setLogLevel(job, Level.TRACE)
+//    AccumuloOutputFormat.setLogLevel(job, Level.TRACE)
 
+    val t = System.currentTimeMillis()
     job.waitForCompletion(true)
+    println("elapsed: ${(System.currentTimeMillis()-t)/1000.0} s")
 
 //    if (opts.offline) {
 //      conn!!.tableOperations().delete(clone)
