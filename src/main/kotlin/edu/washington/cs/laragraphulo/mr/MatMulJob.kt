@@ -7,6 +7,7 @@ import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.opt.old.reduceWithDefault
 import org.apache.accumulo.core.client.AccumuloException
 import org.apache.accumulo.core.client.IteratorSetting
+import org.apache.accumulo.core.client.mapreduce.AccumuloInputFormat
 import org.apache.accumulo.core.client.mapreduce.AccumuloMultiTableInputFormat
 import org.apache.accumulo.core.client.mapreduce.AccumuloOutputFormat
 import org.apache.accumulo.core.client.mapreduce.RangeInputSplit
@@ -24,6 +25,7 @@ import org.apache.hadoop.mapreduce.Mapper
 import org.apache.hadoop.mapreduce.Reducer
 import org.apache.hadoop.util.Tool
 import org.apache.hadoop.util.ToolRunner
+import org.apache.log4j.Level
 import org.slf4j.Logger
 import java.io.DataInput
 import java.io.DataOutput
@@ -105,8 +107,8 @@ class MatMulJob : Configured(), Tool {
 
     @Throws(IOException::class, InterruptedException::class)
     override fun map(key: Key, value: Value, context: Mapper<Key, Value, Text, QualValue>.Context) {
-      val split = context.getInputSplit() as RangeInputSplit
-      val tableName = split.getTableName()
+      val split = context.inputSplit as RangeInputSplit
+      val tableName = split.tableName
 
       key.rowData.let { r -> temp.set(r.backingArray, r.offset(), r.length()) }
 //      logger.info{"$temp -> ${QualValue(tableName, key, value)}"}
@@ -145,6 +147,7 @@ class MatMulJob : Configured(), Tool {
 
       for ((tag1, qual1, value1) in l1) {
         val v1 = value1.toString().toLong() // TODO: fixed parsing as Long with String encoding
+        // TODO: optimization of re-using Mutation objects could be passed onto Graphulo
         val m = Mutation(qual1, guess)
         for ((tag2, qual2, value2) in l2) {
 
@@ -224,25 +227,31 @@ class MatMulJob : Configured(), Tool {
 //      AccumuloInputFormat.setInputTableName(job, clone)
 //    }
 
-    job.setInputFormatClass(AccumuloMultiTableInputFormat::class.java)
+    job.inputFormatClass = AccumuloMultiTableInputFormat::class.java
 
-    job.setMapperClass(MatMulMapper::class.java)
+    job.mapperClass = MatMulMapper::class.java
     job.mapOutputKeyClass = Text::class.java
     job.mapOutputValueClass = QualValue::class.java
 
 //    job.setCombinerClass(MatMulReducer::class.java)
-    job.setReducerClass(MatMulReducer::class.java)
+    job.reducerClass = MatMulReducer::class.java
 
     job.numReduceTasks = opts.reducers
 
-    job.setOutputFormatClass(AccumuloOutputFormat::class.java)
+    job.outputFormatClass = AccumuloOutputFormat::class.java
     job.outputKeyClass = Text::class.java
     job.outputValueClass = Mutation::class.java
+//    AccumuloInputFormat.setLogLevel(job, Level.DEBUG)
+    AccumuloInputFormat.setBatchScan(job, true) // evil switch
 //    AccumuloOutputFormat.setLogLevel(job, Level.TRACE)
+
+    print("Before: "); printMemory()
 
     val t = System.currentTimeMillis()
     job.waitForCompletion(true)
     println("elapsed: ${(System.currentTimeMillis()-t)/1000.0} s")
+
+    print("After: "); printMemory()
 
 //    if (opts.offline) {
 //      conn!!.tableOperations().delete(clone)
@@ -252,14 +261,46 @@ class MatMulJob : Configured(), Tool {
   }
 
   companion object : Loggable {
+
+    private fun printMemory() {
+      val rt = Runtime.getRuntime()
+      println("Memory: ${rt.totalMemory()/1024/1024 - rt.freeMemory()/1024/1024} used, ${rt.totalMemory()/1024/1024} total, ${rt.maxMemory()/1024/1024} max (MB)")
+    }
+
+
     override val logger: Logger = logger<MatMulJob>()
     private val EMPTY = Text()
     private val EMPTYVAL = Value()
 
+    /*
+    To execute on YARN, add to yarn-site.xml per https://stackoverflow.com/questions/33345262/org-apache-hadoop-yarn-exceptions-invalidauxserviceexception-the-auxservicemap
+
+<configuration>
+<property>
+<name>yarn.nodemanager.aux-services</name>
+<value>mapreduce_shuffle</value>
+</property>
+</configuration>
+
+Another trick:
+export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib/native"
+     */
+
     @JvmStatic
     @Throws(Exception::class)
     fun main(args: Array<String>) {
-      val res = ToolRunner.run(Configuration(), MatMulJob(), args)
+      val conf = Configuration()
+
+//      // this should be like defined in your yarn-site.xml
+//      conf.set("yarn.resourcemanager.address", "localhost:8032");
+//
+//// framework is now "yarn", should be defined like this in mapred-site.xm
+//      conf.set("mapreduce.framework.name", "yarn");
+//
+//// like defined in hdfs-site.xml
+//      conf.set("fs.default.name", "hdfs://localhost:9000");
+
+      val res = ToolRunner.run(conf, MatMulJob(), args)
       System.exit(res)
     }
   }
