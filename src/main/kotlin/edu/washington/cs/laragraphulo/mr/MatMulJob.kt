@@ -6,16 +6,20 @@ import edu.washington.cs.laragraphulo.info
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.opt.old.reduceWithDefault
 import org.apache.accumulo.core.client.AccumuloException
+import org.apache.accumulo.core.client.ClientConfiguration
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.mapreduce.AccumuloInputFormat
-import org.apache.accumulo.core.client.mapreduce.AccumuloMultiTableInputFormat
 import org.apache.accumulo.core.client.mapreduce.AccumuloOutputFormat
 import org.apache.accumulo.core.client.mapreduce.RangeInputSplit
+import org.apache.accumulo.core.conf.AccumuloConfiguration
+import org.apache.accumulo.core.conf.Property
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Mutation
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.LongCombiner
 import org.apache.accumulo.core.iterators.user.SummingCombiner
+import org.apache.accumulo.core.trace.Trace
+import org.apache.accumulo.tracer.ZooTraceClient
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.conf.Configured
 import org.apache.hadoop.io.Text
@@ -23,6 +27,7 @@ import org.apache.hadoop.io.WritableComparable
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.Mapper
 import org.apache.hadoop.mapreduce.Reducer
+import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.util.Tool
 import org.apache.hadoop.util.ToolRunner
 import org.apache.log4j.Level
@@ -31,6 +36,7 @@ import java.io.DataInput
 import java.io.DataOutput
 import java.io.IOException
 import java.util.*
+import org.apache.htrace.SpanReceiver
 
 
 /**
@@ -177,10 +183,29 @@ class MatMulJob : Configured(), Tool {
     var noDelete = false
   }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
   @Throws(Exception::class)
   override fun run(args: Array<String>): Int {
+    //SpanReceiverHost -- hadoop
+//    val sr = ZooTraceClient()
+    val service = MatMulJob::class.java.simpleName
+    TracerHolder.initialize(null, service, ClientConfiguration.loadDefault())
+    org.apache.htrace.Trace.setProcessId(service)
     val opts = Opts()
-    opts.parseArgs(MatMulJob::class.java.name, args)
+    opts.parseArgs(MatMulJob::class.java.simpleName, args)
+//    DistributedTrace.enable(null, MatMulJob::class.java.name, opts.clientConfiguration)
 
     val jobName = this.javaClass.simpleName + "_" + System.currentTimeMillis()
 
@@ -227,7 +252,9 @@ class MatMulJob : Configured(), Tool {
 //      AccumuloInputFormat.setInputTableName(job, clone)
 //    }
 
+
     job.inputFormatClass = AccumuloMultiTableInputFormat::class.java
+    AccumuloMultiTableInputFormat.setMasterTraceId(job)
 
     job.mapperClass = MatMulMapper::class.java
     job.mapOutputKeyClass = Text::class.java
@@ -245,13 +272,35 @@ class MatMulJob : Configured(), Tool {
     AccumuloInputFormat.setBatchScan(job, true) // evil switch
 //    AccumuloOutputFormat.setLogLevel(job, Level.TRACE)
 
-    print("Before: "); printMemory()
+//    var scope: TraceScope? = null;
+//    if (opts.trace) {
+////      DistributedTrace.enable("MapReduce");
+//      scope = Trace.startSpan("MapReduce", Sampler.ALWAYS);
+//    }
+    println("Tracing:: ${Trace.isTracing()}")
 
-    val t = System.currentTimeMillis()
-    job.waitForCompletion(true)
-    println("elapsed: ${(System.currentTimeMillis()-t)/1000.0} s")
+    if (Trace.isTracing()) {
+      Trace.currentTraceId()
+    }
 
-    print("After: "); printMemory()
+
+
+    try {
+//      println("load class: ${this.javaClass.classLoader.loadClass("org.apache.accumulo.tracer.ZooTraceClient")}")
+      print("Before: "); printMemory()
+      val t = System.currentTimeMillis()
+      job.waitForCompletion(true)
+      println("elapsed: ${(System.currentTimeMillis() - t) / 1000.0} s")
+      print("After: "); printMemory()
+    } finally {
+      if (Trace.isTracing())
+        Trace.off()
+//      DistributedTrace.disable()
+//      if (opts.trace) {
+//        scope?.close()
+////        DistributedTrace.disable()
+//      }
+    }
 
 //    if (opts.offline) {
 //      conn!!.tableOperations().delete(clone)
@@ -303,6 +352,7 @@ export HADOOP_OPTS="-Djava.library.path=$HADOOP_HOME/lib/native"
       val res = ToolRunner.run(conf, MatMulJob(), args)
       System.exit(res)
     }
+
   }
 
 }
