@@ -109,13 +109,13 @@ public class AccumuloMultiTableInputFormat extends AbstractInputFormat<Key,Value
 
       @Override
       public void initialize(InputSplit inSplit, TaskAttemptContext attempt) throws IOException {
-        String service = AccumuloMultiTableInputFormat.class.getSimpleName();
+        final String service = AccumuloMultiTableInputFormat.class.getSimpleName();
 
 //        Configuration confBackup = new BaseConfiguration();
 //        for (Map.Entry<String, String> entry : context.getConfiguration()) {
 //          confBackup.addProperty(entry.getKey(), entry.getValue());
 //        }
-        ClientConfiguration conf = ClientConfiguration.loadDefault();
+        final ClientConfiguration conf = ClientConfiguration.loadDefault();
 //        conf.addConfiguration(confBackup);
 
         System.out.println("initializing masterTraceId "+masterTraceId+" on service "+service); //+" with conf: "+conf.serialize());

@@ -9,7 +9,6 @@ import org.apache.accumulo.core.client.AccumuloException
 import org.apache.accumulo.core.client.ClientConfiguration
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.mapreduce.AccumuloInputFormat
-import org.apache.accumulo.core.client.mapreduce.AccumuloOutputFormat
 import org.apache.accumulo.core.client.mapreduce.RangeInputSplit
 import org.apache.accumulo.core.conf.AccumuloConfiguration
 import org.apache.accumulo.core.conf.Property
@@ -325,7 +324,7 @@ class MatMulJob : Configured(), Tool {
     To execute on YARN, add to yarn-site.xml per https://stackoverflow.com/questions/33345262/org-apache-hadoop-yarn-exceptions-invalidauxserviceexception-the-auxservicemap
 
 <configuration>
-<property>
+<property>-
 <name>yarn.nodemanager.aux-services</name>
 <value>mapreduce_shuffle</value>
 </property>

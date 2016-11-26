@@ -99,7 +99,10 @@ object TracerHolder : Loggable {
 
 
   @Synchronized private fun loadSpanReceivers(conf: Configuration) {
-    println("conf is $conf")
+    println("conf is: ")
+    for ((k, v) in conf) {
+      println("$k = $v")
+    }
     if (!receivers.isEmpty()) {
       logger.info("Already loaded span receivers, enable tracing does not need to be called again")
       return
