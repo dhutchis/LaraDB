@@ -115,28 +115,32 @@ public class AccumuloMultiTableInputFormat extends AbstractInputFormat<Key,Value
 //        for (Map.Entry<String, String> entry : context.getConfiguration()) {
 //          confBackup.addProperty(entry.getKey(), entry.getValue());
 //        }
-        final ClientConfiguration conf = ClientConfiguration.loadDefault();
+
 //        conf.addConfiguration(confBackup);
 
-        System.out.println("initializing masterTraceId "+masterTraceId+" on service "+service); //+" with conf: "+conf.serialize());
 //        Iterator it = conf.getKeys();
 //        while (it.hasNext()) {
 //          String k = (String)it.next();
 //          conf.get(k)
 //        }
 
-        TracerHolder.initialize(null, service, conf);
-        org.apache.htrace.Trace.setProcessId(service);
 
         if (masterTraceId != -1) {
+          final ClientConfiguration conf = ClientConfiguration.loadDefault();
+          System.out.println("initializing masterTraceId "+masterTraceId+" on service "+service); //+" with conf: "+conf.serialize());
+          TracerHolder.initialize(null, service, conf);
+          org.apache.htrace.Trace.setProcessId(service);
+
           TraceInfo tinfo = new TraceInfo(masterTraceId, masterSpanId);
           traceScope = org.apache.htrace.Trace.startSpan("MR input initialize", (Sampler<TraceInfo>) Sampler.ALWAYS, tinfo);
 
           byte[] r;
           if (inSplit instanceof BatchInputSplit) {
-            r = ((BatchInputSplit) inSplit).getRanges().toString().getBytes(StandardCharsets.UTF_8);
+            BatchInputSplit bs = (BatchInputSplit)inSplit;
+            r = (bs.getTableName()+" "+bs.getRanges()).getBytes(StandardCharsets.UTF_8);
           } else if (inSplit instanceof RangeInputSplit) {
-            r = ((RangeInputSplit) inSplit).getRange().toString().getBytes(StandardCharsets.UTF_8);
+            RangeInputSplit bs = (RangeInputSplit)inSplit;
+            r = (bs.getTableName()+" "+bs.getRange()).getBytes(StandardCharsets.UTF_8);
           } else {
             r = "Unknown range".getBytes(StandardCharsets.UTF_8);
           }

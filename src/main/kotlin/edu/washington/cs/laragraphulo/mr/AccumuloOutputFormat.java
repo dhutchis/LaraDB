@@ -601,19 +601,23 @@ public class AccumuloOutputFormat extends OutputFormat<Text,Mutation> {
     final long masterTraceId = attempt.getConfiguration().getLong(MASTER_TRACE_ID, -1);
     final long masterSpanId = attempt.getConfiguration().getLong(MASTER_SPAN_ID, -1);
 
-    final String service = AccumuloOutputFormat.class.getSimpleName();
-    final ClientConfiguration conf = ClientConfiguration.loadDefault();
-    System.out.println("REDUCE from masterTraceId "+masterTraceId+" on service "+service); //+" with conf: "+conf.serialize());
-
-    TracerHolder.initialize(null, service, conf);
-    org.apache.htrace.Trace.setProcessId(service);
 
     final TraceScope traceScope;
 
     if (masterTraceId != -1) {
+      final String service = AccumuloOutputFormat.class.getSimpleName();
+      final ClientConfiguration conf = ClientConfiguration.loadDefault();
+      System.out.println("REDUCE from masterTraceId "+masterTraceId+" on service "+service); //+" with conf: "+conf.serialize());
+
+
+      TracerHolder.initialize(null, service, conf);
+      org.apache.htrace.Trace.setProcessId(service);
+
       TraceInfo tinfo = new TraceInfo(masterTraceId, masterSpanId);
       traceScope = org.apache.htrace.Trace.startSpan("MR OUTPUT initialize", (Sampler<TraceInfo>) Sampler.ALWAYS, tinfo);
     } else traceScope = null;
+
+
 
 
 

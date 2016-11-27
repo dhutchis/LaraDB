@@ -278,10 +278,6 @@ class MatMulJob : Configured(), Tool {
 //    }
     println("Tracing:: ${Trace.isTracing()}")
 
-    if (Trace.isTracing()) {
-      Trace.currentTraceId()
-    }
-
 
 
     try {
