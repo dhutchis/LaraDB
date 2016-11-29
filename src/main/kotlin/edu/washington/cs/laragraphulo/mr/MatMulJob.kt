@@ -106,6 +106,8 @@ class MatMulJob : Configured(), Tool {
   }
 
 
+
+
 // Almost can use IdentityMapper<Key,Value>, but need to group under row and column qualifier
   class MatMulMapper : Mapper<Key, Value, Text, QualValue>() {
     private val temp = Text()
@@ -122,6 +124,11 @@ class MatMulJob : Configured(), Tool {
  }
 
   class MatMulReducer : Reducer<Text, QualValue, Text, Mutation>() {
+
+    companion object {
+      private const val ENABLE_MUTATION_SIZE_GUESS = false
+    }
+
     @Throws(IOException::class, InterruptedException::class)
     override fun reduce(key: Text, values0: Iterable<QualValue>, context: Reducer<Text, QualValue, Text, Mutation>.Context) {
       // DEEP copy values so that we can iterate through it twice
@@ -142,13 +149,13 @@ class MatMulJob : Configured(), Tool {
 //      logger.info{"$key -> l1 $l1 l2 $l2"}
 
       // initial size guess
-      val guess = l2.map {
+      val guess =  if (ENABLE_MUTATION_SIZE_GUESS) l2.map {
         1 + // family
             it.qual.length + 1 + // qual
             1 + //vis
             1 + 1 + //hasts, deleted
             it.value.size + 1 //val
-      }.reduceWithDefault(0) { i, j -> i + j } + 2 // to be safe
+      }.reduceWithDefault(0) { i, j -> i + j } + 2 else 64
 
       for ((tag1, qual1, value1) in l1) {
         val v1 = value1.toString().toLong() // TODO: fixed parsing as Long with String encoding
@@ -261,8 +268,9 @@ class MatMulJob : Configured(), Tool {
 
 //    job.setCombinerClass(MatMulReducer::class.java)
     job.reducerClass = MatMulReducer::class.java
-
     job.numReduceTasks = opts.reducers
+    job.setSpeculativeExecution(false)
+    job.maxReduceAttempts = 1
 
     job.outputFormatClass = AccumuloOutputFormat::class.java
     job.outputKeyClass = Text::class.java
