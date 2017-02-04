@@ -31,12 +31,12 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <kotlin.version>1.1-M02</kotlin.version>
+    <kotlin.version>1.1.0-beta-38</kotlin.version>
     <java.version>1.8</java.version>
     <accumulo.version>1.8.0</accumulo.version>
-    <junit.jupiter.version>5.0.0-M2</junit.jupiter.version>
-    <junit.vintage.version>4.12.0-M2</junit.vintage.version>
-    <junit.platform.version>1.0.0-M2</junit.platform.version>
+    <junit.jupiter.version>5.0.0-M3</junit.jupiter.version>
+    <junit.vintage.version>4.12.0-M3</junit.vintage.version>
+    <junit.platform.version>1.0.0-M3</junit.platform.version>
   </properties>
 
 
@@ -116,7 +116,7 @@
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>19.0</version>
+      <version>21.0</version>
     </dependency>
 
     <!-- JUnit 5 -->
