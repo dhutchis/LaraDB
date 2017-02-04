@@ -12,6 +12,11 @@ import org.junit.runners.Parameterized
 import java.util.*
 import edu.washington.cs.laragraphulo.util.TestUtil.checkSorted
 
+/** First int is the iterator number, second int is the attribute number within that iterator.
+ * This is for the attributes after the common prefix. */
+typealias TupleRef = Pair<Int,Int>
+
+
 /**
  *
  */
@@ -38,10 +43,6 @@ class MergerTest(
 
 
   class AssertingMergeCollider(val prefixSize: Int): Collider {
-
-    /** First int is the iterator number, second int is the attribute number within that iterator.
-     * This is for the attributes after the common prefix. */
-    typealias TupleRef = Pair<Int,Int>
 
     lateinit var tupleReferences: List<TupleRef>
     lateinit var ALL_ACTIVE: BooleanArray
