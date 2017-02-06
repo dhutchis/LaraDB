@@ -1,0 +1,255 @@
+2017-02-06 11:27:44.976000;coresense:3;TSYS01;temperature;8.22;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;TSL260RD;intensity;57;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;TSL250RD-LS;intensity;1178;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;TSL250RD-AS;intensity;0;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;TMP421;temperature;15.5;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;TMP112;temperature;7.99;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Si1145;intensity;27956;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;SPV1840LR5H-B;intensity;819;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;SO2/H2S Temp;adc_temperature;839;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;SHT25;temperature;732;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;SHT25;humidity;3410;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;PR103J2;temperature;705;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;O3/NO2 Temp;adc_temperature;771;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;MMA8452Q;rms;1.01;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;MMA8452Q;acceleration.z;0.01;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;MMA8452Q;acceleration.y;-1.01;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;MMA8452Q;acceleration.x;0.01;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;MLX75305;intensity;563;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;ML8511;intensity;9725;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;LPS25H;temperature;480;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;LPS25H;pressure;83112;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;IAQ/IRR Temp;adc_temperature;703;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HTU21D;temperature;6.7;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HTU21D;humidity;31.3;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HMC5883L;magnetic_field.z;-0.709;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HMC5883L;magnetic_field.y;-0.17;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HMC5883L;magnetic_field.x;-0.435;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HIH6130;temperature;19.97;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HIH6130;humidity;16.67;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;HIH4030;humidity;385;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Coresense ID;mac_address;00001814BCF3;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense;so2;1379;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense;reducing_gases;1942;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense;oxidizing_gases;9726;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense;o3;367816;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense;no2;926;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense;h2s;6695;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense;co;2392;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;Chemsense ID;mac_address;0004A3E2A1FD;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;CO LMP Temp;adc_temperature;886;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;CO ADC Temp;adc_temperature;657;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMP180;temperature;7.77;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMP180;pressure;82661;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMI160;orientation.z;-1;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMI160;orientation.y;1;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMI160;orientation.x;3;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMI160;index;0;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMI160;acceleration.z;24;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMI160;acceleration.y;999;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;BMI160;acceleration.x;-1;NO_UNIT
+2017-02-06 11:27:44.976000;coresense:3;APDS-9006-020;intensity;3;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;TSYS01;temperature;8.19;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;TSL260RD;intensity;57;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;TSL250RD-LS;intensity;1178;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;TSL250RD-AS;intensity;0;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;TMP421;temperature;15.5;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;TMP112;temperature;8.0;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Si1145;intensity;27956;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;SPV1840LR5H-B;intensity;819;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;SO2/H2S Temp;adc_temperature;839;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;SHT25;temperature;733;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;SHT25;humidity;3406;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;PR103J2;temperature;704;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;O3/NO2 Temp;adc_temperature;771;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;MMA8452Q;rms;1.01;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;MMA8452Q;acceleration.z;0.0;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;MMA8452Q;acceleration.y;-1.01;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;MMA8452Q;acceleration.x;0.01;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;MLX75305;intensity;563;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;ML8511;intensity;9725;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;LPS25H;temperature;481;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;LPS25H;pressure;83113;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;IAQ/IRR Temp;adc_temperature;703;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HTU21D;temperature;6.67;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HTU21D;humidity;31.15;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HMC5883L;magnetic_field.z;-0.708;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HMC5883L;magnetic_field.y;-0.17;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HMC5883L;magnetic_field.x;-0.434;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HIH6130;temperature;19.97;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HIH6130;humidity;16.67;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;HIH4030;humidity;381;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Coresense ID;mac_address;00001814BCF3;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense;so2;1453;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense;reducing_gases;1871;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense;oxidizing_gases;9922;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense;o3;367816;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense;no2;913;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense;h2s;6799;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense;co;2362;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;Chemsense ID;mac_address;0004A3E2A1FD;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;CO LMP Temp;adc_temperature;886;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;CO ADC Temp;adc_temperature;657;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMP180;temperature;7.8;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMP180;pressure;82671;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMI160;orientation.z;-1;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMI160;orientation.y;1;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMI160;orientation.x;3;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMI160;index;0;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMI160;acceleration.z;21;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMI160;acceleration.y;998;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;BMI160;acceleration.x;0;NO_UNIT
+2017-02-06 11:27:20.947000;coresense:3;APDS-9006-020;intensity;3;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;TSYS01;temperature;8.17;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;TSL260RD;intensity;57;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;TSL250RD-LS;intensity;1178;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;TSL250RD-AS;intensity;0;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;TMP421;temperature;15.5;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;TMP112;temperature;8.0;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Si1145;intensity;27956;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;SPV1840LR5H-B;intensity;819;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;SO2/H2S Temp;adc_temperature;839;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;SHT25;temperature;733;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;SHT25;humidity;3394;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;PR103J2;temperature;704;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;O3/NO2 Temp;adc_temperature;772;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;MMA8452Q;rms;1.01;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;MMA8452Q;acceleration.z;0.0;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;MMA8452Q;acceleration.y;-1.01;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;MMA8452Q;acceleration.x;0.01;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;MLX75305;intensity;563;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;ML8511;intensity;9725;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;LPS25H;temperature;481;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;LPS25H;pressure;83110;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;IAQ/IRR Temp;adc_temperature;705;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HTU21D;temperature;6.7;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HTU21D;humidity;30.95;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HMC5883L;magnetic_field.z;-0.708;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HMC5883L;magnetic_field.y;-0.17;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HMC5883L;magnetic_field.x;-0.436;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HIH6130;temperature;19.97;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HIH6130;humidity;16.66;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;HIH4030;humidity;381;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Coresense ID;mac_address;00001814BCF3;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense;so2;1496;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense;reducing_gases;1829;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense;oxidizing_gases;9684;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense;o3;367816;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense;no2;903;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense;h2s;6933;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense;co;2347;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;Chemsense ID;mac_address;0004A3E2A1FD;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;CO LMP Temp;adc_temperature;886;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;CO ADC Temp;adc_temperature;659;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMP180;temperature;7.8;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMP180;pressure;82665;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMI160;orientation.z;-1;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMI160;orientation.y;1;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMI160;orientation.x;3;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMI160;index;0;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMI160;acceleration.z;18;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMI160;acceleration.y;999;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;BMI160;acceleration.x;0;NO_UNIT
+2017-02-06 11:26:56.916000;coresense:3;APDS-9006-020;intensity;3;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;TSYS01;temperature;8.16;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;TSL260RD;intensity;57;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;TSL250RD-LS;intensity;1178;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;TSL250RD-AS;intensity;0;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;TMP421;temperature;15.5;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;TMP112;temperature;7.99;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Si1145;intensity;27956;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;SPV1840LR5H-B;intensity;819;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;SO2/H2S Temp;adc_temperature;839;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;SHT25;temperature;733;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;SHT25;humidity;3391;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;PR103J2;temperature;703;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;O3/NO2 Temp;adc_temperature;772;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;MMA8452Q;rms;1.01;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;MMA8452Q;acceleration.z;0.0;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;MMA8452Q;acceleration.y;-1.01;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;MMA8452Q;acceleration.x;0.01;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;MLX75305;intensity;563;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;ML8511;intensity;9726;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;LPS25H;temperature;482;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;LPS25H;pressure;83110;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;IAQ/IRR Temp;adc_temperature;705;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HTU21D;temperature;6.72;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HTU21D;humidity;30.79;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HMC5883L;magnetic_field.z;-0.706;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HMC5883L;magnetic_field.y;-0.17;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HMC5883L;magnetic_field.x;-0.434;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HIH6130;temperature;19.97;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HIH6130;humidity;16.67;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;HIH4030;humidity;381;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Coresense ID;mac_address;00001814BCF3;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense;so2;1545;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense;reducing_gases;1837;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense;oxidizing_gases;9874;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense;o3;367816;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense;no2;915;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense;h2s;7062;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense;co;2265;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;Chemsense ID;mac_address;0004A3E2A1FD;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;CO LMP Temp;adc_temperature;886;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;CO ADC Temp;adc_temperature;659;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMP180;temperature;7.75;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMP180;pressure;82668;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMI160;orientation.z;-1;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMI160;orientation.y;1;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMI160;orientation.x;3;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMI160;index;0;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMI160;acceleration.z;19;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMI160;acceleration.y;999;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;BMI160;acceleration.x;0;NO_UNIT
+2017-02-06 11:26:29.882000;coresense:3;APDS-9006-020;intensity;2;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;TSYS01;temperature;8.13;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;TSL260RD;intensity;57;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;TSL250RD-LS;intensity;1179;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;TSL250RD-AS;intensity;0;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;TMP421;temperature;15.5;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;TMP112;temperature;8.0;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Si1145;intensity;27956;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;SPV1840LR5H-B;intensity;819;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;SO2/H2S Temp;adc_temperature;839;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;SHT25;temperature;733;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;SHT25;humidity;3388;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;PR103J2;temperature;704;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;O3/NO2 Temp;adc_temperature;772;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;MMA8452Q;rms;1.01;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;MMA8452Q;acceleration.z;0.0;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;MMA8452Q;acceleration.y;-1.01;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;MMA8452Q;acceleration.x;0.01;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;MLX75305;intensity;563;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;ML8511;intensity;9726;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;LPS25H;temperature;483;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;LPS25H;pressure;83112;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;IAQ/IRR Temp;adc_temperature;705;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HTU21D;temperature;6.71;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HTU21D;humidity;30.53;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HMC5883L;magnetic_field.z;-0.708;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HMC5883L;magnetic_field.y;-0.171;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HMC5883L;magnetic_field.x;-0.436;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HIH6130;temperature;19.97;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HIH6130;humidity;16.67;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;HIH4030;humidity;379;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Coresense ID;mac_address;00001814BCF3;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense;so2;1551;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense;reducing_gases;1789;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense;oxidizing_gases;9890;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense;o3;367816;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense;no2;920;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense;h2s;7096;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense;co;2288;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;Chemsense ID;mac_address;0004A3E2A1FD;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;CO LMP Temp;adc_temperature;886;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;CO ADC Temp;adc_temperature;659;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMP180;temperature;7.77;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMP180;pressure;82664;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMI160;orientation.z;-1;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMI160;orientation.y;1;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMI160;orientation.x;3;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMI160;index;0;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMI160;acceleration.z;20;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMI160;acceleration.y;998;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;BMI160;acceleration.x;-1;NO_UNIT
+2017-02-06 11:26:05.852000;coresense:3;APDS-9006-020;intensity;3;NO_UNIT
