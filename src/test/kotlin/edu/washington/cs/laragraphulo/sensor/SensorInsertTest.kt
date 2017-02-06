@@ -3,22 +3,23 @@ package edu.washington.cs.laragraphulo.sensor
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.Loggable
+import kotlinx.support.jdk7.use
+import org.apache.accumulo.core.client.BatchWriterConfig
+import org.apache.accumulo.core.data.Mutation
 import org.junit.Assert
 import org.junit.Test
 import org.slf4j.Logger
-import java.io.BufferedInputStream
 
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.net.URL
-import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
 
-const val filepath = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt";
-const val tablename = "bee_uw_20170206";
+const val filepath = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
+const val tablename = "bee_uw_20170206"
+const val DODB = true
 
 typealias tcvAction = (t:Long, c:String, v:Double) -> Unit
 
@@ -40,13 +41,44 @@ class SensorInsertTest : AccumuloTestBase() {
     val url: URL = Thread.currentThread().contextClassLoader.getResource(filepath)
     Assert.assertNotNull(url)
     val file = File(url.path)
+    var cnt = 0L
 
-    val tcvLog: tcvAction = { t,c,v ->
-      println("t:$t\tc:$c\tv:$v")
+    if (DODB) {
+      if (conn.tableOperations().exists(tablename))
+        conn.tableOperations().delete(tablename)
+      conn.tableOperations().create(tablename)
+
+      val bwc = BatchWriterConfig()
+      conn.createBatchWriter(tablename, bwc).use { bw ->
+
+        var m = Mutation()
+        var ms = ""
+
+        val tcvInsertDB: tcvAction = { t, c, v ->
+          val ts = t.toString()
+          if (ts != ms) {
+            if (m.size() > 0) bw.addMutation(m)
+            m = Mutation(ts)
+            ms = ts
+          }
+          m.put("", c, v.toString())
+          cnt++
+        }
+
+        putSensorFile(file, tcvInsertDB)
+        bw.addMutation(m)
+        bw.flush()
+
+      }
+    } else {
+      /** Prints parsed file contents */
+      val tcvLog: tcvAction = { t,c,v ->
+        println("t:$t\tc:$c\tv:$v")
+        cnt++
+      }
+      putSensorFile(file, tcvLog)
     }
 
-    // deleteExistingTables
-    val cnt = putSensorFile(file, tcvLog)
     logger.info("Wrote $cnt entries to $tablename")
   }
 
