@@ -5,6 +5,8 @@ import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.Loggable
 import kotlinx.support.jdk7.use
 import org.apache.accumulo.core.client.BatchWriterConfig
+import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
+import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
 import org.apache.accumulo.core.data.Mutation
 import org.junit.Assert
 import org.junit.Test
@@ -16,10 +18,21 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 
-
+// PARAMETERS:
 const val filepath = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
 const val tablename = "bee_uw_20170206"
 const val DODB = true
+const val DOSTRING = true
+
+private val ull = ULongLexicoder()
+private val tConv: (Long) -> ByteArray =
+    if (DOSTRING) { t: Long -> t.toString().toByteArray() }
+    else { t: Long -> ull.encode(t) }
+private val dl = DoubleLexicoder()
+private val vConv: (Double) -> ByteArray =
+    if (DOSTRING) { v: Double -> v.toString().toByteArray() }
+    else { v: Double -> dl.encode(v) }
+private val EMPTY = byteArrayOf()
 
 typealias tcvAction = (t:Long, c:String, v:Double) -> Unit
 
@@ -51,17 +64,16 @@ class SensorInsertTest : AccumuloTestBase() {
       val bwc = BatchWriterConfig()
       conn.createBatchWriter(tablename, bwc).use { bw ->
 
-        var m = Mutation()
-        var ms = ""
+        var m = Mutation(tConv(0L))
+        var ms = 0L
 
         val tcvInsertDB: tcvAction = { t, c, v ->
-          val ts = t.toString()
-          if (ts != ms) {
+          if (t != ms) {
             if (m.size() > 0) bw.addMutation(m)
-            m = Mutation(ts)
-            ms = ts
+            m = Mutation(tConv(t))
+            ms = t
           }
-          m.put("", c, v.toString())
+          m.put(EMPTY, c.toByteArray(), vConv(v))
           cnt++
         }
 
