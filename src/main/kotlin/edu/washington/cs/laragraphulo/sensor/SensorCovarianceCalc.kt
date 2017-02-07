@@ -5,9 +5,10 @@ import edu.mit.ll.graphulo.DynamicIteratorSetting
 import edu.mit.ll.graphulo.Graphulo
 import edu.mit.ll.graphulo.apply.ApplyIterator
 import edu.mit.ll.graphulo.apply.ApplyOp
+import edu.mit.ll.graphulo.apply.KeyRetainOnlyApply
 import edu.mit.ll.graphulo.reducer.ReducerSerializable
+import edu.mit.ll.graphulo.rowmult.MultiplyOp
 import edu.mit.ll.graphulo.simplemult.MathTwoScalar
-import edu.mit.ll.graphulo.skvi.DebugInfoIterator
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.Connector
 import org.apache.accumulo.core.client.IteratorSetting
@@ -15,10 +16,7 @@ import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
 import org.apache.accumulo.core.client.lexicoder.PairLexicoder
 import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
-import org.apache.accumulo.core.data.ByteSequence
-import org.apache.accumulo.core.data.Key
-import org.apache.accumulo.core.data.Range
-import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.Combiner
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.OptionDescriber
@@ -39,6 +37,8 @@ class SensorCovarianceCalc(
   val sensorU = "${sensorA}_${sensorB}_U"
   val sensorC = "${sensorA}_${sensorB}_C"
 
+  val G by lazy { Graphulo(conn, pw) }
+
 //  enum class Sensor { A, B }
 
   private fun recreate(vararg tns: String) {
@@ -49,31 +49,50 @@ class SensorCovarianceCalc(
     }
   }
 
+  private val AverageValuesByRow = DynamicIteratorSetting(21, "avgByRow")
+      .append(AppendCounterApply.iteratorSetting(1, doString))
+      .append(CombineSumCnt.iteratorSetting(1, doString))
+      .append(DividePairApply.iteratorSetting(1, doString))
+      .toIteratorSetting()
+  private val subtract = MathTwoScalar::class.java
+  private val subtractOptions = MathTwoScalar.optionMap(MathTwoScalar.ScalarOp.MINUS, MathTwoScalar.ScalarType.DOUBLE, null, true)
+
   fun binAndDiff() {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
     recreate(sensorX)
 
-    val G = Graphulo(conn, pw)
-
-    val itersBefore: List<IteratorSetting> = DynamicIteratorSetting(21, "bin")
+    val itersBefore = DynamicIteratorSetting(21, "bin")
         .append(BinRowApply.iteratorSetting(1, doString))
-        .append(AppendCounterApply.iteratorSetting(1, doString))
-        .append(CombineSumCnt.iteratorSetting(1, doString))
-        .append(DividePairApply.iteratorSetting(1, doString))
-//        .append(IteratorSetting(1, DebugInfoIterator::class.java))
+        .append(AverageValuesByRow)
         .iteratorSettingList
-    val subtract = MathTwoScalar::class.java
-    val subtractOptions = MathTwoScalar.optionMap(MathTwoScalar.ScalarOp.MINUS, MathTwoScalar.ScalarType.DOUBLE, null, true)
     val tCounter = RowCountReduce()
     tCounter.init(emptyMap<String,String>().toMutableMap(), null)
 
-    G.TwoTableEWISE(sensorA, sensorB, null, sensorX,
+    G.TwoTableEWISE(sensorA, sensorB, null, sensorX, // transpose to [c,t']
         -1, subtract, subtractOptions,
         null, null, null, null, false, false,
-        itersBefore, itersBefore, /*Collections.singletonList(IteratorSetting(1, DebugInfoIterator::class.java))*/null, tCounter, null, -1, null, null)
+        itersBefore, itersBefore, null, tCounter, null, -1, null, null)
     val tCount = tCounter.serializableForClient
     println("tCount is $tCount")
+  }
+
+
+  fun meanAndSubtract() {
+    require(conn.tableOperations().exists(sensorX)) {"table $sensorX does not exist"}
+    recreate(sensorU)
+
+    val leftIters = DynamicIteratorSetting(21, "avgLeftByRow")
+        .append(KeyRetainOnlyApply.iteratorSetting(1, PartialKey.ROW))
+        .append(AverageValuesByRow)
+        .iteratorSettingList
+//    , IteratorSetting(1, DebugInfoIterator::class.java))
+
+    G.TwoTableROWCartesian(sensorX, sensorX, null, sensorU, // transpose to [t',c]
+        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(doString),
+        null, null, null, null, false, false, false, false, false, false,
+        leftIters, null, null, null, null, -1, null, null)
+
   }
 
 }
@@ -225,7 +244,7 @@ class CombineSumCnt : Combiner() {
     private val lex = PairLexicoder(DoubleLexicoder(), ULongLexicoder())
 
     fun iteratorSetting(priority: Int, t_string: Boolean = true,
-                        columns: List<IteratorSetting.Column> = Collections.emptyList()): IteratorSetting {
+                        columns: List<IteratorSetting.Column> = emptyList()): IteratorSetting {
       val itset = IteratorSetting(priority, CombineSumCnt::class.java)
       if (columns.isEmpty())
         Combiner.setCombineAllColumns(itset, true)
@@ -322,6 +341,44 @@ class RowCountReduce : ReducerSerializable<Long>() {
 }
 
 
+/**
+ * Use for a MultiplyOp.
+ * Aligns on row, result has row = common row, colQ = right colQ, val = left - right
+ */
+class MinusRowEwiseRight : MultiplyOp {
+  /** Whether to use string encoding or to use numeric encoding. */
+  var t_string: Boolean = true
+
+  companion object {
+    val T_STRING = "T_STRING"
+    private val dlex = DoubleLexicoder()
+
+    fun optionMap(t_string: Boolean): Map<String, String> {
+      val map = HashMap<String, String>()
+      if (!t_string)
+        map.put(T_STRING, t_string.toString())
+      return map
+    }
+  }
+
+
+  override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
+    if (options.containsKey(T_STRING))
+      t_string = options[T_STRING]!!.toBoolean()
+  }
+
+  override fun multiply(Mrow: ByteSequence,
+                        ATcolF: ByteSequence, ATcolQ: ByteSequence, ATcolVis: ByteSequence, ATtime: Long,
+                        BcolF: ByteSequence, BcolQ: ByteSequence, BcolVis: ByteSequence, Btime: Long,
+                        ATval: Value, Bval: Value): Iterator<Map.Entry<Key, Value>> {
+    val nv = Value(
+        if (t_string) (ATval.toString().toDouble() - Bval.toString().toDouble()).toString().toByteArray()
+        else dlex.encode(dlex.decode(ATval.get()) - dlex.decode(Bval.get()))
+    )
+    val k = Key(Mrow.toArray(), ATcolF.toArray(), BcolQ.toArray())
+    return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
+  }
+}
 
 
 

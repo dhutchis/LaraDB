@@ -50,7 +50,10 @@ typealias tcvAction = (t:Long, c:String, v:Double) -> Unit
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class SensorInsertTest : AccumuloTestBase() {
 
-  val origReuse = tester.requestReuse
+  private val origReuse = tester.requestReuse
+  private val conn = tester.accumuloConfig.connector
+  private val scc = SensorCovarianceCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
+      tablenameA, tablenameB, doString = true)
 
   @Test
   fun aInsert() {
@@ -73,8 +76,6 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
   private fun insert(filepath: String, tablename: String) {
-    val conn = tester.accumuloConfig.connector
-
     val url: URL = Thread.currentThread().contextClassLoader.getResource(filepath)
     Assert.assertNotNull(url)
     val file = File(url.path)
@@ -125,12 +126,21 @@ class SensorInsertTest : AccumuloTestBase() {
   fun cBinAndDiff() {
     try {
       Assume.assumeTrue(DODB)
-      val conn = tester.accumuloConfig.connector
-      val scc = SensorCovarianceCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
-          tablenameA, tablenameB, doString = true)
       scc.binAndDiff()
 
-//      DebugUtil.printTable(scc.sensorX, conn, scc.sensorX, 14)
+      DebugUtil.printTable(scc.sensorX, conn, scc.sensorX, 14)
+    } finally {
+      tester.requestReuse = true
+    }
+  }
+
+  @Test
+  fun dMeanAndSubtract() {
+    try {
+      Assume.assumeTrue(DODB)
+      scc.meanAndSubtract()
+
+      DebugUtil.printTable(scc.sensorU, conn, scc.sensorU, 14)
     } finally {
       tester.requestReuse = origReuse
     }
