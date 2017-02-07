@@ -18,7 +18,7 @@ object DebugUtil {
 
   /** @param w Label Width of rows and columns; default 5
    */
-  @JvmOverloads fun printTable(header: String?, conn: Connector, table: String, w: Int? = null) {
+  @JvmOverloads fun printTable(header: String?, conn: Connector, table: String, w: Int = 5) {
     if (header != null)
       println(header)
     val scan: Scanner
@@ -35,10 +35,7 @@ object DebugUtil {
 
   /** @param w Label Width of rows and columns; default 5
    */
-  fun printMapFull(iter: Iterator<Map.Entry<Key, Value>>, w: Int?) {
-    var w = w
-    if (w == null)
-      w = 5
+  fun printMapFull(iter: Iterator<Map.Entry<Key, Value>>, w: Int = 5) {
     val columnSet = TreeSet<String>()
     val rowToColumnMap = TreeMap<String, SortedMap<String, Value>>()
 

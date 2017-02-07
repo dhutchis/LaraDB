@@ -15,3 +15,13 @@ after_failure: find ./target/mini/logs -name "TabletServer*.out" -exec ls -l {} 
 #  - echo "MAVEN_OPTS='-Xmx1g -XX:MaxPermSize=512m'" > ~/.mavenrc
 #  - mvn clean install -P assemble -P docs -DskipTests -Dfindbugs.skip -Drat.skip -Dcheckstyle.skip -Dhadoop.version=2.7.2
 #  - cd ..
+
+before_install:
+  - wget https://github.com/Accla/graphulo/archive/master.zip
+  - unzip master.zip
+  - cd graphulo-master
+  #- test -f "$HOME/.mavenrc" && echo "Contents of ~/.mavenrc:" && cat $HOME/.mavenrc || echo "Does not exist: ~/.mavenrc"
+  - echo "MAVEN_OPTS='-Xmx1g -XX:MaxPermSize=512m'" > ~/.mavenrc
+  - mvn clean install -DskipTests -Dfindbugs.skip
+  - cd ..
+

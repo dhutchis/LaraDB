@@ -11,6 +11,10 @@ class RealAccumuloTester(instanceName: String, zookeeperHost: String,
 
   private val cc: ClientConfiguration
 
+  override var requestReuse: Boolean
+    get() = true
+    set(value) {}
+
   init {
     cc = ClientConfiguration.loadDefault().withInstance(instanceName).withZkHosts(zookeeperHost) // .withZkTimeout(timeout)
     logger.debug { "Using parameters from $cc" }

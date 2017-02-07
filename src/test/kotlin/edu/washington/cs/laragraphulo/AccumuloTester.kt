@@ -12,6 +12,7 @@ interface AccumuloTester : TestRule {
 
 
   val accumuloConfig: AccumuloConfig
+  var requestReuse: Boolean
 
 
 }

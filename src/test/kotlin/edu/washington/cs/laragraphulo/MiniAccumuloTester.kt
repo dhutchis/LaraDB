@@ -16,13 +16,16 @@ import java.io.IOException
 class MiniAccumuloTester(
     private val numTservers: Int,
     private val doDebug: Boolean,
-    private val reuse: Boolean
+    private var reuse: Boolean
 ) : ExternalResource(), AccumuloTester {
   /* Fixture State */
   private var tempDir: File? = null
   private var miniaccumulo: MiniAccumuloCluster? = null
   private var _ac: AccumuloConfig? = null
 
+  override var requestReuse: Boolean
+    get() = reuse
+    set(value) {reuse = value}
 
   override val accumuloConfig: AccumuloConfig
     get() = _ac!!

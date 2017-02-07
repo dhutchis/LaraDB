@@ -3,13 +3,18 @@ package edu.washington.cs.laragraphulo.sensor
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.util.DebugUtil
 import kotlinx.support.jdk7.use
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
 import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
+import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.Mutation
 import org.junit.Assert
+import org.junit.Assume
 import org.junit.Test
+import org.junit.FixMethodOrder;
+import org.junit.runners.MethodSorters;
 import org.slf4j.Logger
 
 import java.io.File
@@ -19,8 +24,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // PARAMETERS:
-const val filepath = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
-const val tablename = "bee_uw_20170206"
+const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
+const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-tiny.txt"
+const val tablenameA = "bee_uw_20170206"
+const val tablenameB = "bee_denver_20170206"
 const val DODB = true
 const val DOSTRING = true
 
@@ -40,15 +47,32 @@ typealias tcvAction = (t:Long, c:String, v:Double) -> Unit
  * Insert sensor data from a file in test/resources/
  * into Accumulo.
  */
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class SensorInsertTest : AccumuloTestBase() {
 
-  init {
-    logger.debug("Initializing SensorInsertTest")
+  val origReuse = tester.requestReuse
+
+  @Test
+  fun aInsert() {
+    try {
+      println("Inserting $tablenameA")
+      insert(filepathA, tablenameA)
+    } finally {
+      tester.requestReuse = true
+    }
   }
 
   @Test
-  @Throws(FileNotFoundException::class)
-  fun put() {
+  fun bInsert() {
+    try {
+      println("Inserting $tablenameB")
+      insert(filepathB, tablenameB)
+    } finally {
+      tester.requestReuse = true
+    }
+  }
+
+  private fun insert(filepath: String, tablename: String) {
     val conn = tester.accumuloConfig.connector
 
     val url: URL = Thread.currentThread().contextClassLoader.getResource(filepath)
@@ -91,13 +115,31 @@ class SensorInsertTest : AccumuloTestBase() {
       putSensorFile(file, tcvLog)
     }
 
-    logger.info("Wrote $cnt entries to $tablename")
+//    logger.info
+    println("Wrote $cnt entries to $tablename")
+//    DebugUtil.printTable(tablename, conn, tablename, 14)
   }
 
 
+  @Test
+  fun cBinAndDiff() {
+    try {
+      Assume.assumeTrue(DODB)
+      val conn = tester.accumuloConfig.connector
+      val scc = SensorCovarianceCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
+          tablenameA, tablenameB, doString = true)
+      scc.binAndDiff()
 
-  companion object : Loggable {
-    override val logger: Logger = logger<SensorInsertTest>()
+//      DebugUtil.printTable(scc.sensorX, conn, scc.sensorX, 14)
+    } finally {
+      tester.requestReuse = origReuse
+    }
+  }
+
+
+  companion object //: Loggable {
+  {
+//    override val logger: Logger = logger<SensorInsertTest>()
 
     val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
 
@@ -108,11 +150,12 @@ class SensorInsertTest : AccumuloTestBase() {
 //        DATE;_;(CLASS;FAMILY);VALUE;_
 //        t           c          v
         val parts = line.split(';')
-        if (parts.size < 6) return
-        if (parts[2] == "Chemsense ID" && parts[3]=="mac_address") return // these mac addresses have hex string values
+        if (parts.size < 6) return@forEach
+        if (parts[2] == "Chemsense ID" && parts[3]=="mac_address") return@forEach // these mac addresses have hex string values
         val t = dateParser.parse(parts[0]).time
         val c = parts[2]+';'+parts[3]
-        val v = parts[4].toDoubleOrNull() ?: return // if cannot parse, skip
+        val v = parts[4].toDoubleOrNull() ?: return@forEach // if cannot parse, skip
+//        println("Inserting $t, $c, $v")
         tcvAction(t,c,v)
 
       } }

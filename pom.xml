@@ -148,6 +148,12 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>edu.mit.ll</groupId>
+      <artifactId>graphulo</artifactId>
+      <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+
   </dependencies>
 
   <build>
