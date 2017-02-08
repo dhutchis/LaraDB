@@ -1,8 +1,6 @@
 package edu.washington.cs.laragraphulo.sensor
 
 import edu.washington.cs.laragraphulo.AccumuloTestBase
-import edu.washington.cs.laragraphulo.logger
-import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.util.DebugUtil
 import kotlinx.support.jdk7.use
 import org.apache.accumulo.core.client.BatchWriterConfig
@@ -12,13 +10,10 @@ import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.Mutation
 import org.junit.Assert
 import org.junit.Assume
+import org.junit.FixMethodOrder
 import org.junit.Test
-import org.junit.FixMethodOrder;
-import org.junit.runners.MethodSorters;
-import org.slf4j.Logger
-
+import org.junit.runners.MethodSorters
 import java.io.File
-import java.io.FileNotFoundException
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
@@ -55,7 +50,17 @@ class SensorInsertTest : AccumuloTestBase() {
   private val scc = SensorCovarianceCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
       tablenameA, tablenameB, doString = true)
 
+
   @Test
+  fun testAll() {
+    aInsert()
+    bInsert()
+    val tCount = cBinAndDiff()
+    dMeanAndSubtract()
+    eCovariance(tCount)
+  }
+
+
   fun aInsert() {
     try {
       println("Inserting $tablenameA")
@@ -65,7 +70,6 @@ class SensorInsertTest : AccumuloTestBase() {
     }
   }
 
-  @Test
   fun bInsert() {
     try {
       println("Inserting $tablenameB")
@@ -122,25 +126,36 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
 
-  @Test
-  fun cBinAndDiff() {
+  fun cBinAndDiff(): Long {
+    val tCount: Long
     try {
       Assume.assumeTrue(DODB)
-      scc.binAndDiff()
+      tCount = scc.binAndDiff()
 
-      DebugUtil.printTable(scc.sensorX, conn, scc.sensorX, 14)
+//      DebugUtil.printTable(scc.sensorX, conn, scc.sensorX, 14)
+      return tCount
     } finally {
       tester.requestReuse = true
     }
   }
 
-  @Test
   fun dMeanAndSubtract() {
     try {
       Assume.assumeTrue(DODB)
       scc.meanAndSubtract()
 
       DebugUtil.printTable(scc.sensorU, conn, scc.sensorU, 14)
+    } finally {
+      tester.requestReuse = true
+    }
+  }
+
+  fun eCovariance(tCount: Long) {
+    try {
+      Assume.assumeTrue(DODB)
+      scc.covariance(tCount)
+
+      DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
     } finally {
       tester.requestReuse = origReuse
     }

@@ -9,6 +9,7 @@ import edu.mit.ll.graphulo.apply.KeyRetainOnlyApply
 import edu.mit.ll.graphulo.reducer.ReducerSerializable
 import edu.mit.ll.graphulo.rowmult.MultiplyOp
 import edu.mit.ll.graphulo.simplemult.MathTwoScalar
+import edu.mit.ll.graphulo.skvi.DebugInfoIterator
 import edu.mit.ll.graphulo.skvi.TwoTableIterator
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.Connector
@@ -18,10 +19,7 @@ import org.apache.accumulo.core.client.lexicoder.PairLexicoder
 import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.*
-import org.apache.accumulo.core.iterators.Combiner
-import org.apache.accumulo.core.iterators.IteratorEnvironment
-import org.apache.accumulo.core.iterators.OptionDescriber
-import org.apache.accumulo.core.iterators.SortedKeyValueIterator
+import org.apache.accumulo.core.iterators.*
 import org.apache.accumulo.core.util.ComparablePair
 import org.apache.hadoop.io.Text
 import java.io.IOException
@@ -55,10 +53,10 @@ class SensorCovarianceCalc(
       .append(CombineSumCnt.iteratorSetting(1, doString))
       .append(DividePairApply.iteratorSetting(1, doString))
       .toIteratorSetting()
-  private val subtract = MathTwoScalar::class.java
+  private val subtract = MathTwoScalar::class.java // TODO: Breaks under true numeric encoding. Works for string encoding.
   private val subtractOptions = MathTwoScalar.optionMap(MathTwoScalar.ScalarOp.MINUS, MathTwoScalar.ScalarType.DOUBLE, null, true)
 
-  fun binAndDiff() {
+  fun binAndDiff(): Long {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
     recreate(sensorX)
@@ -76,6 +74,7 @@ class SensorCovarianceCalc(
         itersBefore, itersBefore, null, tCounter, null, -1, null, null)
     val tCount = tCounter.serializableForClient
     println("tCount is $tCount")
+    return tCount
   }
 
 
@@ -93,6 +92,29 @@ class SensorCovarianceCalc(
         -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(doString),
         null, null, null, null, false, false, false, false, false, false,
         leftIters, null, null, null, null, -1, null, null)
+
+  }
+
+  /**
+   * Divide by tCount in the end.
+   */
+  fun covariance(tCount: Long) {
+    require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
+    recreate(sensorC)
+
+    G.TableMult(TwoTableIterator.CLONESOURCE_TABLENAME, sensorU, sensorC, null,
+        -1, MathTwoScalar::class.java, MathTwoScalar.optionMap(MathTwoScalar.ScalarOp.TIMES, MathTwoScalar.ScalarType.DOUBLE, null, false), // drop zero
+        Graphulo.PLUS_ITERATOR_DOUBLE, // discards zeros
+        null, null, null, false, false,
+        null, null, listOf(IteratorSetting(1,DebugInfoIterator::class.java)),
+        null, null, -1, null, null)
+
+    GraphuloUtil.applyIteratorSoft(
+        GraphuloUtil.addOnScopeOption(
+            MathTwoScalar.applyOpDouble(Graphulo.DEFAULT_COMBINER_PRIORITY+1, true, MathTwoScalar.ScalarOp.DIVIDE, tCount.toDouble(), false),
+            EnumSet.of(IteratorUtil.IteratorScope.scan)),
+        conn.tableOperations(), sensorC)
+
 
   }
 
