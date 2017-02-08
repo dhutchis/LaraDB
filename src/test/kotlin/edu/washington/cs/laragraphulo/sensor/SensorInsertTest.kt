@@ -36,7 +36,7 @@ private val vConv: (Double) -> ByteArray =
     else { v: Double -> dl.encode(v) }
 private val EMPTY = byteArrayOf()
 
-typealias tcvAction = (t:Long, c:String, v:Double) -> Unit
+typealias tcvAction = (t: Long, c: String, v: Double) -> Unit
 
 /**
  * Insert sensor data from a file in test/resources/
@@ -62,21 +62,13 @@ class SensorInsertTest : AccumuloTestBase() {
 
 
   fun aInsert() {
-    try {
-      println("Inserting $tablenameA")
-      insert(filepathA, tablenameA)
-    } finally {
-      tester.requestReuse = true
-    }
+    println("Inserting $tablenameA")
+    insert(filepathA, tablenameA)
   }
 
   fun bInsert() {
-    try {
-      println("Inserting $tablenameB")
-      insert(filepathB, tablenameB)
-    } finally {
-      tester.requestReuse = true
-    }
+    println("Inserting $tablenameB")
+    insert(filepathB, tablenameB)
   }
 
   private fun insert(filepath: String, tablename: String) {
@@ -113,7 +105,7 @@ class SensorInsertTest : AccumuloTestBase() {
       }
     } else {
       /** Prints parsed file contents */
-      val tcvLog: tcvAction = { t,c,v ->
+      val tcvLog: tcvAction = { t, c, v ->
         println("t:$t\tc:$c\tv:$v")
         cnt++
       }
@@ -127,38 +119,25 @@ class SensorInsertTest : AccumuloTestBase() {
 
 
   fun cBinAndDiff(): Long {
-    val tCount: Long
-    try {
-      Assume.assumeTrue(DODB)
-      tCount = scc.binAndDiff()
+    Assume.assumeTrue(DODB)
+    val tCount = scc.binAndDiff()
 
 //      DebugUtil.printTable(scc.sensorX, conn, scc.sensorX, 14)
-      return tCount
-    } finally {
-      tester.requestReuse = true
-    }
+    return tCount
   }
 
   fun dMeanAndSubtract() {
-    try {
-      Assume.assumeTrue(DODB)
-      scc.meanAndSubtract()
+    Assume.assumeTrue(DODB)
+    scc.meanAndSubtract()
 
-      DebugUtil.printTable(scc.sensorU, conn, scc.sensorU, 14)
-    } finally {
-      tester.requestReuse = true
-    }
+//      DebugUtil.printTable(scc.sensorU, conn, scc.sensorU, 14)
   }
 
   fun eCovariance(tCount: Long) {
-    try {
-      Assume.assumeTrue(DODB)
-      scc.covariance(tCount)
+    Assume.assumeTrue(DODB)
+    scc.covariance(tCount)
 
-      DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
-    } finally {
-      tester.requestReuse = origReuse
-    }
+    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
   }
 
 
@@ -170,20 +149,22 @@ class SensorInsertTest : AccumuloTestBase() {
 
 
     private inline fun putSensorFile(file: File, tcvAction: tcvAction) {
-      file.bufferedReader().useLines { lines -> lines.forEach { line ->
-//        2017-02-06 11:27:44.976000;coresense:3;TSYS01;temperature;8.22;NO_UNIT
+      file.bufferedReader().useLines { lines ->
+        lines.forEach { line ->
+          //        2017-02-06 11:27:44.976000;coresense:3;TSYS01;temperature;8.22;NO_UNIT
 //        DATE;_;(CLASS;FAMILY);VALUE;_
 //        t           c          v
-        val parts = line.split(';')
-        if (parts.size < 6) return@forEach
-        if (parts[2] == "Chemsense ID" && parts[3]=="mac_address") return@forEach // these mac addresses have hex string values
-        val t = dateParser.parse(parts[0]).time
-        val c = parts[2]+';'+parts[3]
-        val v = parts[4].toDoubleOrNull() ?: return@forEach // if cannot parse, skip
+          val parts = line.split(';')
+          if (parts.size < 6) return@forEach
+          if (parts[2] == "Chemsense ID" && parts[3] == "mac_address") return@forEach // these mac addresses have hex string values
+          val t = dateParser.parse(parts[0]).time
+          val c = parts[2] + ';' + parts[3]
+          val v = parts[4].toDoubleOrNull() ?: return@forEach // if cannot parse, skip
 //        println("Inserting $t, $c, $v")
-        tcvAction(t,c,v)
+          tcvAction(t, c, v)
 
-      } }
+        }
+      }
     }
 
 
