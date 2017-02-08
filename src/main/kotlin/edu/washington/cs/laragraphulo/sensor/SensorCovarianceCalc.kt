@@ -9,6 +9,7 @@ import edu.mit.ll.graphulo.apply.KeyRetainOnlyApply
 import edu.mit.ll.graphulo.reducer.ReducerSerializable
 import edu.mit.ll.graphulo.rowmult.MultiplyOp
 import edu.mit.ll.graphulo.simplemult.MathTwoScalar
+import edu.mit.ll.graphulo.skvi.TwoTableIterator
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.Connector
 import org.apache.accumulo.core.client.IteratorSetting
@@ -88,7 +89,7 @@ class SensorCovarianceCalc(
         .iteratorSettingList
 //    , IteratorSetting(1, DebugInfoIterator::class.java))
 
-    G.TwoTableROWCartesian(sensorX, sensorX, null, sensorU, // transpose to [t',c]
+    G.TwoTableROWCartesian(TwoTableIterator.CLONESOURCE_TABLENAME, sensorX, null, sensorU, // transpose to [t',c]
         -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(doString),
         null, null, null, null, false, false, false, false, false, false,
         leftIters, null, null, null, null, -1, null, null)
@@ -348,33 +349,37 @@ class RowCountReduce : ReducerSerializable<Long>() {
 class MinusRowEwiseRight : MultiplyOp {
   /** Whether to use string encoding or to use numeric encoding. */
   var t_string: Boolean = true
+  var keep_zero: Boolean = true
 
   companion object {
     val T_STRING = "T_STRING"
+    val KEEP_ZERO = "KEEP_ZERO"
     private val dlex = DoubleLexicoder()
 
-    fun optionMap(t_string: Boolean): Map<String, String> {
+    fun optionMap(t_string: Boolean, keep_zero: Boolean = true): Map<String, String> {
       val map = HashMap<String, String>()
-      if (!t_string)
-        map.put(T_STRING, t_string.toString())
+      if (!t_string) map.put(T_STRING, t_string.toString())
+      if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
       return map
     }
   }
 
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(T_STRING))
-      t_string = options[T_STRING]!!.toBoolean()
+    if (options.containsKey(T_STRING)) t_string = options[T_STRING]!!.toBoolean()
+    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
   }
 
   override fun multiply(Mrow: ByteSequence,
                         ATcolF: ByteSequence, ATcolQ: ByteSequence, ATcolVis: ByteSequence, ATtime: Long,
                         BcolF: ByteSequence, BcolQ: ByteSequence, BcolVis: ByteSequence, Btime: Long,
                         ATval: Value, Bval: Value): Iterator<Map.Entry<Key, Value>> {
-    val nv = Value(
-        if (t_string) (ATval.toString().toDouble() - Bval.toString().toDouble()).toString().toByteArray()
-        else dlex.encode(dlex.decode(ATval.get()) - dlex.decode(Bval.get()))
-    )
+    if (!keep_zero && ATval == Bval) return Collections.emptyIterator()
+    val a = if (t_string) ATval.toString().toDouble() else dlex.decode(ATval.get())
+    val b = if (t_string) Bval.toString().toDouble() else dlex.decode(Bval.get())
+    val r = a - b
+    if (!keep_zero && r == 0.0) return Collections.emptyIterator()
+    val nv = Value(if (t_string) r.toString().toByteArray() else dlex.encode(r))
     val k = Key(Mrow.toArray(), ATcolF.toArray(), BcolQ.toArray())
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
   }
