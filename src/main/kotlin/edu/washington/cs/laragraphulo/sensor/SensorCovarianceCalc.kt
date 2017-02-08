@@ -6,10 +6,12 @@ import edu.mit.ll.graphulo.Graphulo
 import edu.mit.ll.graphulo.apply.ApplyIterator
 import edu.mit.ll.graphulo.apply.ApplyOp
 import edu.mit.ll.graphulo.apply.KeyRetainOnlyApply
+import edu.mit.ll.graphulo.ewise.EWiseOp
 import edu.mit.ll.graphulo.reducer.ReducerSerializable
 import edu.mit.ll.graphulo.rowmult.MultiplyOp
 import edu.mit.ll.graphulo.simplemult.MathTwoScalar
-import edu.mit.ll.graphulo.skvi.DebugInfoIterator
+import edu.mit.ll.graphulo.skvi.DoubleCombiner
+import edu.mit.ll.graphulo.skvi.DoubleSummingCombiner
 import edu.mit.ll.graphulo.skvi.TwoTableIterator
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.Connector
@@ -21,6 +23,8 @@ import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.*
 import org.apache.accumulo.core.util.ComparablePair
+import org.apache.accumulo.core.util.format.DefaultFormatter
+import org.apache.accumulo.core.util.format.FormatterConfig
 import org.apache.hadoop.io.Text
 import java.io.IOException
 import java.util.*
@@ -53,8 +57,6 @@ class SensorCovarianceCalc(
       .append(CombineSumCnt.iteratorSetting(1, doString))
       .append(DividePairApply.iteratorSetting(1, doString))
       .toIteratorSetting()
-  private val subtract = MathTwoScalar::class.java // TODO: Breaks under true numeric encoding. Works for string encoding.
-  private val subtractOptions = MathTwoScalar.optionMap(MathTwoScalar.ScalarOp.MINUS, MathTwoScalar.ScalarType.DOUBLE, null, true)
 
   fun binAndDiff(): Long {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
@@ -66,7 +68,10 @@ class SensorCovarianceCalc(
         .append(AverageValuesByRow)
         .iteratorSettingList
     val tCounter = RowCountReduce()
-    tCounter.init(emptyMap<String,String>().toMutableMap(), null)
+//    tCounter.init(emptyMap<String,String>().toMutableMap(), null)
+
+    val subtract = SubtractEWise::class.java
+    val subtractOptions = SubtractEWise.optionMap(doString, keep_zero = true)
 
     G.TwoTableEWISE(sensorA, sensorB, null, sensorX, // transpose to [c,t']
         -1, subtract, subtractOptions,
@@ -89,7 +94,7 @@ class SensorCovarianceCalc(
 //    , IteratorSetting(1, DebugInfoIterator::class.java))
 
     G.TwoTableROWCartesian(TwoTableIterator.CLONESOURCE_TABLENAME, sensorX, null, sensorU, // transpose to [t',c]
-        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(doString),
+        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(doString, keep_zero = false),
         null, null, null, null, false, false, false, false, false, false,
         leftIters, null, null, null, null, -1, null, null)
 
@@ -103,20 +108,22 @@ class SensorCovarianceCalc(
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
     recreate(sensorC)
 
+    val plusIter = IteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, DoubleSummingCombiner::class.java)
+    DoubleSummingCombiner.setEncodingType(plusIter, if (doString) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
+    DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
+
     G.TableMult(TwoTableIterator.CLONESOURCE_TABLENAME, sensorU, sensorC, null,
-        -1, MathTwoScalar::class.java, MathTwoScalar.optionMap(MathTwoScalar.ScalarOp.TIMES, MathTwoScalar.ScalarType.DOUBLE, null, false), // drop zero
-        Graphulo.PLUS_ITERATOR_DOUBLE, // discards zeros
+        -1, Multiply::class.java, Multiply.optionMap(doString, keep_zero = false), // drop zero
+        plusIter, // discards zeros
         null, null, null, false, false,
-        null, null, listOf(IteratorSetting(1,DebugInfoIterator::class.java)),
+        null, null, null,
         null, null, -1, null, null)
 
     GraphuloUtil.applyIteratorSoft(
         GraphuloUtil.addOnScopeOption(
-            MathTwoScalar.applyOpDouble(Graphulo.DEFAULT_COMBINER_PRIORITY+1, true, MathTwoScalar.ScalarOp.DIVIDE, tCount.toDouble(), false),
+            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, doString, tCount.toDouble(), keep_zero = false),
             EnumSet.of(IteratorUtil.IteratorScope.scan)),
         conn.tableOperations(), sensorC)
-
-
   }
 
 }
@@ -372,6 +379,7 @@ class RowCountReduce : ReducerSerializable<Long>() {
 class MinusRowEwiseRight : MultiplyOp {
   /** Whether to use string encoding or to use numeric encoding. */
   var t_string: Boolean = true
+  /** Whether to discard or retain values that are zero after subtraction. */
   var keep_zero: Boolean = true
 
   companion object {
@@ -408,5 +416,169 @@ class MinusRowEwiseRight : MultiplyOp {
   }
 }
 
+
+
+
+
+/**
+ * Use for a MultiplyOp.
+ * Aligns on row, result has row = common row, colQ = right colQ, val = left - right
+ */
+class SubtractEWise : EWiseOp {
+  /** Whether to use string encoding or to use numeric encoding. */
+  var t_string: Boolean = true
+  /** Whether to discard or retain values that are zero after subtraction. */
+  var keep_zero: Boolean = true
+
+  companion object {
+    val T_STRING = "T_STRING"
+    val KEEP_ZERO = "KEEP_ZERO"
+    private val dlex = DoubleLexicoder()
+
+    fun optionMap(t_string: Boolean, keep_zero: Boolean = true): Map<String, String> {
+      val map = HashMap<String, String>()
+      if (!t_string) map.put(T_STRING, t_string.toString())
+      if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
+      return map
+    }
+  }
+
+
+  override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
+    if (options.containsKey(T_STRING)) t_string = options[T_STRING]!!.toBoolean()
+    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
+  }
+
+  override fun multiply(Mrow: ByteSequence, McolF: ByteSequence, McolQ: ByteSequence, McolVis: ByteSequence,
+                        Atime: Long, Btime: Long,
+                        Aval: Value, Bval: Value): Iterator<Map.Entry<Key, Value>> {
+    if (!keep_zero && Aval == Bval) return Collections.emptyIterator()
+    val a = if (t_string) Aval.toString().toDouble() else dlex.decode(Aval.get())
+    val b = if (t_string) Bval.toString().toDouble() else dlex.decode(Bval.get())
+    val r = a - b
+    if (!keep_zero && r == 0.0) return Collections.emptyIterator()
+    val nv = Value(if (t_string) r.toString().toByteArray() else dlex.encode(r))
+    val k = Key(Mrow.toArray(), McolF.toArray(), McolQ.toArray())
+    return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
+  }
+}
+
+
+/** Only exists because MathTwoScalar doesn't support direct Double encoding; it encodes by String. */
+class Multiply : MultiplyOp {
+  /** Whether to use string encoding or to use numeric encoding. */
+  var t_string: Boolean = true
+  /** Whether to discard or retain values that are zero after multiplication. */
+  var keep_zero: Boolean = true
+
+  companion object {
+    val T_STRING = "T_STRING"
+    val KEEP_ZERO = "KEEP_ZERO"
+    private val dlex = DoubleLexicoder()
+
+    fun optionMap(t_string: Boolean, keep_zero: Boolean = true): Map<String, String> {
+      val map = HashMap<String, String>()
+      if (!t_string) map.put(T_STRING, t_string.toString())
+      if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
+      return map
+    }
+  }
+
+
+  override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
+    if (options.containsKey(T_STRING)) t_string = options[T_STRING]!!.toBoolean()
+    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
+  }
+
+  override fun multiply(Mrow: ByteSequence,
+                        ATcolF: ByteSequence, ATcolQ: ByteSequence, ATcolVis: ByteSequence, ATtime: Long,
+                        BcolF: ByteSequence, BcolQ: ByteSequence, BcolVis: ByteSequence, Btime: Long,
+                        ATval: Value, Bval: Value): Iterator<Map.Entry<Key, Value>> {
+    val a = if (t_string) ATval.toString().toDouble() else dlex.decode(ATval.get())
+    val b = if (t_string) Bval.toString().toDouble() else dlex.decode(Bval.get())
+    val r = a * b
+    if (!keep_zero && r == 0.0) return Collections.emptyIterator()
+    val nv = Value(if (t_string) r.toString().toByteArray() else dlex.encode(r))
+    val k = Key(ATcolQ.toArray(), ATcolF.toArray(), BcolQ.toArray())
+    return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
+  }
+}
+
+
+class DivideApply : ApplyOp {
+  /** Whether to use string encoding or to use numeric encoding. */
+  var t_string: Boolean = true
+  /** Whether to discard or retain values that are zero after multiplication. */
+  var keep_zero: Boolean = true
+  var divisor: Double = 1.0
+
+  companion object {
+    val T_STRING = "T_STRING"
+    val DIVISOR = "DIVISOR"
+    val KEEP_ZERO = "KEEP_ZERO"
+    private val dlex = DoubleLexicoder()
+
+    fun iteratorSetting(priority: Int, t_string: Boolean, divisor: Double, keep_zero: Boolean = true): IteratorSetting {
+      val itset = IteratorSetting(priority, ApplyIterator::class.java)
+      itset.addOption(ApplyIterator.APPLYOP, DivideApply::class.java.name)
+      if (!t_string) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + T_STRING, t_string.toString())
+      if (!keep_zero) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + KEEP_ZERO, keep_zero.toString())
+      itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + DIVISOR, divisor.toString())
+      return itset
+    }
+  }
+
+  override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
+    if (options.containsKey(Multiply.T_STRING)) t_string = options[Multiply.T_STRING]!!.toBoolean()
+    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
+    require(options.containsKey(DIVISOR)) {"No DIVISOR given"}
+    divisor = options[DIVISOR]!!.toDouble()
+  }
+
+  override fun seekApplyOp(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) {
+  }
+
+  override fun apply(k: Key, v: Value): MutableIterator<MutableMap.MutableEntry<Key, Value>> {
+    val ov = if (t_string) v.toString().toDouble() else dlex.decode(v.get())
+    if (!keep_zero && ov == 0.0) return Collections.emptyIterator()
+    val nv = ov / divisor
+    val newval = Value(if (t_string) nv.toString().toByteArray() else dlex.encode(nv))
+    return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(k, newval))
+  }
+}
+
+
+
+
+
+
+/**
+ * Used for displaying numeric Doubles in the Accumulo shell.
+ * Set `table.formatter` to `edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay` on the appropriate table.
+ */
+class DoubleValueDisplay : DefaultFormatter() {
+  private var si: Iterator<Map.Entry<Key, Value>>? = null
+
+  companion object {
+    private val dlex = DoubleLexicoder()
+  }
+
+  override fun initialize(scanner: Iterable<Map.Entry<Key, Value>>, config: FormatterConfig) {
+//    checkState(false)
+    si = scanner.iterator()
+//    this.config = FormatterConfig(config)
+    super.initialize(scanner, config)
+  }
+
+  override fun next(): String {
+    checkState(true)
+
+    val orig = si!!.next()
+    val nv = Value(dlex.decode(orig.value.get()).toString().toByteArray())
+    val next = AbstractMap.SimpleImmutableEntry(orig.key, nv)
+
+    return formatEntry(next)
+  }
+}
 
 

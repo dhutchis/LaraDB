@@ -25,7 +25,7 @@ const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
 const val DODB = true
-const val DOSTRING = true
+const val DOSTRING = false
 
 private val ull = ULongLexicoder()
 private val tConv: (Long) -> ByteArray =
@@ -53,7 +53,7 @@ class SensorInsertTest : AccumuloTestBase() {
   private val origReuse = tester.requestReuse
   private val conn = tester.accumuloConfig.connector
   private val scc = SensorCovarianceCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
-      tablenameA, tablenameB, doString = true)
+      tablenameA, tablenameB, doString = DOSTRING)
 
 
 
@@ -65,6 +65,8 @@ class SensorInsertTest : AccumuloTestBase() {
     time("cBinAndDiff") { tCount = cBinAndDiff() }
     time("dMeanAndSubtract") { dMeanAndSubtract() }
     time("eCovariance") { eCovariance(tCount) }
+    if (!DOSTRING)
+      conn.tableOperations().setProperty(scc.sensorC, "table.formatter", "edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay")
   }
 
 
@@ -143,7 +145,6 @@ class SensorInsertTest : AccumuloTestBase() {
   fun eCovariance(tCount: Long) {
     Assume.assumeTrue(DODB)
     scc.covariance(tCount)
-
 //    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
   }
 
