@@ -17,10 +17,11 @@ import java.io.File
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.system.measureTimeMillis
 
 // PARAMETERS:
-const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
-const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-tiny.txt"
+const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-small.txt"
+const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
 const val DODB = true
@@ -38,6 +39,10 @@ private val EMPTY = byteArrayOf()
 
 typealias tcvAction = (t: Long, c: String, v: Double) -> Unit
 
+private inline fun time(s: String, f: () -> Unit) {
+  println("TIME $s ${measureTimeMillis(f)/1000.0}")
+}
+
 /**
  * Insert sensor data from a file in test/resources/
  * into Accumulo.
@@ -51,13 +56,15 @@ class SensorInsertTest : AccumuloTestBase() {
       tablenameA, tablenameB, doString = true)
 
 
+
   @Test
   fun testAll() {
-    aInsert()
-    bInsert()
-    val tCount = cBinAndDiff()
-    dMeanAndSubtract()
-    eCovariance(tCount)
+    time("aInsert") { aInsert() }
+    time("bInsert") { bInsert() }
+    var tCount: Long = -1
+    time("cBinAndDiff") { tCount = cBinAndDiff() }
+    time("dMeanAndSubtract") { dMeanAndSubtract() }
+    time("eCovariance") { eCovariance(tCount) }
   }
 
 
@@ -137,7 +144,7 @@ class SensorInsertTest : AccumuloTestBase() {
     Assume.assumeTrue(DODB)
     scc.covariance(tCount)
 
-    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
+//    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
   }
 
 

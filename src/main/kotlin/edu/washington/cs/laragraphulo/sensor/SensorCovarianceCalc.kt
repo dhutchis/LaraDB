@@ -99,6 +99,7 @@ class SensorCovarianceCalc(
    * Divide by tCount in the end.
    */
   fun covariance(tCount: Long) {
+    require(tCount > 0) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
     recreate(sensorC)
 
