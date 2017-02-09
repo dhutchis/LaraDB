@@ -26,6 +26,8 @@ const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
 const val DODB = true
 const val DOSTRING = false
+const val minTime = 0L
+const val maxTime = Long.MAX_VALUE
 
 private val ull = ULongLexicoder()
 private val tConv: (Long) -> ByteArray =
@@ -129,7 +131,7 @@ class SensorInsertTest : AccumuloTestBase() {
 
   fun cBinAndDiff(): Long {
     Assume.assumeTrue(DODB)
-    val tCount = scc.binAndDiff()
+    val tCount = scc.binAndDiff(minTime, maxTime)
 
 //      DebugUtil.printTable(scc.sensorX, conn, scc.sensorX, 14)
     return tCount
@@ -144,6 +146,7 @@ class SensorInsertTest : AccumuloTestBase() {
 
   fun eCovariance(tCount: Long) {
     Assume.assumeTrue(DODB)
+    Assume.assumeTrue("Positive tCount $tCount", tCount > 0L)
     scc.covariance(tCount)
 //    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
   }

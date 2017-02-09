@@ -9,7 +9,6 @@ import edu.mit.ll.graphulo.apply.KeyRetainOnlyApply
 import edu.mit.ll.graphulo.ewise.EWiseOp
 import edu.mit.ll.graphulo.reducer.ReducerSerializable
 import edu.mit.ll.graphulo.rowmult.MultiplyOp
-import edu.mit.ll.graphulo.simplemult.MathTwoScalar
 import edu.mit.ll.graphulo.skvi.DoubleCombiner
 import edu.mit.ll.graphulo.skvi.DoubleSummingCombiner
 import edu.mit.ll.graphulo.skvi.TwoTableIterator
@@ -39,6 +38,7 @@ class SensorCovarianceCalc(
   val sensorX = "${sensorA}_${sensorB}_X"
   val sensorU = "${sensorA}_${sensorB}_U"
   val sensorC = "${sensorA}_${sensorB}_C"
+  private val ull = ULongLexicoder()
 
   val G by lazy { Graphulo(conn, pw) }
 
@@ -58,10 +58,24 @@ class SensorCovarianceCalc(
       .append(DividePairApply.iteratorSetting(1, doString))
       .toIteratorSetting()
 
-  fun binAndDiff(): Long {
+  fun binAndDiff(minTime: Long, maxTime: Long): Long {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
     recreate(sensorX)
+
+    val minRow = (if (doString) minTime else Value(ull.encode(minTime))).toString()
+    val maxRow = (if (doString) maxTime else Value(ull.encode(maxTime))).toString()
+    if (!doString && (minRow.contains(':') || maxRow.contains(':'))) {
+      throw RuntimeException("Special character detected ':' in time string for row filter")
+    }
+    var i = 0
+    while (minRow.contains(i.toChar()) || maxRow.contains(i.toChar())) {
+      i++
+    }
+    val sep = i.toChar()
+    val rowFilter = "$minRow$sep:$sep$maxRow$sep"
+
+
 
     val itersBefore = DynamicIteratorSetting(21, "bin")
         .append(BinRowApply.iteratorSetting(1, doString))
@@ -75,7 +89,7 @@ class SensorCovarianceCalc(
 
     G.TwoTableEWISE(sensorA, sensorB, null, sensorX, // transpose to [c,t']
         -1, subtract, subtractOptions,
-        null, null, null, null, false, false,
+        null, rowFilter, null, null, false, false,
         itersBefore, itersBefore, null, tCounter, null, -1, null, null)
     val tCount = tCounter.serializableForClient
     println("tCount is $tCount")
