@@ -101,10 +101,11 @@ class SensorCovarianceCalc(
   }
 
   /**
-   * Divide by tCount in the end.
+   * Matrix inner product.
+   * Divide by tCount - 1 in the end.
    */
   fun covariance(tCount: Long) {
-    require(tCount > 0) {"Bad tCount: $tCount"}
+    require(tCount > 1) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
     recreate(sensorC)
 
@@ -121,7 +122,7 @@ class SensorCovarianceCalc(
 
     GraphuloUtil.applyIteratorSoft(
         GraphuloUtil.addOnScopeOption(
-            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, doString, tCount.toDouble(), keep_zero = false),
+            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, doString, (tCount-1).toDouble(), keep_zero = false),
             EnumSet.of(IteratorUtil.IteratorScope.scan)),
         conn.tableOperations(), sensorC)
   }
