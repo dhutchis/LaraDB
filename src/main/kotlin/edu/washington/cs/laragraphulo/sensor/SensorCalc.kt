@@ -28,7 +28,7 @@ import org.apache.hadoop.io.Text
 import java.io.IOException
 import java.util.*
 
-class SensorCovarianceCalc(
+class SensorCalc(
     val conn: Connector,
     val pw: PasswordToken,
     val sensorA: String,

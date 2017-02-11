@@ -39,7 +39,6 @@ private val vConv: (Double) -> ByteArray =
     else { v: Double -> dl.encode(v) }
 private val EMPTY = byteArrayOf()
 
-typealias tcvAction = (t: Long, c: String, v: Double) -> Unit
 
 private inline fun time(s: String, f: () -> Unit) {
   println("TIME $s ${measureTimeMillis(f)/1000.0}")
@@ -54,7 +53,7 @@ class SensorInsertTest : AccumuloTestBase() {
 
   private val origReuse = tester.requestReuse
   private val conn = tester.accumuloConfig.connector
-  private val scc = SensorCovarianceCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
+  private val scc = SensorCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
       tablenameA, tablenameB, doString = DOSTRING)
 
 
@@ -86,43 +85,10 @@ class SensorInsertTest : AccumuloTestBase() {
     val url: URL = Thread.currentThread().contextClassLoader.getResource(filepath)
     Assert.assertNotNull(url)
     val file = File(url.path)
-    var cnt = 0L
-
-    if (DODB) {
-      if (conn.tableOperations().exists(tablename))
-        conn.tableOperations().delete(tablename)
-      conn.tableOperations().create(tablename)
-
-      val bwc = BatchWriterConfig()
-      conn.createBatchWriter(tablename, bwc).use { bw ->
-
-        var m = Mutation(tConv(0L))
-        var ms = 0L
-
-        val tcvInsertDB: tcvAction = { t, c, v ->
-          if (t != ms) {
-            if (m.size() > 0) bw.addMutation(m)
-            m = Mutation(tConv(t))
-            ms = t
-          }
-          m.put(EMPTY, c.toByteArray(), vConv(v))
-          cnt++
-        }
-
-        putSensorFile(file, tcvInsertDB)
-        bw.addMutation(m)
-        bw.flush()
-
-      }
-    } else {
-      /** Prints parsed file contents */
-      val tcvLog: tcvAction = { t, c, v ->
-        println("t:$t\tc:$c\tv:$v")
-        cnt++
-      }
-      putSensorFile(file, tcvLog)
-    }
-
+    val action =
+        if (DODB) SensorFileAction.ingestAction(conn, tablename, DOSTRING)
+        else SensorFileAction.printAction(System.out)
+    val cnt = action(file)
 //    logger.info
     println("Wrote $cnt entries to $tablename")
 //    DebugUtil.printTable(tablename, conn, tablename, 14)
@@ -151,35 +117,6 @@ class SensorInsertTest : AccumuloTestBase() {
 //    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
   }
 
-
-  companion object //: Loggable {
-  {
-//    override val logger: Logger = logger<SensorInsertTest>()
-
-    val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
-
-
-    private inline fun putSensorFile(file: File, tcvAction: tcvAction) {
-      file.bufferedReader().useLines { lines ->
-        lines.forEach { line ->
-          //        2017-02-06 11:27:44.976000;coresense:3;TSYS01;temperature;8.22;NO_UNIT
-//        DATE;_;(CLASS;FAMILY);VALUE;_
-//        t           c          v
-          val parts = line.split(';')
-          if (parts.size < 6) return@forEach
-          if (parts[2] == "Chemsense ID" && parts[3] == "mac_address") return@forEach // these mac addresses have hex string values
-          val t = dateParser.parse(parts[0]).time
-          val c = parts[2] + ';' + parts[3]
-          val v = parts[4].toDoubleOrNull() ?: return@forEach // if cannot parse, skip
-//        println("Inserting $t, $c, $v")
-          tcvAction(t, c, v)
-
-        }
-      }
-    }
-
-
-  }
 
 
 }
