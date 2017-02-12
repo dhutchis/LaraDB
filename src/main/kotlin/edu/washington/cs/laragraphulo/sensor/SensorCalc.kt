@@ -82,7 +82,7 @@ class SensorCalc(
     Encode('E'),                 // ok
     FilterPush('F'),             // ok
     MonotoneSortElim('M'),       // ok, in serial mode
-    PropagatePartition('P'),     //
+    PropagatePartition('P'),     // partial; need split on c in U and C
     ReuseSource('R'),            // ok
     SymmetricCovariance('S'),    //
     ZeroDiscard('Z');            // ok
@@ -135,11 +135,14 @@ class SensorCalc(
 
 
 
-  private fun recreate(vararg tns: String) {
+  private fun recreateWithSpitsFrom(from: String?, vararg tns: String) {
+    val t = conn.tableOperations()
     tns.forEach { tn ->
-      if (conn.tableOperations().exists(tn))
-        conn.tableOperations().delete(tn)
-      conn.tableOperations().create(tn)
+      if (t.exists(tn))
+        t.delete(tn)
+      t.create(tn)
+      if (PropagatePartition in opts && from != null)
+        GraphuloUtil.copySplits(t, from, tn)
     }
   }
 
@@ -156,9 +159,11 @@ class SensorCalc(
   fun _pre_binAndDiff() {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
-    if (MonotoneSortElim !in opts)
-      recreate(sensorA2, sensorB2)
-    recreate(sensorX)
+    if (MonotoneSortElim !in opts) {
+      recreateWithSpitsFrom(sensorA, sensorA2)
+      recreateWithSpitsFrom(sensorB, sensorB2)
+    }
+    recreateWithSpitsFrom(null, sensorX) // TODO: split on c
   }
   private fun _binAndDiff(minTime: Long, maxTime: Long): Long {
     val rowFilter: String?
@@ -225,8 +230,9 @@ class SensorCalc(
     _meanAndSubtract()
   }
   fun _pre_meanAndSubtract() {
+    require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorX)) {"table $sensorX does not exist"}
-    recreate(sensorU)
+    recreateWithSpitsFrom(sensorA, sensorU) // choose A arbitrarily
   }
   fun _meanAndSubtract() {
     val leftIters = DynamicIteratorSetting(21, "avgLeftByRow")
@@ -255,7 +261,7 @@ class SensorCalc(
   fun _pre_covariance() {
 //    require(tCount > 1) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
-    recreate(sensorC)
+    recreateWithSpitsFrom(null, sensorC) // TODO: split on c
   }
   fun _covariance(tCount: Long) {
     val keepT = AggregatePush !in opts

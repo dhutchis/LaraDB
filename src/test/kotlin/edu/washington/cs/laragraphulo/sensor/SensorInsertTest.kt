@@ -41,6 +41,7 @@ class SensorInsertTest : AccumuloTestBase() {
     s.add(SensorCalc.SensorOpt.MonotoneSortElim)
     s.add(SensorCalc.SensorOpt.ZeroDiscard)
     s.add(SensorCalc.SensorOpt.AggregatePush)
+    s.add(SensorCalc.SensorOpt.PropagatePartition)
     s
   }()
 
