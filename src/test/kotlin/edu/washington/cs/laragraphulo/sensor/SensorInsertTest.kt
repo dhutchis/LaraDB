@@ -15,6 +15,7 @@ import org.junit.Test
 import org.junit.runners.MethodSorters
 import java.io.File
 import java.net.URL
+import java.security.spec.EncodedKeySpec
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.system.measureTimeMillis
@@ -25,20 +26,8 @@ const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
 const val DODB = true
-const val DOSTRING = false
 const val minTime = 0L
 const val maxTime = Long.MAX_VALUE
-
-private val ull = ULongLexicoder()
-private val tConv: (Long) -> ByteArray =
-    if (DOSTRING) { t: Long -> t.toString().toByteArray() }
-    else { t: Long -> ull.encode(t) }
-private val dl = DoubleLexicoder()
-private val vConv: (Double) -> ByteArray =
-    if (DOSTRING) { v: Double -> v.toString().toByteArray() }
-    else { v: Double -> dl.encode(v) }
-private val EMPTY = byteArrayOf()
-
 
 private inline fun time(s: String, f: () -> Unit) {
   println("TIME $s ${measureTimeMillis(f)/1000.0}")
@@ -55,7 +44,7 @@ class SensorInsertTest : AccumuloTestBase() {
   private val conn = tester.accumuloConfig.connector
   private val opts = {
     val s = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
-    if (!DOSTRING) s.add(SensorCalc.SensorOpt.Encode)
+    s.add(SensorCalc.SensorOpt.Encode)
     s.add(SensorCalc.SensorOpt.FilterPush)
     s
   }()
@@ -74,7 +63,7 @@ class SensorInsertTest : AccumuloTestBase() {
     time("cBinAndDiff") { tCount = cBinAndDiff() }
     time("dMeanAndSubtract") { dMeanAndSubtract() }
     time("eCovariance") { eCovariance(tCount) }
-    if (!DOSTRING)
+    if (SensorCalc.SensorOpt.Encode !in opts)
       conn.tableOperations().setProperty(scc.sensorC, "table.formatter", "edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay")
   }
 
@@ -94,7 +83,7 @@ class SensorInsertTest : AccumuloTestBase() {
     Assert.assertNotNull(url)
     val file = File(url.path)
     val action =
-        if (DODB) SensorFileAction.ingestAction(conn, tablename, DOSTRING)
+        if (DODB) SensorFileAction.ingestAction(conn, tablename, SensorCalc.SensorOpt.Encode in opts)
         else SensorFileAction.printAction(System.out)
     val cnt = action(file)
 //    logger.info

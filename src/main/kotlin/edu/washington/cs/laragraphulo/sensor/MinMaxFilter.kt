@@ -1,5 +1,8 @@
 package edu.washington.cs.laragraphulo.sensor
 
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.debug
+import edu.washington.cs.laragraphulo.logger
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
@@ -9,7 +12,7 @@ import org.apache.accumulo.core.iterators.OptionDescriber
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 
 /**
- * Filter based on minimum and maximum Value (encoded as Longs).
+ * Filter based on minimum and maximum Row (encoded as Longs).
  * Depending on [encode], either encoded as a String or by ULongLexicoder.
  */
 class MinMaxFilter : Filter() {
@@ -22,6 +25,7 @@ class MinMaxFilter : Filter() {
   override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment?) {
     super.init(source, options, env)
     initOptions(options)
+    logger.debug {"init with $minValue to $maxValue and encode $encode"}
   }
 
   private fun initOptions(options: Map<String,String>): MinMaxFilter {
@@ -33,7 +37,7 @@ class MinMaxFilter : Filter() {
   }
 
   override fun accept(k: Key, v: Value): Boolean {
-    return v.get().toLong(encode) in minValue..maxValue
+    return k.rowData.toArray().toLong(encode) in minValue..maxValue
   }
 
   override fun deepCopy(env: IteratorEnvironment?): MinMaxFilter {
@@ -55,8 +59,8 @@ class MinMaxFilter : Filter() {
     return super.validateOptions(options)
   }
 
-  companion object {
-//    private val log = LogManager.getLogger(MinMaxFilter::class.java)
+  companion object : Loggable {
+    override val logger: org.slf4j.Logger = logger<MinMaxFilter>()
 
     val MINVALUE = "minValue"
     val MAXVALUE = "maxValue"

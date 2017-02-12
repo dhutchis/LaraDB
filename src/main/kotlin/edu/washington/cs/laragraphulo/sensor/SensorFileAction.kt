@@ -40,17 +40,17 @@ interface SensorFileAction {
 //          , var cnt: Long = 0
     )
 
-    fun ingestAction(conn: Connector, table: String, doString: Boolean): SensorFileAction {
+    fun ingestAction(conn: Connector, table: String, encode: Boolean): SensorFileAction {
       val ull = ULongLexicoder()
       val EMPTY = byteArrayOf()
       val dl = DoubleLexicoder()
 
-      val tConv: (Long) -> ByteArray =
-          if (doString) { t: Long -> t.toString().toByteArray() }
-          else { t: Long -> ull.encode(t) }
+//      val tConv: (Long) -> ByteArray =
+//          if (encode) { t: Long -> t.toString().toByteArray() }
+//          else { t: Long -> ull.encode(t) }
       val vConv: (Double) -> ByteArray =
-          if (doString) { v: Double -> v.toString().toByteArray() }
-          else { v: Double -> dl.encode(v) }
+          if (encode) { v: Double -> dl.encode(v) }
+          else { v: Double -> v.toString().toByteArray() }
 
 
 
@@ -60,13 +60,13 @@ interface SensorFileAction {
         conn.tableOperations().create(table)
         val bwc = BatchWriterConfig()
         val bw = conn.createBatchWriter(table, bwc)
-        State(bw, Mutation(tConv(0L)))
+        State(bw, Mutation((0L).toByteArray(encode)))
       }
 
       val tcvAction = { s: State, t: Long, c: String, v: Double ->
         if (t != s.ms) {
           if (s.m.size() > 0) s.bw.addMutation(s.m)
-          s.m = Mutation(tConv(t))
+          s.m = Mutation(t.toByteArray(encode))
           s.ms = t
         }
         s.m.put(EMPTY, c.toByteArray(), vConv(v))
