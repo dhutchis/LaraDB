@@ -28,21 +28,96 @@ import org.apache.hadoop.io.Text
 import java.io.IOException
 import java.util.*
 
+fun Set<SensorCalc.SensorOpt>.printSet() = this.sorted().joinToString { it.rep.toString() }
+fun Set<SensorCalc.SensorOpt>.printSetAll() =
+    SensorCalc.SensorOpt.values().joinToString { if (it in this) it.rep.toString() else " " }
+
+private data class TimedResult<out R>(
+    val result: R,
+    val time: Double
+)
+private inline fun <R> time(f: () -> R): TimedResult<R> {
+  val start = System.currentTimeMillis()
+  val result = f()
+  val time = (System.currentTimeMillis() - start)/1000.0
+  return TimedResult(result, time)
+}
+
+
+
 class SensorCalc(
     val conn: Connector,
     val pw: PasswordToken,
     val sensorA: String,
     val sensorB: String,
-    val doString: Boolean = true
+    val opts: Set<SensorOpt>
 ) {
   val sensorX = "${sensorA}_${sensorB}_X"
   val sensorU = "${sensorA}_${sensorB}_U"
   val sensorC = "${sensorA}_${sensorB}_C"
-  private val ull = ULongLexicoder()
-
   val G by lazy { Graphulo(conn, pw) }
+  val sensorM = "${sensorA}_${sensorB}_M"
+  val sensorF = "${sensorA}_${sensorB}_F"
+  
+  enum class SensorOpt(
+      val rep: Char
+  ) : Comparable<SensorOpt> {
+    AggregatePush('A'),          //
+    //    ClientScalar,          //
+    ZeroDiscard('Z'),            //
+    Defer('D'),                  //
+    Encode('E'),                 // ok
+    FilterPush('F'),             // ok
+    MonotoneSortElim('M'),       //
+    PropagatePartition('P'),     //
+    ReuseSource('R'),            //
+    SymmetricCovariance('S');    //
+//    override fun compareTo(other: SensorOpt): Int = this.rep.compareTo(other.rep)
+    companion object {
+      val fromRep: Map<Char,SensorOpt> = SensorOpt.values().map { it.rep to it }.toMap()
+      val num = values().size
+    }
+  }
+  private val AggregatePush = SensorOpt.AggregatePush
+  private val ZeroDiscard = SensorOpt.ZeroDiscard
+  private val Defer = SensorOpt.Defer
+  private val Encode = SensorOpt.Encode
+  private val FilterPush = SensorOpt.FilterPush
+  private val MonotoneSortElim = SensorOpt.MonotoneSortElim
+  private val PropagatePartition = SensorOpt.PropagatePartition
+  private val ReuseSource = SensorOpt.ReuseSource
+  private val SymmetricCovariance = SensorOpt.SymmetricCovariance
 
-//  enum class Sensor { A, B }
+  companion object {
+    private val ull = ULongLexicoder()
+  }
+
+
+  /** Time to run the SensorCalc pipeline to X, to U, to C.
+   * No overlap; times are additive. Does not include table creation time. */
+  data class SensorCalcTimes(
+      val opts: Set<SensorOpt>,
+      val toX: Double,
+      val toU: Double,
+      val toC: Double
+  ) {
+    override fun toString(): String {
+      return "${opts.printSetAll()},$toX,$toU,$toC"
+    }
+  }
+
+
+  
+  fun timeAll(minTime: Long, maxTime: Long): SensorCalcTimes {
+    require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
+    require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
+    recreate(sensorX, sensorU, sensorC)
+    val (tCount, tX) = time { _binAndDiff(minTime, maxTime) }
+
+    return SensorCalcTimes(opts, tX, 0.0, 0.0)
+  }
+
+
 
   private fun recreate(vararg tns: String) {
     tns.forEach { tn ->
@@ -53,39 +128,47 @@ class SensorCalc(
   }
 
   private val AverageValuesByRow = DynamicIteratorSetting(21, "avgByRow")
-      .append(AppendCounterApply.iteratorSetting(1, doString))
-      .append(CombineSumCnt.iteratorSetting(1, doString))
-      .append(DividePairApply.iteratorSetting(1, doString))
+      .append(AppendCounterApply.iteratorSetting(1, Encode !in opts))
+      .append(CombineSumCnt.iteratorSetting(1, Encode !in opts))
+      .append(DividePairApply.iteratorSetting(1, Encode !in opts))
       .toIteratorSetting()
 
   fun binAndDiff(minTime: Long, maxTime: Long): Long {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
     recreate(sensorX)
-
-    val minRow = (if (doString) minTime else Value(ull.encode(minTime))).toString()
-    val maxRow = (if (doString) maxTime else Value(ull.encode(maxTime))).toString()
-    if (!doString && (minRow.contains(':') || maxRow.contains(':'))) {
-      throw RuntimeException("Special character detected ':' in time string for row filter")
+    return _binAndDiff(minTime, maxTime)
+  }
+  
+  private fun _binAndDiff(minTime: Long, maxTime: Long): Long {
+    val rowFilter: String?
+    if (FilterPush in opts) {
+      val minRow = (if (Encode !in opts) minTime else Value(ull.encode(minTime))).toString()
+      val maxRow = (if (Encode !in opts) maxTime else Value(ull.encode(maxTime))).toString()
+      if (Encode in opts && (minRow.contains(':') || maxRow.contains(':')))
+        throw RuntimeException("Special character detected ':' in time string for row filter")
+      var i = 0
+      while (minRow.contains(i.toChar()) || maxRow.contains(i.toChar()))
+        i++
+      val sep = i.toChar()
+      rowFilter = "$minRow$sep:$sep$maxRow$sep"
+    } else {
+      rowFilter = null
     }
-    var i = 0
-    while (minRow.contains(i.toChar()) || maxRow.contains(i.toChar())) {
-      i++
-    }
-    val sep = i.toChar()
-    val rowFilter = "$minRow$sep:$sep$maxRow$sep"
 
-
-
-    val itersBefore = DynamicIteratorSetting(21, "bin")
-        .append(BinRowApply.iteratorSetting(1, doString))
-        .append(AverageValuesByRow)
-        .iteratorSettingList
+    val itersBefore: List<IteratorSetting> = {
+      val dis = DynamicIteratorSetting(21, "bin")
+          .append(BinRowApply.iteratorSetting(1, Encode !in opts))
+          .append(AverageValuesByRow)
+      if (FilterPush !in opts)
+        dis.append(MinMaxFilter.iteratorSetting(1, minTime, maxTime, Encode in opts))
+      dis.iteratorSettingList
+    }()
     val tCounter = RowCountReduce()
 //    tCounter.init(emptyMap<String,String>().toMutableMap(), null)
 
     val subtract = SubtractEWise::class.java
-    val subtractOptions = SubtractEWise.optionMap(doString, keep_zero = true)
+    val subtractOptions = SubtractEWise.optionMap(Encode !in opts, keep_zero = true)
 
     G.TwoTableEWISE(sensorA, sensorB, null, sensorX, // transpose to [c,t']
         -1, subtract, subtractOptions,
@@ -108,7 +191,7 @@ class SensorCalc(
 //    , IteratorSetting(1, DebugInfoIterator::class.java))
 
     G.TwoTableROWCartesian(TwoTableIterator.CLONESOURCE_TABLENAME, sensorX, null, sensorU, // transpose to [t',c]
-        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(doString, keep_zero = false),
+        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode !in opts, keep_zero = false),
         null, null, null, null, false, false, false, false, false, false,
         leftIters, null, null, null, null, -1, null, null)
 
@@ -124,11 +207,11 @@ class SensorCalc(
     recreate(sensorC)
 
     val plusIter = IteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, DoubleSummingCombiner::class.java)
-    DoubleSummingCombiner.setEncodingType(plusIter, if (doString) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
+    DoubleSummingCombiner.setEncodingType(plusIter, if (Encode !in opts) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
     DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
 
     G.TableMult(TwoTableIterator.CLONESOURCE_TABLENAME, sensorU, sensorC, null,
-        -1, Multiply::class.java, Multiply.optionMap(doString, keep_zero = false), // drop zero
+        -1, Multiply::class.java, Multiply.optionMap(Encode !in opts, keep_zero = false), // drop zero
         plusIter, // discards zeros
         null, null, null, false, false,
         null, null, null,
@@ -136,7 +219,7 @@ class SensorCalc(
 
     GraphuloUtil.applyIteratorSoft(
         GraphuloUtil.addOnScopeOption(
-            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, doString, (tCount-1).toDouble(), keep_zero = false),
+            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, Encode !in opts, (tCount-1).toDouble(), keep_zero = false),
             EnumSet.of(IteratorUtil.IteratorScope.scan)),
         conn.tableOperations(), sensorC)
   }
@@ -144,6 +227,9 @@ class SensorCalc(
 }
 
 
+private val ull = ULongLexicoder()
+fun ByteArray.toLong(encode: Boolean): Long = if (encode) ull.decode(this) else String(this).toLong()
+fun Long.toByteArray(encode: Boolean): ByteArray = if (encode) ull.encode(this) else this.toString().toByteArray()
 
 
 /**

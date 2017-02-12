@@ -53,8 +53,16 @@ class SensorInsertTest : AccumuloTestBase() {
 
   private val origReuse = tester.requestReuse
   private val conn = tester.accumuloConfig.connector
+  private val opts = {
+    val s = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
+    if (!DOSTRING) s.add(SensorCalc.SensorOpt.Encode)
+    s.add(SensorCalc.SensorOpt.FilterPush)
+    s
+  }()
   private val scc = SensorCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
-      tablenameA, tablenameB, doString = DOSTRING)
+      tablenameA, tablenameB,
+      opts
+  )
 
 
 
