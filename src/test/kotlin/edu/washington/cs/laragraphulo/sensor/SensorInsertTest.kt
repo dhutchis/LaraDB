@@ -45,6 +45,7 @@ class SensorInsertTest : AccumuloTestBase() {
     val s = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
     s.add(SensorCalc.SensorOpt.Encode)
     s.add(SensorCalc.SensorOpt.FilterPush)
+    s.add(SensorCalc.SensorOpt.MonotoneSortElim)
     s
   }()
 

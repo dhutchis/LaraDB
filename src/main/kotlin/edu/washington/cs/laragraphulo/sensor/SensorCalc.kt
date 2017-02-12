@@ -63,6 +63,8 @@ class SensorCalc(
     val sensorB: String,
     val opts: Set<SensorOpt>
 ) {
+  val sensorA2 = "${sensorA}_newt"
+  val sensorB2 = "${sensorB}_newt"
   val sensorX = "${sensorA}_${sensorB}_X"
   val sensorU = "${sensorA}_${sensorB}_U"
   val sensorC = "${sensorA}_${sensorB}_C"
@@ -79,7 +81,7 @@ class SensorCalc(
     Defer('D'),                  //
     Encode('E'),                 // ok
     FilterPush('F'),             // ok
-    MonotoneSortElim('M'),       //
+    MonotoneSortElim('M'),       // ok, in serial mode
     PropagatePartition('P'),     //
     ReuseSource('R'),            //
     SymmetricCovariance('S');    //
@@ -120,9 +122,9 @@ class SensorCalc(
 
   
   fun timeAll(minTime: Long, maxTime: Long): SensorCalcTimes {
-    require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
-    require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
-    recreate(sensorX, sensorU, sensorC)
+    _pre_binAndDiff()
+    _pre_meanAndSubtract()
+    _pre_covariance()
     val (tCount, tX) = time { _binAndDiff(minTime, maxTime) }
 
     return SensorCalcTimes(opts, tX, 0.0, 0.0)
@@ -145,12 +147,16 @@ class SensorCalc(
       .toIteratorSetting()
 
   fun binAndDiff(minTime: Long, maxTime: Long): Long {
-    require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
-    require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
-    recreate(sensorX)
+    _pre_binAndDiff()
     return _binAndDiff(minTime, maxTime)
   }
-  
+  fun _pre_binAndDiff() {
+    require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
+    require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
+    if (MonotoneSortElim !in opts)
+      recreate(sensorA2, sensorB2)
+    recreate(sensorX)
+  }
   private fun _binAndDiff(minTime: Long, maxTime: Long): Long {
     val rowFilter: String?
     if (FilterPush in opts) {
@@ -168,11 +174,11 @@ class SensorCalc(
     }
 
     val itersBefore: List<IteratorSetting> = {
-      val dis = DynamicIteratorSetting(21, "bin")
+      val dis = DynamicIteratorSetting(21, "filterBinAvg")
           .append(BinRowApply.iteratorSetting(1, Encode in opts))
           .append(AverageValuesByRow)
       if (FilterPush !in opts)
-        dis.append(MinMaxFilter.iteratorSetting(1, minTime, maxTime, Encode in opts))
+        dis.prepend(MinMaxFilter.iteratorSetting(1, minTime, maxTime, Encode in opts))
       dis.iteratorSettingList
     }()
     val tCounter = RowCountReduce()
@@ -181,20 +187,45 @@ class SensorCalc(
     val subtract = SubtractEWise::class.java
     val subtractOptions = SubtractEWise.optionMap(Encode in opts, keep_zero = true)
 
-    G.TwoTableEWISE(sensorA, sensorB, null, sensorX, // transpose to [c,t']
-        -1, subtract, subtractOptions,
-        null, rowFilter, null, null, false, false,
-        itersBefore, itersBefore, null, tCounter, null, -1, null, null)
+    if (MonotoneSortElim in opts) {
+      G.TwoTableEWISE(sensorA, sensorB, null, sensorX, // transpose to [c,t']
+          -1, subtract, subtractOptions,
+          null, rowFilter, null, null, false, false,
+          itersBefore, itersBefore, null, tCounter, null, -1, null, null)
+    } else {
+      // 2 pass version, slowed down because sort elim is disabled
+      val dis = DynamicIteratorSetting(21, "filterBin")
+      if (FilterPush !in opts)
+        dis.append(MinMaxFilter.iteratorSetting(1, minTime, maxTime, Encode in opts))
+      dis.append(BinRowApply.iteratorSetting(1, Encode in opts))
+      val iters = dis.iteratorSettingList
+      G.OneTable(sensorA, sensorA2, null,
+          null, -1, null, null, null,
+          rowFilter, null, iters, null, null)
+      G.OneTable(sensorB, sensorB2, null,
+          null, -1, null, null, null,
+          rowFilter, null, iters, null, null)
+
+      G.TwoTableEWISE(sensorA2, sensorB2, null, sensorX, // transpose to [c,t']
+          -1, subtract, subtractOptions,
+          null, rowFilter, null, null, false, false,
+          listOf(AverageValuesByRow), listOf(AverageValuesByRow), null, tCounter, null, -1, null, null)
+    }
+
     val tCount = tCounter.serializableForClient
     println("tCount is $tCount")
     return tCount
   }
 
-
   fun meanAndSubtract() {
+    _pre_meanAndSubtract()
+    _meanAndSubtract()
+  }
+  fun _pre_meanAndSubtract() {
     require(conn.tableOperations().exists(sensorX)) {"table $sensorX does not exist"}
     recreate(sensorU)
-
+  }
+  fun _meanAndSubtract() {
     val leftIters = DynamicIteratorSetting(21, "avgLeftByRow")
         .append(KeyRetainOnlyApply.iteratorSetting(1, PartialKey.ROW))
         .append(AverageValuesByRow)
@@ -213,10 +244,15 @@ class SensorCalc(
    * Divide by tCount - 1 in the end.
    */
   fun covariance(tCount: Long) {
-    require(tCount > 1) {"Bad tCount: $tCount"}
+    _pre_covariance()
+    _covariance(tCount)
+  }
+  fun _pre_covariance() {
+//    require(tCount > 1) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
     recreate(sensorC)
-
+  }
+  fun _covariance(tCount: Long) {
     val plusIter = IteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, DoubleSummingCombiner::class.java)
     DoubleSummingCombiner.setEncodingType(plusIter, if (Encode !in opts) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
     DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
