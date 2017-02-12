@@ -59,8 +59,8 @@ class SensorInsertTest : AccumuloTestBase() {
     println("Running: ${opts.printSet()}")
     val times = scc.timeAll(minTime, maxTime)
 
-    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
-        {it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString()}
+//    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
+//        {it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString()}
 
     println(times)
 

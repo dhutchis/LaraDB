@@ -3,17 +3,14 @@ package edu.washington.cs.laragraphulo.sensor
 import org.apache.accumulo.core.client.BatchWriter
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.Connector
-import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
-import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
 import org.apache.accumulo.core.data.Mutation
+import org.apache.hadoop.io.Text
 import java.io.File
 import java.io.PrintStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-typealias tcvAction = (t: Long, c: String, v: Double) -> Unit
-
-
+private val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
 
 
 /**
@@ -33,52 +30,76 @@ interface SensorFileAction {
     }
 
     /** This should be defined inside the ingestAction method but some Kotlin Compiler error in 1.1-Beta2 prevents it. */
-    private data class State(
+    private data class IngestState(
         val bw: BatchWriter,
         var m: Mutation,// = Mutation(tConv(0L)),
         var ms: Long = 0L
 //          , var cnt: Long = 0
     )
 
-    fun ingestAction(conn: Connector, table: String, encode: Boolean): SensorFileAction {
-      val ull = ULongLexicoder()
+    fun ingestAction(conn: Connector, table: String, encode: Boolean,
+                     recreateTable: Boolean = false,
+                     partitions: Int = 1, splitFirstTime: Boolean = false,
+                     reverse: Boolean = true // files store times in reverse order
+    ): SensorFileAction {
+      require(partitions >= 1) {"bad partitions: $partitions"}
       val EMPTY = byteArrayOf()
-      val dl = DoubleLexicoder()
 
-//      val tConv: (Long) -> ByteArray =
-//          if (encode) { t: Long -> t.toString().toByteArray() }
-//          else { t: Long -> ullex.encode(t) }
-      val vConv: (Double) -> ByteArray =
-          if (encode) { v: Double -> dl.encode(v) }
-          else { v: Double -> v.toString().toByteArray() }
-
-
-
-      val beforeAction = {
-        if (conn.tableOperations().exists(table))
-          conn.tableOperations().delete(table)
-        conn.tableOperations().create(table)
-        val bwc = BatchWriterConfig()
-        val bw = conn.createBatchWriter(table, bwc)
-        State(bw, Mutation((0L).toByteArray(encode)))
+      val tFirstFun: (File) -> Long = { file: File ->
+        file.useLines { lines ->
+          for (line in lines) {
+            if (line.isBlank()) continue
+            val parts = line.split(';')
+            if (parts.size < 6) continue
+            return@useLines dateParser.parse(parts[0]).time
+          }
+          throw RuntimeException("Cannot obtain time from first line in file $file")
+        }
       }
 
-      val tcvAction = { s: State, t: Long, c: String, v: Double ->
+      val beforeAction = { file: File ->
+        if (recreateTable) {
+          if (conn.tableOperations().exists(table))
+            conn.tableOperations().delete(table)
+          conn.tableOperations().create(table)
+        } else {
+          if (!conn.tableOperations().exists(table))
+            conn.tableOperations().create(table)
+        }
+
+        if (splitFirstTime || partitions > 1) {
+          val tFirst = tFirstFun(file)
+          val ss: SortedSet<Text> = TreeSet<Text>()
+          if (splitFirstTime)
+            ss.add(Text(tFirst.toByteArray(encode)))
+          (1..partitions-1)
+              .map { tFirst + (if(reverse) -1 else 1)*it*1000L*60*60*24/partitions }
+              .mapTo(ss) { Text(it.toByteArray(encode)) }
+          conn.tableOperations().addSplits(table, ss)
+          // p2 -> add day/2
+          // p3 -> add day/3, 2*day/3
+        }
+
+        val bwc = BatchWriterConfig()
+        val bw = conn.createBatchWriter(table, bwc)
+        IngestState(bw, Mutation((0L).toByteArray(encode)))
+      }
+
+
+      val tcvAction = { s: IngestState, t: Long, c: String, v: Double ->
         if (t != s.ms) {
           if (s.m.size() > 0) s.bw.addMutation(s.m)
           s.m = Mutation(t.toByteArray(encode))
           s.ms = t
         }
-        s.m.put(EMPTY, c.toByteArray(), vConv(v))
-//        s.cnt++
+        s.m.put(EMPTY, c.toByteArray(), v.toByteArray(encode))
         s
       }
 
-      val afterAction = { s: State ->
+      val afterAction = { s: IngestState ->
         s.bw.addMutation(s.m)
         s.bw.close()
       }
-
       return SensorFileActionImpl(beforeAction, tcvAction, afterAction)
     }
 
@@ -86,13 +107,13 @@ interface SensorFileAction {
 
 
   class SensorFileActionImpl<State>(
-      private val beforeAction: () -> State,
+      private val beforeAction: (File) -> State,
       private val tcvAction: (s: State, t: Long, c: String, v: Double) -> State,
       private val afterAction: (s: State) -> Unit
   ) : SensorFileAction {
 
     override operator fun invoke(file: File): Long {
-      var s = beforeAction()
+      var s = beforeAction(file)
       var cnt = 0L
       try {
         file.bufferedReader().useLines { lines ->
@@ -116,11 +137,6 @@ interface SensorFileAction {
         afterAction(s)
       }
       return cnt
-    }
-
-
-    companion object {
-      private val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
     }
 
   }
