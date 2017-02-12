@@ -11,7 +11,7 @@ import edu.mit.ll.graphulo.reducer.ReducerSerializable
 import edu.mit.ll.graphulo.rowmult.MultiplyOp
 import edu.mit.ll.graphulo.skvi.DoubleCombiner
 import edu.mit.ll.graphulo.skvi.DoubleSummingCombiner
-import edu.mit.ll.graphulo.skvi.TwoTableIterator
+import edu.mit.ll.graphulo.skvi.TwoTableIterator.CLONESOURCE_TABLENAME
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.Connector
 import org.apache.accumulo.core.client.IteratorSetting
@@ -82,7 +82,7 @@ class SensorCalc(
     FilterPush('F'),             // ok
     MonotoneSortElim('M'),       // ok, in serial mode
     PropagatePartition('P'),     //
-    ReuseSource('R'),            //
+    ReuseSource('R'),            // ok
     SymmetricCovariance('S'),    //
     ZeroDiscard('Z');            // ok
     //    override fun compareTo(other: SensorOpt): Int = this.rep.compareTo(other.rep)
@@ -234,8 +234,9 @@ class SensorCalc(
         .iteratorSettingList
 //    , IteratorSetting(1, DebugInfoIterator::class.java))
     val keepZeros = ZeroDiscard !in opts
+    val firstTable = if (ReuseSource in opts) CLONESOURCE_TABLENAME else sensorX
 
-    G.TwoTableROWCartesian(TwoTableIterator.CLONESOURCE_TABLENAME, sensorX, null, sensorU, // transpose to [t',c]
+    G.TwoTableROWCartesian(firstTable, sensorX, null, sensorU, // transpose to [t',c]
         -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode in opts, keep_zero = keepZeros),
         null, null, null, null, false, false, false, false, false, false,
         leftIters, null, null, null, null, -1, null, null)
@@ -260,8 +261,9 @@ class SensorCalc(
     DoubleSummingCombiner.setEncodingType(plusIter, if (Encode !in opts) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
     DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
     val keepZeros = ZeroDiscard !in opts
+    val firstTable = if (ReuseSource in opts) CLONESOURCE_TABLENAME else sensorU
 
-    G.TableMult(TwoTableIterator.CLONESOURCE_TABLENAME, sensorU, sensorC, null,
+    G.TableMult(firstTable, sensorU, sensorC, null,
         -1, Multiply::class.java, Multiply.optionMap(Encode in opts, keep_zero = keepZeros), // drop zero
         plusIter, // discards zeros
         null, null, null, false, false,
