@@ -2,12 +2,7 @@ package edu.washington.cs.laragraphulo.sensor
 
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.util.DebugUtil
-import kotlinx.support.jdk7.use
-import org.apache.accumulo.core.client.BatchWriterConfig
-import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
-import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
-import org.apache.accumulo.core.data.Mutation
 import org.junit.Assert
 import org.junit.Assume
 import org.junit.FixMethodOrder
@@ -15,14 +10,12 @@ import org.junit.Test
 import org.junit.runners.MethodSorters
 import java.io.File
 import java.net.URL
-import java.security.spec.EncodedKeySpec
-import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.system.measureTimeMillis
 
 // PARAMETERS:
-const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-small.txt"
-const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
+const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
+const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-tiny.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
 const val DODB = true
@@ -47,6 +40,7 @@ class SensorInsertTest : AccumuloTestBase() {
     s.add(SensorCalc.SensorOpt.FilterPush)
     s.add(SensorCalc.SensorOpt.MonotoneSortElim)
     s.add(SensorCalc.SensorOpt.ZeroDiscard)
+    s.add(SensorCalc.SensorOpt.AggregatePush)
     s
   }()
 
@@ -64,6 +58,10 @@ class SensorInsertTest : AccumuloTestBase() {
     if (!DODB) return
     println("Running: ${opts.printSet()}")
     val times = scc.timeAll(minTime, maxTime)
+
+    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
+        {it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString()}
+
     println(times)
 
 //    var tCount: Long = -1

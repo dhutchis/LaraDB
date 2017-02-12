@@ -18,6 +18,7 @@ import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
 import org.apache.accumulo.core.client.lexicoder.PairLexicoder
 import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
+import org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.concat
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.*
@@ -75,7 +76,7 @@ class SensorCalc(
   enum class SensorOpt(
       val rep: Char
   ) : Comparable<SensorOpt> {
-    AggregatePush('A'),          //
+    AggregatePush('A'),          // ok
     //    ClientScalar,          //
     Defer('D'),                  //
     Encode('E'),                 // ok
@@ -257,18 +258,32 @@ class SensorCalc(
     recreate(sensorC)
   }
   fun _covariance(tCount: Long) {
+    val keepT = AggregatePush !in opts
+    val dis = DynamicIteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, if (keepT) "summer" else "dropSummer")
+    if (keepT) dis.append(DropSecondInColQPair.iteratorSetting(1))
     val plusIter = IteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, DoubleSummingCombiner::class.java)
     DoubleSummingCombiner.setEncodingType(plusIter, if (Encode !in opts) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
     DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
+    dis.append(plusIter)
+
+    val allPlusIter = if (keepT) dis.toIteratorSetting() else null
     val keepZeros = ZeroDiscard !in opts
     val firstTable = if (ReuseSource in opts) CLONESOURCE_TABLENAME else sensorU
 
     G.TableMult(firstTable, sensorU, sensorC, null,
-        -1, Multiply::class.java, Multiply.optionMap(Encode in opts, keep_zero = keepZeros), // drop zero
-        plusIter, // discards zeros
+        -1, Multiply::class.java, Multiply.optionMap(Encode in opts, keep_zero = keepZeros, keepT = keepT), // drop zero
+        allPlusIter,
         null, null, null, false, false,
         null, null, null,
         null, null, -1, null, null)
+
+    if (!keepT) {
+      GraphuloUtil.applyIteratorSoft(
+          GraphuloUtil.addOnScopeOption(
+              dis.toIteratorSetting(),
+              EnumSet.of(IteratorUtil.IteratorScope.scan)),
+          conn.tableOperations(), sensorC)
+    }
 
     GraphuloUtil.applyIteratorSoft(
         GraphuloUtil.addOnScopeOption(
@@ -333,7 +348,6 @@ class AppendCounterApply : ApplyOp {
 
   companion object {
     const val ENCODE = "ENCODE"
-    private val dlex = DoubleLexicoder()
     private val lex = PairLexicoder(DoubleLexicoder(), ULongLexicoder())
     private val commaOne = ",1".toByteArray()
 
@@ -605,21 +619,38 @@ class SubtractEWise : EWiseOp {
 }
 
 
-/** Only exists because MathTwoScalar doesn't support direct Double encoding; it encodes by String. */
+/** Exists because MathTwoScalar doesn't support direct Double encoding; it encodes by String. */
 class Multiply : MultiplyOp {
   /** Whether to use string encoding or to use numeric encoding. */
   private var encode: Boolean = false
   /** Whether to discard or retain values that are zero after multiplication. */
   private var keep_zero: Boolean = true
+  /** Whether to append the matching row to the end of the column qualifier. */
+  private var keepT: Boolean = false
 
   companion object {
     const val ENCODE = "ENCODE"
     const val KEEP_ZERO = "KEEP_ZERO"
+    const val KEEPT = "KEEPT"
+//    private val ctlex = PairLexicoder<ByteArray,ByteArray>(BytesLexicoder(),BytesLexicoder())
+    private fun encodePairBytes(a: ByteArray, b: ByteArray): ByteArray {
+      return concat(org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.escape(a),
+          org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.escape(b))
+    }
+    private fun decodePairBytes(all: ByteArray): Pair<ByteArray,ByteArray> {
+      val fields = org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.split(all, 0, all.size)
+      if (fields.size != 2) {
+        throw RuntimeException("Data does not have 2 fields, it has " + fields.size)
+      }
+      return Pair(org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.unescape(fields[0]),
+          org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.unescape(fields[1]))
+    }
 
-    fun optionMap(encode: Boolean = false, keep_zero: Boolean = true): Map<String, String> {
+    fun optionMap(encode: Boolean = false, keep_zero: Boolean = true, keepT: Boolean = false): Map<String, String> {
       val map = HashMap<String, String>()
       if (encode) map.put(ENCODE, encode.toString())
       if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
+      if (keepT) map.put(KEEPT, keepT.toString())
       return map
     }
   }
@@ -628,6 +659,7 @@ class Multiply : MultiplyOp {
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
     encode = options[ENCODE]?.toBoolean() ?: encode
     keep_zero = options[KEEP_ZERO]?.toBoolean() ?: keep_zero
+    keepT = options[KEEPT]?.toBoolean() ?: keepT
   }
 
   override fun multiply(Mrow: ByteSequence,
@@ -639,7 +671,8 @@ class Multiply : MultiplyOp {
     val r = a * b
     if (!keep_zero && r == 0.0) return Collections.emptyIterator()
     val nv = Value(r.toByteArray(encode))
-    val k = Key(ATcolQ.toArray(), ATcolF.toArray(), BcolQ.toArray())
+    val colq = if (keepT) encodePairBytes(BcolQ.toArray(), Mrow.toArray()) else BcolQ.toArray()
+    val k = Key(ATcolQ.toArray(), ATcolF.toArray(), colq)
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
   }
 }
@@ -657,10 +690,10 @@ class DivideApply : ApplyOp {
     const val DIVISOR = "DIVISOR"
     const val KEEP_ZERO = "KEEP_ZERO"
 
-    fun iteratorSetting(priority: Int, t_string: Boolean, divisor: Double, keep_zero: Boolean = true): IteratorSetting {
+    fun iteratorSetting(priority: Int, encode: Boolean, divisor: Double, keep_zero: Boolean = true): IteratorSetting {
       val itset = IteratorSetting(priority, ApplyIterator::class.java)
       itset.addOption(ApplyIterator.APPLYOP, DivideApply::class.java.name)
-      if (!t_string) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + ENCODE, t_string.toString())
+      if (encode) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + ENCODE, encode.toString())
       if (!keep_zero) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + KEEP_ZERO, keep_zero.toString())
       itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + DIVISOR, divisor.toString())
       return itset
@@ -715,5 +748,49 @@ class DoubleValueDisplay : DefaultFormatter() {
     return formatEntry(next)
   }
 }
+
+
+
+
+
+
+
+
+
+
+class DropSecondInColQPair : ApplyOp {
+
+  companion object {
+    /** Undoes `encodePairBytes` */
+    private fun decodePairBytes(all: ByteArray): Pair<ByteArray,ByteArray> {
+      val fields = org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.split(all, 0, all.size)
+      if (fields.size != 2) {
+        throw RuntimeException("Data does not have 2 fields, it has " + fields.size)
+      }
+      return Pair(org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.unescape(fields[0]),
+          org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.unescape(fields[1]))
+    }
+
+    fun iteratorSetting(priority: Int): IteratorSetting {
+      val itset = IteratorSetting(priority, ApplyIterator::class.java)
+      itset.addOption(ApplyIterator.APPLYOP, DropSecondInColQPair::class.java.name)
+      return itset
+    }
+  }
+
+  override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
+  }
+
+  override fun seekApplyOp(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) {
+  }
+
+  override fun apply(k: Key, v: Value): MutableIterator<MutableMap.MutableEntry<Key, Value>> {
+    val newq = decodePairBytes(k.columnQualifierData.toArray()).first
+
+    val newk = Key(k.rowData.toArray(), k.columnFamilyData.toArray(), newq)
+    return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(newk, v))
+  }
+}
+
 
 

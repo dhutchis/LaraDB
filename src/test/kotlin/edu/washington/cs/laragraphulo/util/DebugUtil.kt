@@ -18,7 +18,8 @@ object DebugUtil {
 
   /** @param w Label Width of rows and columns; default 5
    */
-  @JvmOverloads fun printTable(header: String?, conn: Connector, table: String, w: Int = 5) {
+  @JvmOverloads fun printTable(header: String?, conn: Connector, table: String, w: Int = 5,
+                                      valFun: (Value) -> String = Value::toString) {
     if (header != null)
       println(header)
     val scan: Scanner
@@ -28,20 +29,21 @@ object DebugUtil {
       throw RuntimeException(e)
     }
 
-    printMapFull(scan.iterator(), w)
+    printMapFull(scan.iterator(), w, valFun)
     scan.close()
   }
 
 
   /** @param w Label Width of rows and columns; default 5
    */
-  fun printMapFull(iter: Iterator<Map.Entry<Key, Value>>, w: Int = 5) {
+  fun printMapFull(iter: Iterator<Map.Entry<Key, Value>>, w: Int = 5,
+                   valFun: (Value) -> String = Value::toString) {
     val columnSet = TreeSet<String>()
-    val rowToColumnMap = TreeMap<String, SortedMap<String, Value>>()
+    val rowToColumnMap = TreeMap<String, SortedMap<String, String>>()
 
     run {
       var curRow: String? = null
-      var curRowMap: SortedMap<String, Value>? = null
+      var curRowMap: SortedMap<String, String>? = null
 
       while (iter.hasNext()) {
         val entry = iter.next()
@@ -52,10 +54,10 @@ object DebugUtil {
         columnSet.add(col)
         if (row != curRow) {
           curRow = row
-          curRowMap = TreeMap<String, Value>()
+          curRowMap = TreeMap<String, String>()
           rowToColumnMap.put(curRow, curRowMap)
         }
-        curRowMap!!.put(col, entry.value)
+        curRowMap!!.put(col, valFun(entry.value))
       }
     }
 
@@ -71,8 +73,8 @@ object DebugUtil {
       System.out.printf("%${w}s ", row.substring(0, Math.min(w, row.length)))
 
       for (col in columnSet) {
-        if (colMap.containsKey(col)) {
-          val v = colMap[col].toString()
+        if (col in colMap) {
+          val v = colMap[col]!!
           System.out.printf("%${w}s ", v.substring(0, Math.min(w, v.length)))
         } else {
           System.out.printf("%${w}s ", "")
