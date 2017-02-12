@@ -60,10 +60,15 @@ class SensorInsertTest : AccumuloTestBase() {
   fun testAll() {
     time("aInsert") { aInsert() }
     time("bInsert") { bInsert() }
-    var tCount: Long = -1
-    time("cBinAndDiff") { tCount = cBinAndDiff() }
-    time("dMeanAndSubtract") { dMeanAndSubtract() }
-    time("eCovariance") { eCovariance(tCount) }
+    if (!DODB) return
+    println("Running: ${opts.printSet()}")
+    val times = scc.timeAll(minTime, maxTime)
+    println(times)
+
+//    var tCount: Long = -1
+//    time("cBinAndDiff") { tCount = cBinAndDiff() }
+//    time("dMeanAndSubtract") { dMeanAndSubtract() }
+//    time("eCovariance") { eCovariance(tCount) }
     if (SensorCalc.SensorOpt.Encode !in opts)
       conn.tableOperations().setProperty(scc.sensorC, "table.formatter", "edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay")
   }

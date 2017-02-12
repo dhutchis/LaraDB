@@ -39,9 +39,9 @@ fun Double.toByteArray(encode: Boolean): ByteArray = if (encode) dlex.encode(thi
 
 
 
-fun Set<SensorCalc.SensorOpt>.printSet() = this.sorted().joinToString { it.rep.toString() }
+fun Set<SensorCalc.SensorOpt>.printSet() = this.sorted().joinToString("") { it.rep.toString() }
 fun Set<SensorCalc.SensorOpt>.printSetAll() =
-    SensorCalc.SensorOpt.values().joinToString { if (it in this) it.rep.toString() else " " }
+    SensorCalc.SensorOpt.values().joinToString("") { if (it in this) it.rep.toString() else " " }
 
 private data class TimedResult<out R>(
     val result: R,
@@ -77,15 +77,15 @@ class SensorCalc(
   ) : Comparable<SensorOpt> {
     AggregatePush('A'),          //
     //    ClientScalar,          //
-    ZeroDiscard('Z'),            //
     Defer('D'),                  //
     Encode('E'),                 // ok
     FilterPush('F'),             // ok
     MonotoneSortElim('M'),       // ok, in serial mode
     PropagatePartition('P'),     //
     ReuseSource('R'),            //
-    SymmetricCovariance('S');    //
-//    override fun compareTo(other: SensorOpt): Int = this.rep.compareTo(other.rep)
+    SymmetricCovariance('S'),    //
+    ZeroDiscard('Z');            //
+    //    override fun compareTo(other: SensorOpt): Int = this.rep.compareTo(other.rep)
     companion object {
       val fromRep: Map<Char,SensorOpt> = SensorOpt.values().map { it.rep to it }.toMap()
       val num = values().size
@@ -126,8 +126,10 @@ class SensorCalc(
     _pre_meanAndSubtract()
     _pre_covariance()
     val (tCount, tX) = time { _binAndDiff(minTime, maxTime) }
+    val (_, tU) = time { _meanAndSubtract() }
+    val (_, tC) = time { _covariance(tCount) }
 
-    return SensorCalcTimes(opts, tX, 0.0, 0.0)
+    return SensorCalcTimes(opts, tX, tU, tC)
   }
 
 
