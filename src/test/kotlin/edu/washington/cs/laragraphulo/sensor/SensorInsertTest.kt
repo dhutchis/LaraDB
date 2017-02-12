@@ -39,15 +39,15 @@ private inline fun time(s: String, f: () -> Unit) {
  */
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class SensorInsertTest : AccumuloTestBase() {
-
-  private val origReuse = tester.requestReuse
   private val conn = tester.accumuloConfig.connector
-  private val opts = {
+
+  private val opts: Set<SensorCalc.SensorOpt> = {
     val s = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
     s.add(SensorCalc.SensorOpt.Encode)
     s.add(SensorCalc.SensorOpt.FilterPush)
     s
   }()
+
   private val scc = SensorCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
       tablenameA, tablenameB,
       opts

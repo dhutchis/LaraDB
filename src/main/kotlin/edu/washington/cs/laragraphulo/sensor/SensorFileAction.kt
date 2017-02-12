@@ -47,7 +47,7 @@ interface SensorFileAction {
 
 //      val tConv: (Long) -> ByteArray =
 //          if (encode) { t: Long -> t.toString().toByteArray() }
-//          else { t: Long -> ull.encode(t) }
+//          else { t: Long -> ullex.encode(t) }
       val vConv: (Double) -> ByteArray =
           if (encode) { v: Double -> dl.encode(v) }
           else { v: Double -> v.toString().toByteArray() }

@@ -28,6 +28,17 @@ import org.apache.hadoop.io.Text
 import java.io.IOException
 import java.util.*
 
+
+private val ullex = ULongLexicoder()
+private val dlex = DoubleLexicoder()
+fun ByteArray.toLong(encode: Boolean): Long = if (encode) ullex.decode(this) else String(this).toLong()
+fun Long.toByteArray(encode: Boolean): ByteArray = if (encode) ullex.encode(this) else this.toString().toByteArray()
+fun ByteArray.toDouble(encode: Boolean): Double = if (encode) dlex.decode(this) else String(this).toDouble()
+fun Double.toByteArray(encode: Boolean): ByteArray = if (encode) dlex.encode(this) else this.toString().toByteArray()
+
+
+
+
 fun Set<SensorCalc.SensorOpt>.printSet() = this.sorted().joinToString { it.rep.toString() }
 fun Set<SensorCalc.SensorOpt>.printSetAll() =
     SensorCalc.SensorOpt.values().joinToString { if (it in this) it.rep.toString() else " " }
@@ -128,9 +139,9 @@ class SensorCalc(
   }
 
   private val AverageValuesByRow = DynamicIteratorSetting(21, "avgByRow")
-      .append(AppendCounterApply.iteratorSetting(1, Encode !in opts))
-      .append(CombineSumCnt.iteratorSetting(1, Encode !in opts))
-      .append(DividePairApply.iteratorSetting(1, Encode !in opts))
+      .append(AppendCounterApply.iteratorSetting(1, Encode in opts))
+      .append(CombineSumCnt.iteratorSetting(1, Encode in opts))
+      .append(DividePairApply.iteratorSetting(1, Encode in opts))
       .toIteratorSetting()
 
   fun binAndDiff(minTime: Long, maxTime: Long): Long {
@@ -158,7 +169,7 @@ class SensorCalc(
 
     val itersBefore: List<IteratorSetting> = {
       val dis = DynamicIteratorSetting(21, "bin")
-          .append(BinRowApply.iteratorSetting(1, Encode !in opts))
+          .append(BinRowApply.iteratorSetting(1, Encode in opts))
           .append(AverageValuesByRow)
       if (FilterPush !in opts)
         dis.append(MinMaxFilter.iteratorSetting(1, minTime, maxTime, Encode in opts))
@@ -168,7 +179,7 @@ class SensorCalc(
 //    tCounter.init(emptyMap<String,String>().toMutableMap(), null)
 
     val subtract = SubtractEWise::class.java
-    val subtractOptions = SubtractEWise.optionMap(Encode !in opts, keep_zero = true)
+    val subtractOptions = SubtractEWise.optionMap(Encode in opts, keep_zero = true)
 
     G.TwoTableEWISE(sensorA, sensorB, null, sensorX, // transpose to [c,t']
         -1, subtract, subtractOptions,
@@ -191,7 +202,7 @@ class SensorCalc(
 //    , IteratorSetting(1, DebugInfoIterator::class.java))
 
     G.TwoTableROWCartesian(TwoTableIterator.CLONESOURCE_TABLENAME, sensorX, null, sensorU, // transpose to [t',c]
-        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode !in opts, keep_zero = false),
+        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode in opts, keep_zero = false),
         null, null, null, null, false, false, false, false, false, false,
         leftIters, null, null, null, null, -1, null, null)
 
@@ -211,7 +222,7 @@ class SensorCalc(
     DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
 
     G.TableMult(TwoTableIterator.CLONESOURCE_TABLENAME, sensorU, sensorC, null,
-        -1, Multiply::class.java, Multiply.optionMap(Encode !in opts, keep_zero = false), // drop zero
+        -1, Multiply::class.java, Multiply.optionMap(Encode in opts, keep_zero = false), // drop zero
         plusIter, // discards zeros
         null, null, null, false, false,
         null, null, null,
@@ -219,7 +230,7 @@ class SensorCalc(
 
     GraphuloUtil.applyIteratorSoft(
         GraphuloUtil.addOnScopeOption(
-            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, Encode !in opts, (tCount-1).toDouble(), keep_zero = false),
+            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, Encode in opts, (tCount-1).toDouble(), keep_zero = false),
             EnumSet.of(IteratorUtil.IteratorScope.scan)),
         conn.tableOperations(), sensorC)
   }
@@ -227,9 +238,6 @@ class SensorCalc(
 }
 
 
-private val ull = ULongLexicoder()
-fun ByteArray.toLong(encode: Boolean): Long = if (encode) ull.decode(this) else String(this).toLong()
-fun Long.toByteArray(encode: Boolean): ByteArray = if (encode) ull.encode(this) else this.toString().toByteArray()
 
 
 /**
@@ -240,36 +248,34 @@ fun Long.toByteArray(encode: Boolean): ByteArray = if (encode) ull.encode(this) 
  */
 class BinRowApply : ApplyOp {
   /** Whether to use string encoding or to use ulong encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
 
   val binSize = 60000
 
   companion object {
-    val T_STRING = "T_STRING"
-    private val ULL = ULongLexicoder()
+    const val ENCODE = "ENCODE"
 
-    fun iteratorSetting(priority: Int, t_string: Boolean): IteratorSetting {
+    fun iteratorSetting(priority: Int, encode: Boolean = false): IteratorSetting {
       val itset = IteratorSetting(priority, ApplyIterator::class.java)
       itset.addOption(ApplyIterator.APPLYOP, BinRowApply::class.java.name)
-      if (!t_string)
-        itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + T_STRING, t_string.toString())
+      if (encode)
+        itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + ENCODE, encode.toString())
       return itset
     }
   }
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(T_STRING))
-      t_string = options[T_STRING]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
   }
 
   override fun seekApplyOp(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) {
   }
 
   override fun apply(k: Key, v: Value): MutableIterator<MutableMap.MutableEntry<Key, Value>> {
-    val t = k.rowData.toArray().let { if (t_string) String(it).toLong() else ULL.decode(it) }
+    val t = k.rowData.toArray().toLong(encode)
     val tm = t % binSize
     val tb = t - tm + (if (tm >= binSize/2) binSize else 0) // new t
-    val rb = if (t_string) tb.toString().toByteArray() else ULL.encode(tb) // new row
+    val rb = tb.toByteArray(encode) // new row
     val kb = Key(rb, k.columnFamilyData.toArray(), k.columnQualifierData.toArray(), k.columnVisibility.bytes) // no ts
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(kb,v))
   }
@@ -281,42 +287,41 @@ class BinRowApply : ApplyOp {
  */
 class AppendCounterApply : ApplyOp {
   /** Whether to use string encoding or to use ulong encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
 
   companion object {
-    val T_STRING = "T_STRING"
+    const val ENCODE = "ENCODE"
     private val dlex = DoubleLexicoder()
     private val lex = PairLexicoder(DoubleLexicoder(), ULongLexicoder())
     private val commaOne = ",1".toByteArray()
 
-    fun iteratorSetting(priority: Int, t_string: Boolean): IteratorSetting {
+    fun iteratorSetting(priority: Int, encode: Boolean = false): IteratorSetting {
       val itset = IteratorSetting(priority, ApplyIterator::class.java)
       itset.addOption(ApplyIterator.APPLYOP, AppendCounterApply::class.java.name)
-      if (!t_string)
-        itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + T_STRING, t_string.toString())
+      if (encode)
+        itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + ENCODE, encode.toString())
       return itset
     }
   }
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(T_STRING))
-      t_string = options[T_STRING]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
   }
 
   override fun seekApplyOp(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) {
   }
 
   override fun apply(k: Key, v: Value): MutableIterator<MutableMap.MutableEntry<Key, Value>> {
-    if (t_string) {
+    val nvarr = if (!encode) {
       val varr = v.get()
       val sz = varr.size
       val nvarr = Arrays.copyOf(varr, sz+commaOne.size)
       System.arraycopy(commaOne, 0, nvarr, sz, commaOne.size)
-      return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(k,Value(nvarr)))
+      nvarr
     } else {
-      val nv = lex.encode(ComparablePair(dlex.decode(v.get()), 1L))
-      return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(k,Value(nv)))
+      lex.encode(ComparablePair(dlex.decode(v.get()), 1L))
     }
+    return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(k,Value(nvarr)))
   }
 }
 
@@ -328,7 +333,7 @@ class AppendCounterApply : ApplyOp {
  */
 class CombineSumCnt : Combiner() {
   /** Whether to use string encoding or to use numeric encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
 
   override fun reduce(key: Key, iter: Iterator<Value>): Value {
     var sum = 0.0
@@ -339,7 +344,7 @@ class CombineSumCnt : Combiner() {
     if (!iter.hasNext()) return next!!
 
     do {
-      if (t_string) {
+      if (!encode) {
         val stats = next!!.toString().split(',') //.dropLastWhile(String::isEmpty).toTypedArray()
         require(stats.size == 2) {"bad value: $next"}
         sum += stats[0].toDouble()
@@ -352,38 +357,34 @@ class CombineSumCnt : Combiner() {
       next = if (iter.hasNext()) iter.next() else null
     } while (next != null)
 
-    val ret = if (t_string) "$sum,$count".toByteArray() else lex.encode(ComparablePair(sum, count))
+    val ret = if (!encode) "$sum,$count".toByteArray() else lex.encode(ComparablePair(sum, count))
     return Value(ret)
   }
 
   @Throws(IOException::class)
   override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment?) {
     super.init(source, options, env)
-    if (options.containsKey(T_STRING))
-      t_string = options[T_STRING]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
   }
 
   override fun describeOptions(): OptionDescriber.IteratorOptions {
     val io = super.describeOptions()
     io.setName("CombineSumCnt")
     io.setDescription("Combiner that keeps track of sum and count of pairs of doubles and longs")
-    io.addNamedOption(T_STRING, "True for String encoding, false for pair lexicoding (default true)")
+    io.addNamedOption(ENCODE, "True for pair lexicoding, false for string encoding (default false)")
     return io
   }
 
   companion object {
-    val T_STRING = "T_STRING"
+    const val ENCODE = "ENCODE"
     private val lex = PairLexicoder(DoubleLexicoder(), ULongLexicoder())
 
-    fun iteratorSetting(priority: Int, t_string: Boolean = true,
+    fun iteratorSetting(priority: Int, encode: Boolean = false,
                         columns: List<IteratorSetting.Column> = emptyList()): IteratorSetting {
       val itset = IteratorSetting(priority, CombineSumCnt::class.java)
-      if (columns.isEmpty())
-        Combiner.setCombineAllColumns(itset, true)
-      else
-        Combiner.setColumns(itset, columns)
-      if (!t_string)
-        itset.addOption(T_STRING, t_string.toString())
+      if (columns.isEmpty()) Combiner.setCombineAllColumns(itset, true)
+      else Combiner.setColumns(itset, columns)
+      if (encode) itset.addOption(ENCODE, encode.toString())
       return itset
     }
   }
@@ -396,32 +397,31 @@ class CombineSumCnt : Combiner() {
  */
 class DividePairApply : ApplyOp {
   /** Whether to use string encoding or to use numeric encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
 
   companion object {
-    val T_STRING = "T_STRING"
+    const val ENCODE = "ENCODE"
     private val dlex = DoubleLexicoder()
     private val lex = PairLexicoder(DoubleLexicoder(), ULongLexicoder())
 
-    fun iteratorSetting(priority: Int, t_string: Boolean): IteratorSetting {
+    fun iteratorSetting(priority: Int, encode: Boolean): IteratorSetting {
       val itset = IteratorSetting(priority, ApplyIterator::class.java)
       itset.addOption(ApplyIterator.APPLYOP, DividePairApply::class.java.name)
-      if (!t_string)
-        itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + T_STRING, t_string.toString())
+      if (encode)
+        itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + ENCODE, encode.toString())
       return itset
     }
   }
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(T_STRING))
-      t_string = options[T_STRING]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
   }
 
   override fun seekApplyOp(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) {
   }
 
   override fun apply(k: Key, v: Value): MutableIterator<MutableMap.MutableEntry<Key, Value>> {
-    if (t_string) {
+    if (!encode) {
       val stats = v.toString().split(',')
       require(stats.size == 2) {"bad value: $v"}
       val sum = stats[0].toDouble()
@@ -479,18 +479,17 @@ class RowCountReduce : ReducerSerializable<Long>() {
  */
 class MinusRowEwiseRight : MultiplyOp {
   /** Whether to use string encoding or to use numeric encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
   /** Whether to discard or retain values that are zero after subtraction. */
-  var keep_zero: Boolean = true
+  private var keep_zero: Boolean = true
 
   companion object {
-    val T_STRING = "T_STRING"
-    val KEEP_ZERO = "KEEP_ZERO"
-    private val dlex = DoubleLexicoder()
+    const val ENCODE = "ENCODE"
+    const val KEEP_ZERO = "KEEP_ZERO"
 
-    fun optionMap(t_string: Boolean, keep_zero: Boolean = true): Map<String, String> {
+    fun optionMap(encode: Boolean = false, keep_zero: Boolean = true): Map<String, String> {
       val map = HashMap<String, String>()
-      if (!t_string) map.put(T_STRING, t_string.toString())
+      if (encode) map.put(ENCODE, encode.toString())
       if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
       return map
     }
@@ -498,8 +497,8 @@ class MinusRowEwiseRight : MultiplyOp {
 
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(T_STRING)) t_string = options[T_STRING]!!.toBoolean()
-    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
+    keep_zero = options[KEEP_ZERO]?.toBoolean() ?: keep_zero
   }
 
   override fun multiply(Mrow: ByteSequence,
@@ -507,11 +506,11 @@ class MinusRowEwiseRight : MultiplyOp {
                         BcolF: ByteSequence, BcolQ: ByteSequence, BcolVis: ByteSequence, Btime: Long,
                         ATval: Value, Bval: Value): Iterator<Map.Entry<Key, Value>> {
     if (!keep_zero && ATval == Bval) return Collections.emptyIterator()
-    val a = if (t_string) ATval.toString().toDouble() else dlex.decode(ATval.get())
-    val b = if (t_string) Bval.toString().toDouble() else dlex.decode(Bval.get())
+    val a = ATval.get().toDouble(encode)
+    val b = Bval.get().toDouble(encode)
     val r = a - b
     if (!keep_zero && r == 0.0) return Collections.emptyIterator()
-    val nv = Value(if (t_string) r.toString().toByteArray() else dlex.encode(r))
+    val nv = Value(r.toByteArray(encode))
     val k = Key(Mrow.toArray(), ATcolF.toArray(), BcolQ.toArray())
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
   }
@@ -527,18 +526,17 @@ class MinusRowEwiseRight : MultiplyOp {
  */
 class SubtractEWise : EWiseOp {
   /** Whether to use string encoding or to use numeric encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
   /** Whether to discard or retain values that are zero after subtraction. */
-  var keep_zero: Boolean = true
+  private var keep_zero: Boolean = true
 
   companion object {
-    val T_STRING = "T_STRING"
-    val KEEP_ZERO = "KEEP_ZERO"
-    private val dlex = DoubleLexicoder()
+    const val ENCODE = "ENCODE"
+    const val KEEP_ZERO = "KEEP_ZERO"
 
-    fun optionMap(t_string: Boolean, keep_zero: Boolean = true): Map<String, String> {
+    fun optionMap(encode: Boolean = false, keep_zero: Boolean = true): Map<String, String> {
       val map = HashMap<String, String>()
-      if (!t_string) map.put(T_STRING, t_string.toString())
+      if (encode) map.put(ENCODE, encode.toString())
       if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
       return map
     }
@@ -546,19 +544,19 @@ class SubtractEWise : EWiseOp {
 
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(T_STRING)) t_string = options[T_STRING]!!.toBoolean()
-    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
+    keep_zero = options[KEEP_ZERO]?.toBoolean() ?: keep_zero
   }
 
   override fun multiply(Mrow: ByteSequence, McolF: ByteSequence, McolQ: ByteSequence, McolVis: ByteSequence,
                         Atime: Long, Btime: Long,
                         Aval: Value, Bval: Value): Iterator<Map.Entry<Key, Value>> {
     if (!keep_zero && Aval == Bval) return Collections.emptyIterator()
-    val a = if (t_string) Aval.toString().toDouble() else dlex.decode(Aval.get())
-    val b = if (t_string) Bval.toString().toDouble() else dlex.decode(Bval.get())
+    val a = Aval.get().toDouble(encode)
+    val b = Bval.get().toDouble(encode)
     val r = a - b
     if (!keep_zero && r == 0.0) return Collections.emptyIterator()
-    val nv = Value(if (t_string) r.toString().toByteArray() else dlex.encode(r))
+    val nv = Value(r.toByteArray(encode))
     val k = Key(Mrow.toArray(), McolF.toArray(), McolQ.toArray())
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
   }
@@ -568,18 +566,17 @@ class SubtractEWise : EWiseOp {
 /** Only exists because MathTwoScalar doesn't support direct Double encoding; it encodes by String. */
 class Multiply : MultiplyOp {
   /** Whether to use string encoding or to use numeric encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
   /** Whether to discard or retain values that are zero after multiplication. */
-  var keep_zero: Boolean = true
+  private var keep_zero: Boolean = true
 
   companion object {
-    val T_STRING = "T_STRING"
-    val KEEP_ZERO = "KEEP_ZERO"
-    private val dlex = DoubleLexicoder()
+    const val ENCODE = "ENCODE"
+    const val KEEP_ZERO = "KEEP_ZERO"
 
-    fun optionMap(t_string: Boolean, keep_zero: Boolean = true): Map<String, String> {
+    fun optionMap(encode: Boolean = false, keep_zero: Boolean = true): Map<String, String> {
       val map = HashMap<String, String>()
-      if (!t_string) map.put(T_STRING, t_string.toString())
+      if (encode) map.put(ENCODE, encode.toString())
       if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
       return map
     }
@@ -587,19 +584,19 @@ class Multiply : MultiplyOp {
 
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(T_STRING)) t_string = options[T_STRING]!!.toBoolean()
-    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
+    keep_zero = options[KEEP_ZERO]?.toBoolean() ?: keep_zero
   }
 
   override fun multiply(Mrow: ByteSequence,
                         ATcolF: ByteSequence, ATcolQ: ByteSequence, ATcolVis: ByteSequence, ATtime: Long,
                         BcolF: ByteSequence, BcolQ: ByteSequence, BcolVis: ByteSequence, Btime: Long,
                         ATval: Value, Bval: Value): Iterator<Map.Entry<Key, Value>> {
-    val a = if (t_string) ATval.toString().toDouble() else dlex.decode(ATval.get())
-    val b = if (t_string) Bval.toString().toDouble() else dlex.decode(Bval.get())
+    val a = ATval.get().toDouble(encode)
+    val b = Bval.get().toDouble(encode)
     val r = a * b
     if (!keep_zero && r == 0.0) return Collections.emptyIterator()
-    val nv = Value(if (t_string) r.toString().toByteArray() else dlex.encode(r))
+    val nv = Value(r.toByteArray(encode))
     val k = Key(ATcolQ.toArray(), ATcolF.toArray(), BcolQ.toArray())
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
   }
@@ -608,21 +605,20 @@ class Multiply : MultiplyOp {
 
 class DivideApply : ApplyOp {
   /** Whether to use string encoding or to use numeric encoding. */
-  var t_string: Boolean = true
+  private var encode: Boolean = false
   /** Whether to discard or retain values that are zero after multiplication. */
-  var keep_zero: Boolean = true
-  var divisor: Double = 1.0
+  private var keep_zero: Boolean = true
+  private var divisor: Double = 1.0
 
   companion object {
-    val T_STRING = "T_STRING"
-    val DIVISOR = "DIVISOR"
-    val KEEP_ZERO = "KEEP_ZERO"
-    private val dlex = DoubleLexicoder()
+    const val ENCODE = "ENCODE"
+    const val DIVISOR = "DIVISOR"
+    const val KEEP_ZERO = "KEEP_ZERO"
 
     fun iteratorSetting(priority: Int, t_string: Boolean, divisor: Double, keep_zero: Boolean = true): IteratorSetting {
       val itset = IteratorSetting(priority, ApplyIterator::class.java)
       itset.addOption(ApplyIterator.APPLYOP, DivideApply::class.java.name)
-      if (!t_string) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + T_STRING, t_string.toString())
+      if (!t_string) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + ENCODE, t_string.toString())
       if (!keep_zero) itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + KEEP_ZERO, keep_zero.toString())
       itset.addOption(ApplyIterator.APPLYOP + GraphuloUtil.OPT_SUFFIX + DIVISOR, divisor.toString())
       return itset
@@ -630,8 +626,8 @@ class DivideApply : ApplyOp {
   }
 
   override fun init(options: MutableMap<String, String>, env: IteratorEnvironment?) {
-    if (options.containsKey(Multiply.T_STRING)) t_string = options[Multiply.T_STRING]!!.toBoolean()
-    if (options.containsKey(KEEP_ZERO)) keep_zero = options[KEEP_ZERO]!!.toBoolean()
+    encode = options[ENCODE]?.toBoolean() ?: encode
+    keep_zero = options[KEEP_ZERO]?.toBoolean() ?: keep_zero
     require(options.containsKey(DIVISOR)) {"No DIVISOR given"}
     divisor = options[DIVISOR]!!.toDouble()
   }
@@ -640,10 +636,10 @@ class DivideApply : ApplyOp {
   }
 
   override fun apply(k: Key, v: Value): MutableIterator<MutableMap.MutableEntry<Key, Value>> {
-    val ov = if (t_string) v.toString().toDouble() else dlex.decode(v.get())
+    val ov = v.get().toDouble(encode)
     if (!keep_zero && ov == 0.0) return Collections.emptyIterator()
     val nv = ov / divisor
-    val newval = Value(if (t_string) nv.toString().toByteArray() else dlex.encode(nv))
+    val newval = Value(nv.toByteArray(encode))
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(k, newval))
   }
 }
@@ -659,10 +655,6 @@ class DivideApply : ApplyOp {
  */
 class DoubleValueDisplay : DefaultFormatter() {
   private var si: Iterator<Map.Entry<Key, Value>>? = null
-
-  companion object {
-    private val dlex = DoubleLexicoder()
-  }
 
   override fun initialize(scanner: Iterable<Map.Entry<Key, Value>>, config: FormatterConfig) {
 //    checkState(false)
