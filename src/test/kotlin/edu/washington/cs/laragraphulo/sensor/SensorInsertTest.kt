@@ -46,6 +46,7 @@ class SensorInsertTest : AccumuloTestBase() {
     s.add(SensorCalc.SensorOpt.Encode)
     s.add(SensorCalc.SensorOpt.FilterPush)
     s.add(SensorCalc.SensorOpt.MonotoneSortElim)
+    s.add(SensorCalc.SensorOpt.ZeroDiscard)
     s
   }()
 

@@ -84,7 +84,7 @@ class SensorCalc(
     PropagatePartition('P'),     //
     ReuseSource('R'),            //
     SymmetricCovariance('S'),    //
-    ZeroDiscard('Z');            //
+    ZeroDiscard('Z');            // ok
     //    override fun compareTo(other: SensorOpt): Int = this.rep.compareTo(other.rep)
     companion object {
       val fromRep: Map<Char,SensorOpt> = SensorOpt.values().map { it.rep to it }.toMap()
@@ -233,9 +233,10 @@ class SensorCalc(
         .append(AverageValuesByRow)
         .iteratorSettingList
 //    , IteratorSetting(1, DebugInfoIterator::class.java))
+    val keepZeros = ZeroDiscard !in opts
 
     G.TwoTableROWCartesian(TwoTableIterator.CLONESOURCE_TABLENAME, sensorX, null, sensorU, // transpose to [t',c]
-        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode in opts, keep_zero = false),
+        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode in opts, keep_zero = keepZeros),
         null, null, null, null, false, false, false, false, false, false,
         leftIters, null, null, null, null, -1, null, null)
 
@@ -258,9 +259,10 @@ class SensorCalc(
     val plusIter = IteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, DoubleSummingCombiner::class.java)
     DoubleSummingCombiner.setEncodingType(plusIter, if (Encode !in opts) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
     DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
+    val keepZeros = ZeroDiscard !in opts
 
     G.TableMult(TwoTableIterator.CLONESOURCE_TABLENAME, sensorU, sensorC, null,
-        -1, Multiply::class.java, Multiply.optionMap(Encode in opts, keep_zero = false), // drop zero
+        -1, Multiply::class.java, Multiply.optionMap(Encode in opts, keep_zero = keepZeros), // drop zero
         plusIter, // discards zeros
         null, null, null, false, false,
         null, null, null,
@@ -268,7 +270,7 @@ class SensorCalc(
 
     GraphuloUtil.applyIteratorSoft(
         GraphuloUtil.addOnScopeOption(
-            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, Encode in opts, (tCount-1).toDouble(), keep_zero = false),
+            DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, Encode in opts, (tCount-1).toDouble(), keep_zero = keepZeros),
             EnumSet.of(IteratorUtil.IteratorScope.scan)),
         conn.tableOperations(), sensorC)
   }
