@@ -14,8 +14,8 @@ import java.util.*
 import kotlin.system.measureTimeMillis
 
 // PARAMETERS:
-const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-small.txt"
-const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
+const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
+const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-tiny.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
 const val DODB = true
@@ -23,7 +23,7 @@ const val minTime = 0L
 const val maxTime = Long.MAX_VALUE
 const val cPartitions = 2
 const val tPartitions = 2
-const val SHOWC = false
+const val SHOWC = true
 
 private inline fun time(s: String, f: () -> Unit) {
   println("TIME $s ${measureTimeMillis(f)/1000.0}")
@@ -45,6 +45,7 @@ class SensorInsertTest : AccumuloTestBase() {
     s.add(SensorCalc.SensorOpt.ZeroDiscard)
     s.add(SensorCalc.SensorOpt.AggregatePush)
     s.add(SensorCalc.SensorOpt.PropagatePartition)
+    s.add(SensorCalc.SensorOpt.SymmetricCovariance)
     s
   }()
 

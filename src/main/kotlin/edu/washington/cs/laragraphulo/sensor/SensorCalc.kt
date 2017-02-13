@@ -85,7 +85,7 @@ class SensorCalc(
     MonotoneSortElim('M'),       // ok, in serial mode
     PropagatePartition('P'),     // ok; no splits past A, B if disabled
     ReuseSource('R'),            // ok
-    SymmetricCovariance('S'),    //
+    SymmetricCovariance('S'),    // ok
     ZeroDiscard('Z');            // ok
     //    override fun compareTo(other: SensorOpt): Int = this.rep.compareTo(other.rep)
     companion object {
@@ -283,7 +283,8 @@ class SensorCalc(
     val firstTable = if (ReuseSource in opts) CLONESOURCE_TABLENAME else sensorU
 
     G.TableMult(firstTable, sensorU, sensorC, null,
-        -1, Multiply::class.java, Multiply.optionMap(Encode in opts, keep_zero = keepZeros, keepT = keepT), // drop zero
+        -1, Multiply::class.java, Multiply.optionMap(Encode in opts,
+            keep_zero = keepZeros, keepT = keepT, upperTriangle = SymmetricCovariance in opts),
         allPlusIter,
         null, null, null, false, false,
         null, null, null,
@@ -639,11 +640,14 @@ class Multiply : MultiplyOp {
   private var keep_zero: Boolean = true
   /** Whether to append the matching row to the end of the column qualifier. */
   private var keepT: Boolean = false
+  /** Only compute upper triangle c <= c' */
+  private var upperTriangle: Boolean = true
 
   companion object {
     const val ENCODE = "ENCODE"
     const val KEEP_ZERO = "KEEP_ZERO"
     const val KEEPT = "KEEPT"
+    const val UPPERTRIANGLE = "UPPERTRIANGLE"
 //    private val ctlex = PairLexicoder<ByteArray,ByteArray>(BytesLexicoder(),BytesLexicoder())
     private fun encodePairBytes(a: ByteArray, b: ByteArray): ByteArray {
       return concat(org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.escape(a),
@@ -658,11 +662,13 @@ class Multiply : MultiplyOp {
           org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.unescape(fields[1]))
     }
 
-    fun optionMap(encode: Boolean = false, keep_zero: Boolean = true, keepT: Boolean = false): Map<String, String> {
+    fun optionMap(encode: Boolean = false, keep_zero: Boolean = true,
+                  keepT: Boolean = false, upperTriangle: Boolean = true): Map<String, String> {
       val map = HashMap<String, String>()
       if (encode) map.put(ENCODE, encode.toString())
       if (!keep_zero) map.put(KEEP_ZERO, keep_zero.toString())
       if (keepT) map.put(KEEPT, keepT.toString())
+      if (!upperTriangle) map.put(UPPERTRIANGLE, upperTriangle.toString())
       return map
     }
   }
@@ -672,6 +678,7 @@ class Multiply : MultiplyOp {
     encode = options[ENCODE]?.toBoolean() ?: encode
     keep_zero = options[KEEP_ZERO]?.toBoolean() ?: keep_zero
     keepT = options[KEEPT]?.toBoolean() ?: keepT
+    upperTriangle = options[UPPERTRIANGLE]?.toBoolean() ?: upperTriangle
   }
 
   override fun multiply(Mrow: ByteSequence,
@@ -681,8 +688,10 @@ class Multiply : MultiplyOp {
     val a = ATval.get().toDouble(encode)
     val b = Bval.get().toDouble(encode)
     val r = a * b
-    if (!keep_zero && r == 0.0) return Collections.emptyIterator()
+    if (!keep_zero && r == 0.0 || upperTriangle && ATcolQ > BcolQ)
+      return Collections.emptyIterator()
     val nv = Value(r.toByteArray(encode))
+
     val colq = if (keepT) encodePairBytes(BcolQ.toArray(), Mrow.toArray()) else BcolQ.toArray()
     val k = Key(ATcolQ.toArray(), ATcolF.toArray(), colq)
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry<Key, Value>(k, nv))
