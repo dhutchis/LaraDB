@@ -11,6 +11,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 private val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
+private val dateParserNoMilli = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").apply { timeZone = TimeZone.getTimeZone("UTC") }
 
 
 /**
@@ -50,7 +51,8 @@ interface SensorFileAction {
             if (line.isBlank()) continue
             val parts = line.split(';')
             if (parts.size < 6) continue
-            return@useLines dateParser.parse(parts[0]).time
+            return@useLines (if (parts[0].contains('.')) dateParser
+                else dateParserNoMilli).parse(parts[0]).time
           }
           throw RuntimeException("Cannot obtain time from first line in file $file")
         }
@@ -124,7 +126,9 @@ interface SensorFileAction {
             val parts = line.split(';')
             if (parts.size < 6) return@forEach
             if (parts[2] == "Chemsense ID" && parts[3] == "mac_address") return@forEach // these mac addresses have hex string values
-            val t = dateParser.parse(parts[0]).time
+            val t =
+                (if (parts[0].contains('.')) dateParser
+                else dateParserNoMilli).parse(parts[0]).time
             val c = parts[2] + ';' + parts[3]
             val v = parts[4].toDoubleOrNull() ?: return@forEach // if cannot parse, skip
 //        println("Inserting $t, $c, $v")

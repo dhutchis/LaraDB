@@ -14,16 +14,27 @@ import java.util.*
 import kotlin.system.measureTimeMillis
 
 // PARAMETERS:
-const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
-const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-tiny.txt"
+const val DOINGEST = true // ingest input tables
+const val DOINGEST_RECREATE = true // recreate input tables
+
+// uw:     http://beehive1.mcs.anl.gov/nodes/0000001e0610ba37/
+// denver: http://beehive1.mcs.anl.gov/nodes/0000001e0610ba72/
+
+const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-small.txt"
+const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
+
+//const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-11.txt"
+//const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-11.txt"
+//const val tablenameA = "bee_uw_20170211"
+//const val tablenameB = "bee_denver_20170211"
+
 const val DODB = true
 const val minTime = 0L
 const val maxTime = Long.MAX_VALUE
 const val cPartitions = 2
 const val tPartitions = 2
-const val SHOWC = true
 
 private inline fun time(s: String, f: () -> Unit) {
   println("TIME $s ${measureTimeMillis(f)/1000.0}")
@@ -46,6 +57,8 @@ class SensorInsertTest : AccumuloTestBase() {
     s.add(SensorCalc.SensorOpt.AggregatePush)
     s.add(SensorCalc.SensorOpt.PropagatePartition)
     s.add(SensorCalc.SensorOpt.SymmetricCovariance)
+    s.add(SensorCalc.SensorOpt.Defer)
+    s.add(SensorCalc.SensorOpt.ReuseSource)
     s
   }()
 
@@ -53,7 +66,7 @@ class SensorInsertTest : AccumuloTestBase() {
       tablenameA, tablenameB,
       opts, cPartitions
   )
-
+  private val SHOW: List<String> = listOf() //scc.sensorC, scc.sensorM if Defer
 
 
   @Test
@@ -64,9 +77,10 @@ class SensorInsertTest : AccumuloTestBase() {
     println("Running: ${opts.printSet()}")
     val times = scc.timeAll(minTime, maxTime)
 
-    if (SHOWC)
-      DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
-          {it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString()}
+    SHOW.forEach {
+      DebugUtil.printTable(it, conn, it, 14)
+          { it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString() }
+    }
 
     println(times)
 
@@ -90,12 +104,13 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
   private fun insert(filepath: String, tablename: String) {
+    Assume.assumeTrue("not ingesting", DOINGEST)
     val url: URL = Thread.currentThread().contextClassLoader.getResource(filepath)
     Assert.assertNotNull(url)
     val file = File(url.path)
     val action =
         if (DODB) SensorFileAction.ingestAction(conn, tablename, SensorCalc.SensorOpt.Encode in opts,
-            recreateTable = false, partitions = tPartitions, splitFirstTime = false)
+            recreateTable = DOINGEST_RECREATE, partitions = tPartitions, splitFirstTime = false)
         else SensorFileAction.printAction(System.out)
     val cnt = action(file)
 //    logger.info
