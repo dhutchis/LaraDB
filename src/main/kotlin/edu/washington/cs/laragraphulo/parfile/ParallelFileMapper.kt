@@ -7,6 +7,7 @@ import java.util.*
 /**
  * An action to take on each file in a directory.
  */
+@FunctionalInterface
 interface FileAction {
   fun run(f: File) {
     println(f.name)

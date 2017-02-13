@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.sensor
 
+import edu.washington.cs.laragraphulo.parfile.FileAction
 import org.apache.accumulo.core.client.BatchWriter
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.Connector
@@ -10,14 +11,19 @@ import java.io.PrintStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-private val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
-private val dateParserNoMilli = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").apply { timeZone = TimeZone.getTimeZone("UTC") }
-
+val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
+val dateParserNoMilli = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").apply { timeZone = TimeZone.getTimeZone("UTC") }
+val dateParserNoTime = SimpleDateFormat("yyyy-MM-dd").apply { timeZone = TimeZone.getTimeZone("UTC") }
 
 /**
  * Ingest csv sensor data from parsed beehive files.
  */
-interface SensorFileAction {
+interface SensorFileAction : FileAction {
+
+  override fun run(f: File) {
+    invoke(f)
+  }
+
   /**
    * Run the action on the sensor file
    */
@@ -41,7 +47,8 @@ interface SensorFileAction {
     fun ingestAction(conn: Connector, table: String, encode: Boolean,
                      recreateTable: Boolean = false,
                      partitions: Int = 1, splitFirstTime: Boolean = false,
-                     reverse: Boolean = true // files store times in reverse order
+                     reverse: Boolean = true, // files store times in reverse order
+                     createTable: Boolean = true
     ): SensorFileAction {
       require(partitions >= 1) {"bad partitions: $partitions"}
 
@@ -59,13 +66,15 @@ interface SensorFileAction {
       }
 
       val beforeAction = { file: File ->
+        println("before: $file")
+        val t = conn.tableOperations()
         if (recreateTable) {
-          if (conn.tableOperations().exists(table))
-            conn.tableOperations().delete(table)
-          conn.tableOperations().create(table)
-        } else {
-          if (!conn.tableOperations().exists(table))
-            conn.tableOperations().create(table)
+          if (t.exists(table))
+            t.delete(table)
+          t.create(table)
+        } else if (createTable) {
+          if (!t.exists(table))
+            t.create(table)
         }
 
         if (splitFirstTime || partitions > 1) {
@@ -77,18 +86,19 @@ interface SensorFileAction {
               .mapTo(ss) { Text((tFirst + (if(reverse) -1 else 1)*it*1000L*60*60*24/partitions)
                   .toByteArray(encode)) }
           println("Splits on $file: $ss")
-          conn.tableOperations().addSplits(table, ss)
+          t.addSplits(table, ss)
           // p2 -> add day/2
           // p3 -> add day/3, 2*day/3
         }
 
         val bwc = BatchWriterConfig()
         val bw = conn.createBatchWriter(table, bwc)
-        IngestState(bw, Mutation((0L).toByteArray(encode)))
+        IngestState(bw, Mutation())
       }
 
       val EMPTY = byteArrayOf()
       val tcvAction = { s: IngestState, t: Long, c: String, v: Double ->
+//        println("see: $t, $c, $v;  $s")
         if (t != s.ms) {
           if (s.m.size() > 0) s.bw.addMutation(s.m)
           s.m = Mutation(t.toByteArray(encode))
@@ -99,7 +109,8 @@ interface SensorFileAction {
       }
 
       val afterAction = { s: IngestState ->
-        s.bw.addMutation(s.m)
+//        println("after: $s")
+        if (s.m.size() > 0) s.bw.addMutation(s.m)
         s.bw.close()
       }
       return SensorFileActionImpl(beforeAction, tcvAction, afterAction)

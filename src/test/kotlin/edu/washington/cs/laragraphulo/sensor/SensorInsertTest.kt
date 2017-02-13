@@ -3,10 +3,9 @@ package edu.washington.cs.laragraphulo.sensor
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.util.DebugUtil
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
-import org.junit.Assert
-import org.junit.Assume
-import org.junit.FixMethodOrder
-import org.junit.Test
+import org.apache.hadoop.io.Text
+import org.junit.*
+import org.junit.jupiter.api.Disabled
 import org.junit.runners.MethodSorters
 import java.io.File
 import java.net.URL
@@ -16,25 +15,25 @@ import kotlin.system.measureTimeMillis
 // PARAMETERS:
 const val DOINGEST = true // ingest input tables
 const val DOINGEST_RECREATE = true // recreate input tables
+const val DODB = true
 
-// uw:     http://beehive1.mcs.anl.gov/nodes/0000001e0610ba37/
-// denver: http://beehive1.mcs.anl.gov/nodes/0000001e0610ba72/
-
-const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-small.txt"
-const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
+// change to set of files
+const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
+const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-tiny.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
+const val minTime = 0L
+const val maxTime = Long.MAX_VALUE
+const val cPartitions = 2
+const val tPartitions = 2  // change to split after every file except the last
 
 //const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-11.txt"
 //const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-11.txt"
 //const val tablenameA = "bee_uw_20170211"
 //const val tablenameB = "bee_denver_20170211"
+//val minTime = dateParserNoTime.parse("2017-02-06").time // start at 6th - 1486339200000
+//val maxTime = dateParserNoTime.parse("2017-02-12").time // end at 11th  -
 
-const val DODB = true
-const val minTime = 0L
-const val maxTime = Long.MAX_VALUE
-const val cPartitions = 2
-const val tPartitions = 2
 
 private inline fun time(s: String, f: () -> Unit) {
   println("TIME $s ${measureTimeMillis(f)/1000.0}")
@@ -44,13 +43,13 @@ private inline fun time(s: String, f: () -> Unit) {
  * Insert sensor data from a file in test/resources/
  * into Accumulo.
  */
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+//@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class SensorInsertTest : AccumuloTestBase() {
   private val conn = tester.accumuloConfig.connector
 
   private val opts: Set<SensorCalc.SensorOpt> = {
     val s = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
-    s.add(SensorCalc.SensorOpt.Encode)
+//    s.add(SensorCalc.SensorOpt.Encode)
     s.add(SensorCalc.SensorOpt.FilterPush)
     s.add(SensorCalc.SensorOpt.MonotoneSortElim)
     s.add(SensorCalc.SensorOpt.ZeroDiscard)
@@ -70,10 +69,57 @@ class SensorInsertTest : AccumuloTestBase() {
 
 
   @Test
+  fun testInsertToOne() {
+    val tn = "testInsertBoth"
+    val fs = setOf(filepathA, filepathB)
+        .map { Thread.currentThread().contextClassLoader.getResource(it).path.let { File(it) } }
+        .toSet()
+    insertToOne(fs, tn)
+  }
+
+  @Test
+  @Disabled
+  @Ignore
+  fun realInsertToOne() {
+    val tn = "bee_uw_denver"
+    val dir = Thread.currentThread().contextClassLoader.getResource("data/sensor/input/").path.run(::File)
+    println("Input Dir: $dir")
+    val fs = dir.listFiles()
+    println("Files    : ${fs.joinToString {it.name}}")
+    insertToOne(fs.toSet(), tn)
+  }
+
+
+  fun insertToOne(fs: Set<File>, tn: String) {
+    time("insertToOne") {
+      SensorFileListInsert(fs,
+          conn, tn, SensorCalc.SensorOpt.Encode in opts).run()
+    }
+//    DebugUtil.printTable(tn, conn, tn, 14)
+//        { it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString() }
+  }
+
+
+  @Test
   fun testAll() {
+//    val t = conn.tableOperations()
+//    val tn = "test"
+//    t.create(tn)
+//    var tm: SortedSet<Text> = TreeSet()
+//    tm.add(Text("b"))
+//    t.addSplits(tn, tm)
+//    tm = TreeSet()
+//    tm.add(Text("a"))
+//    t.addSplits(tn, tm)
+//    println(t.listSplits(tn))
+//    return
+
+    // insert file set A to table A
     time("aInsert") { aInsert() }
+    // insert file set B to table B
     time("bInsert") { bInsert() }
     if (!DODB) return
+
     println("Running: ${opts.printSet()}")
     val times = scc.timeAll(minTime, maxTime)
 
@@ -113,8 +159,7 @@ class SensorInsertTest : AccumuloTestBase() {
             recreateTable = DOINGEST_RECREATE, partitions = tPartitions, splitFirstTime = false)
         else SensorFileAction.printAction(System.out)
     val cnt = action(file)
-//    logger.info
-    println("Wrote $cnt entries to $tablename")
+    println("Wrote $cnt entries to $tablename from $filepath")
 //    DebugUtil.printTable(tablename, conn, tablename, 14)
   }
 
