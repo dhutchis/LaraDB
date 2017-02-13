@@ -31,9 +31,9 @@ object TEST_CONFIG {
     if (s == null && File(DEFAULT_TEST_CONFIG_FILE).exists()) {
       loadConfigFromFileOrSystem(DEFAULT_TEST_CONFIG_FILE)
       if (_accumuloTester == null)
-        _accumuloTester = MiniAccumuloTester(1, false, false)
+        _accumuloTester = MiniAccumuloTester(2, false, false)
     } else if (s == null) {
-      _accumuloTester = MiniAccumuloTester(1, false, false)
+      _accumuloTester = MiniAccumuloTester(2, false, false)
     } else if (s.startsWith("txe1-")) {
       val instance = s.substring(5)
       val file = File("/home/gridsan/groups/databases/$instance/accumulo_user_password.txt")

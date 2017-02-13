@@ -43,7 +43,6 @@ interface SensorFileAction {
                      reverse: Boolean = true // files store times in reverse order
     ): SensorFileAction {
       require(partitions >= 1) {"bad partitions: $partitions"}
-      val EMPTY = byteArrayOf()
 
       val tFirstFun: (File) -> Long = { file: File ->
         file.useLines { lines ->
@@ -73,8 +72,9 @@ interface SensorFileAction {
           if (splitFirstTime)
             ss.add(Text(tFirst.toByteArray(encode)))
           (1..partitions-1)
-              .map { tFirst + (if(reverse) -1 else 1)*it*1000L*60*60*24/partitions }
-              .mapTo(ss) { Text(it.toByteArray(encode)) }
+              .mapTo(ss) { Text((tFirst + (if(reverse) -1 else 1)*it*1000L*60*60*24/partitions)
+                  .toByteArray(encode)) }
+          println("Splits on $file: $ss")
           conn.tableOperations().addSplits(table, ss)
           // p2 -> add day/2
           // p3 -> add day/3, 2*day/3
@@ -85,7 +85,7 @@ interface SensorFileAction {
         IngestState(bw, Mutation((0L).toByteArray(encode)))
       }
 
-
+      val EMPTY = byteArrayOf()
       val tcvAction = { s: IngestState, t: Long, c: String, v: Double ->
         if (t != s.ms) {
           if (s.m.size() > 0) s.bw.addMutation(s.m)

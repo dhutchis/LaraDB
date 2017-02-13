@@ -62,7 +62,8 @@ class SensorCalc(
     val pw: PasswordToken,
     val sensorA: String,
     val sensorB: String,
-    val opts: Set<SensorOpt>
+    val opts: Set<SensorOpt>,
+    val cPartitions: Int = 1
 ) {
   val sensorA2 = "${sensorA}_newt"
   val sensorB2 = "${sensorB}_newt"
@@ -82,7 +83,7 @@ class SensorCalc(
     Encode('E'),                 // ok
     FilterPush('F'),             // ok
     MonotoneSortElim('M'),       // ok, in serial mode
-    PropagatePartition('P'),     // partial; need split on c in U and C
+    PropagatePartition('P'),     // ok; no splits past A, B if disabled
     ReuseSource('R'),            // ok
     SymmetricCovariance('S'),    //
     ZeroDiscard('Z');            // ok
@@ -141,8 +142,13 @@ class SensorCalc(
       if (t.exists(tn))
         t.delete(tn)
       t.create(tn)
-      if (PropagatePartition in opts && from != null)
-        GraphuloUtil.copySplits(t, from, tn)
+      if (PropagatePartition in opts) {
+        // null means use c splits
+        if (from != null)
+          GraphuloUtil.copySplits(t, from, tn)
+        else
+          conn.tableOperations().addSplits(tn, cListSplitSet(cPartitions))
+      }
     }
   }
 
@@ -163,7 +169,7 @@ class SensorCalc(
       recreateWithSpitsFrom(sensorA, sensorA2)
       recreateWithSpitsFrom(sensorB, sensorB2)
     }
-    recreateWithSpitsFrom(null, sensorX) // TODO: split on c
+    recreateWithSpitsFrom(null, sensorX)
   }
   private fun _binAndDiff(minTime: Long, maxTime: Long): Long {
     val rowFilter: String?
@@ -797,6 +803,80 @@ class DropSecondInColQPair : ApplyOp {
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(newk, v))
   }
 }
+
+
+
+
+
+val cList = listOf(
+    "TSYS01;temperature",
+    "TSL260RD;intensity",
+    "TSL250RD-LS;intensity",
+    "TSL250RD-AS;intensity",
+    "TMP421;temperature",
+    "TMP112;temperature",
+    "Si1145;intensity",
+    "SPV1840LR5H-B;intensity",
+    "SO2/H2S Temp;adc_temperature",
+    "SHT25;temperature",
+    "SHT25;humidity",
+    "PR103J2;temperature",
+    "O3/NO2 Temp;adc_temperature",
+    "MMA8452Q;rms",
+    "MMA8452Q;acceleration.z",
+    "MMA8452Q;acceleration.y",
+    "MMA8452Q;acceleration.x",
+    "MLX75305;intensity",
+    "ML8511;intensity",
+    "LPS25H;temperature",
+    "LPS25H;pressure",
+    "IAQ/IRR Temp;adc_temperature",
+    "HTU21D;temperature",
+    "HTU21D;humidity",
+    "HMC5883L;magnetic_field.z",
+    "HMC5883L;magnetic_field.y",
+    "HMC5883L;magnetic_field.x",
+    "HIH6130;temperature",
+    "HIH6130;humidity",
+    "HIH4030;humidity",
+    "Coresense ID;mac_address",
+    "Chemsense;so2",
+    "Chemsense;reducing_gases",
+    "Chemsense;oxidizing_gases",
+    "Chemsense;o3",
+    "Chemsense;no2",
+    "Chemsense;h2s",
+    "Chemsense;co",
+    "Chemsense ID;mac_address",
+    "CO LMP Temp;adc_temperature",
+    "CO ADC Temp;adc_temperature",
+    "BMP180;temperature",
+    "BMP180;pressure",
+    "BMI160;orientation.z",
+    "BMI160;orientation.y",
+    "BMI160;orientation.x",
+    "BMI160;index",
+    "BMI160;acceleration.z",
+    "BMI160;acceleration.y",
+    "BMI160;acceleration.x"
+).sorted()
+
+fun cListSplitSet(partitions: Int): SortedSet<Text> {
+  require(partitions >= 1) {"bad partitions: $partitions"}
+  val sz = cList.size
+
+  val ss =(1..partitions-1)
+      .map { Text(cList[ it*sz/partitions ]) }
+      .toSortedSet()
+  // p2 -> 1*sz/2         = 1*6/2=3
+  // p3 -> 1*sz/3, 2*sz/3 = 1*6/3=2, 2*6/3=4
+
+  println("Splits on c: $ss")
+  return ss
+}
+
+
+
 
 
 

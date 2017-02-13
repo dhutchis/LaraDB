@@ -14,13 +14,16 @@ import java.util.*
 import kotlin.system.measureTimeMillis
 
 // PARAMETERS:
-const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
-const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-tiny.txt"
+const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-small.txt"
+const val filepathB = "data/sensor/bee-denver-v2dec-2017-02-06-small.txt"
 const val tablenameA = "bee_uw_20170206"
 const val tablenameB = "bee_denver_20170206"
 const val DODB = true
 const val minTime = 0L
 const val maxTime = Long.MAX_VALUE
+const val cPartitions = 2
+const val tPartitions = 2
+const val SHOWC = false
 
 private inline fun time(s: String, f: () -> Unit) {
   println("TIME $s ${measureTimeMillis(f)/1000.0}")
@@ -47,7 +50,7 @@ class SensorInsertTest : AccumuloTestBase() {
 
   private val scc = SensorCalc(conn, tester.accumuloConfig.authenticationToken as PasswordToken,
       tablenameA, tablenameB,
-      opts
+      opts, cPartitions
   )
 
 
@@ -60,8 +63,9 @@ class SensorInsertTest : AccumuloTestBase() {
     println("Running: ${opts.printSet()}")
     val times = scc.timeAll(minTime, maxTime)
 
-//    DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
-//        {it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString()}
+    if (SHOWC)
+      DebugUtil.printTable(scc.sensorC, conn, scc.sensorC, 14)
+          {it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString()}
 
     println(times)
 
@@ -89,7 +93,8 @@ class SensorInsertTest : AccumuloTestBase() {
     Assert.assertNotNull(url)
     val file = File(url.path)
     val action =
-        if (DODB) SensorFileAction.ingestAction(conn, tablename, SensorCalc.SensorOpt.Encode in opts)
+        if (DODB) SensorFileAction.ingestAction(conn, tablename, SensorCalc.SensorOpt.Encode in opts,
+            recreateTable = false, partitions = tPartitions, splitFirstTime = false)
         else SensorFileAction.printAction(System.out)
     val cnt = action(file)
 //    logger.info
