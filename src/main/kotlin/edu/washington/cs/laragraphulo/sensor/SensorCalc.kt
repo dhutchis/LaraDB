@@ -79,7 +79,7 @@ class SensorCalc(
   ) : Comparable<SensorOpt> {
     AggregatePush('A'),          // ok
     //    ClientScalar,          //
-    Defer('D'),                  //
+    Defer('D'),                  // ok
     Encode('E'),                 // ok
     FilterPush('F'),             // ok
     MonotoneSortElim('M'),       // ok, in serial mode
@@ -239,6 +239,8 @@ class SensorCalc(
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorX)) {"table $sensorX does not exist"}
     recreateWithSpitsFrom(sensorA, sensorU) // choose A arbitrarily
+    if (Defer !in opts)
+      recreateWithSpitsFrom(sensorX, sensorM)
   }
   fun _meanAndSubtract() {
     val leftIters = DynamicIteratorSetting(21, "avgLeftByRow")
@@ -249,10 +251,21 @@ class SensorCalc(
     val keepZeros = ZeroDiscard !in opts
     val firstTable = if (ReuseSource in opts) CLONESOURCE_TABLENAME else sensorX
 
-    G.TwoTableROWCartesian(firstTable, sensorX, null, sensorU, // transpose to [t',c]
-        -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode in opts, keep_zero = keepZeros),
-        null, null, null, null, false, false, false, false, false, false,
-        leftIters, null, null, null, null, -1, null, null)
+    if (Defer !in opts) {
+      G.OneTable(sensorX, sensorM, null,
+          null, -1, null, null,
+          null, null, null,
+          leftIters, null, null)
+      G.TwoTableROWCartesian(sensorM, sensorX, null, sensorU, // transpose to [t',c]
+          -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode in opts, keep_zero = keepZeros),
+          null, null, null, null, false, false, false, false, false, false,
+          null, null, null, null, null, -1, null, null)
+    } else {
+      G.TwoTableROWCartesian(firstTable, sensorX, null, sensorU, // transpose to [t',c]
+          -1, MinusRowEwiseRight::class.java, MinusRowEwiseRight.optionMap(Encode in opts, keep_zero = keepZeros),
+          null, null, null, null, false, false, false, false, false, false,
+          leftIters, null, null, null, null, -1, null, null)
+    }
 
   }
 
@@ -267,7 +280,9 @@ class SensorCalc(
   fun _pre_covariance() {
 //    require(tCount > 1) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
-    recreateWithSpitsFrom(null, sensorC) // TODO: split on c
+    recreateWithSpitsFrom(null, sensorC)
+    if (Defer !in opts)
+      recreateWithSpitsFrom(null, sensorF)
   }
   fun _covariance(tCount: Long) {
     val keepT = AggregatePush !in opts
@@ -297,12 +312,15 @@ class SensorCalc(
               EnumSet.of(IteratorUtil.IteratorScope.scan)),
           conn.tableOperations(), sensorC)
     }
-
     GraphuloUtil.applyIteratorSoft(
         GraphuloUtil.addOnScopeOption(
             DivideApply.iteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY+1, Encode in opts, (tCount-1).toDouble(), keep_zero = keepZeros),
             EnumSet.of(IteratorUtil.IteratorScope.scan)),
         conn.tableOperations(), sensorC)
+
+    if (Defer !in opts) {
+      G.OneTable(sensorC, sensorF, null, null, -1, null, null, null, null, null, null, null, null)
+    }
   }
 
 }
