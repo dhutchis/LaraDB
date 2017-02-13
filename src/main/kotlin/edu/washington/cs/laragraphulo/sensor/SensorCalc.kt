@@ -833,8 +833,9 @@ class DropSecondInColQPair : ApplyOp {
 
 
 
-
-
+// 50 classes
+// 10 splits seems appropriate
+// assuming equal distribution, which is not true because some columns have little variation
 val cList = listOf(
     "TSYS01;temperature",
     "TSL260RD;intensity",

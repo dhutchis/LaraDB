@@ -37,7 +37,7 @@ class ParallelFileMapper(
           "Problem with lockDirectory $lockDirectory"}
 
     inputFiles.forEach { f ->
-          if (inputFiles.any { it.name.equals(f.name) && it !== f })
+          if (inputFiles.any { it.name == f.name && it !== f })
             throw IllegalArgumentException("One of the input files has the same name as another: ${f.name}")
         }
 
