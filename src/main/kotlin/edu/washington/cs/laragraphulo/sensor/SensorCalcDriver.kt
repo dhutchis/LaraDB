@@ -50,12 +50,31 @@ class SensorCalcDriver(
     val noOpts: Set<SensorCalc.SensorOpt> = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
     val listStart = listOf(doPipeline(noOpts))
 
-    val (_, results) = SensorCalc.SensorOpt.values().fold(noOpts to listStart) { pair, opt ->
-      val (opts, list) = pair
-      val newOpts = opts + opt
-      val newList = list + doPipeline(newOpts)
-      newOpts to newList
-    }
+    val optList = listOf(
+        "",
+        "A",
+        "AD",
+        "ADE",
+        "ADEF",
+        "ADEFM",
+        "ADEFMP",
+        "ADEFMPR",
+        "ADEFMPRS",
+        "ADEFMPRSZ"
+    ).map { SensorCalc.SensorOpt.parseRep(it) }
+
+    val results = optList.map { doPipeline(it) }
+
+//    val (_, results) = SensorCalc.SensorOpt.values().fold(noOpts to listStart) { pair, opt ->
+//      if (opt == SensorCalc.SensorOpt.MonotoneSortElim)
+//        pair    // skip M - seems to be bad?
+//      else {
+//        val (opts, list) = pair
+//        val newOpts = opts + opt
+//        val newList = list + doPipeline(newOpts)
+//        newOpts to newList
+//      }
+//    }
 
     results.forEach { println(it) }
   }

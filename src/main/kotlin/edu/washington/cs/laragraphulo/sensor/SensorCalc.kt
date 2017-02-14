@@ -27,6 +27,7 @@ import org.apache.accumulo.core.util.format.DefaultFormatter
 import org.apache.accumulo.core.util.format.FormatterConfig
 import org.apache.hadoop.io.Text
 import java.io.IOException
+import java.text.ParseException
 import java.util.*
 
 
@@ -91,6 +92,11 @@ class SensorCalc(
     companion object {
       val fromRep: Map<Char,SensorOpt> = SensorOpt.values().map { it.rep to it }.toMap()
       val num = values().size
+      fun parseRep(s: String): Set<SensorOpt> {
+        return s.filterNot { it.isWhitespace() }
+            .map { fromRep[it] ?: throw RuntimeException("bad char $it inside $s") }
+            .toSet()
+      }
     }
   }
   private val AggregatePush = SensorOpt.AggregatePush
@@ -117,7 +123,7 @@ class SensorCalc(
       val toC: Double
   ) {
     override fun toString(): String {
-      return "${opts.printSetAll()},$toX,$toU,$toC"
+      return "${opts.printSetAll()},$toX,$toU,$toC,${toX+toU+toC}"
     }
   }
 
@@ -137,7 +143,7 @@ class SensorCalc(
 
 
 
-  private fun recreateWithSpitsFrom(from: String?, vararg tns: String) {
+  private fun recreateWithSplitsFrom(from: String?, vararg tns: String) {
     val t = conn.tableOperations()
     tns.forEach { tn ->
       if (t.exists(tn))
@@ -166,13 +172,15 @@ class SensorCalc(
   fun _pre_binAndDiff() {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
-    if (MonotoneSortElim !in opts) {
-      recreateWithSpitsFrom(sensorA, sensorA2)
-      recreateWithSpitsFrom(sensorB, sensorB2)
-    }
-    recreateWithSpitsFrom(sensorB, sensorX) // choose B arbitrarily
+
+    recreateWithSplitsFrom(sensorB, sensorX) // choose B arbitrarily
   }
   private fun _binAndDiff(minTime: Long, maxTime: Long): Long {
+    if (MonotoneSortElim !in opts) {
+      recreateWithSplitsFrom(sensorA, sensorA2)
+      recreateWithSplitsFrom(sensorB, sensorB2)
+    }
+
     val rowFilter: String?
     if (FilterPush in opts) {
       val minRow = (if (Encode !in opts) minTime else Value(ull.encode(minTime))).toString()
@@ -240,11 +248,13 @@ class SensorCalc(
   fun _pre_meanAndSubtract() {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorX)) {"table $sensorX does not exist"}
-    recreateWithSpitsFrom(sensorA, sensorU) // choose A arbitrarily
-    if (Defer !in opts)
-      recreateWithSpitsFrom(sensorX, sensorM)
+    recreateWithSplitsFrom(sensorA, sensorU) // choose A arbitrarily
+
   }
   fun _meanAndSubtract() {
+    if (Defer !in opts)
+      recreateWithSplitsFrom(sensorX, sensorM)
+
     val leftIters = DynamicIteratorSetting(21, "avgLeftByRow")
         .append(KeyRetainOnlyApply.iteratorSetting(1, PartialKey.ROW))
         .append(AverageValuesByRow)
@@ -282,11 +292,13 @@ class SensorCalc(
   fun _pre_covariance() {
 //    require(tCount > 1) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
-    recreateWithSpitsFrom(sensorX, sensorC)
-    if (Defer !in opts)
-      recreateWithSpitsFrom(sensorX, sensorF)
+    recreateWithSplitsFrom(sensorX, sensorC)
+
   }
   fun _covariance(tCount: Long) {
+    if (Defer !in opts)
+      recreateWithSplitsFrom(sensorX, sensorF)
+
     val dis = DynamicIteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, if (AggregatePush in opts) "summer" else "dropSummer")
     if (AggregatePush !in opts) dis.append(DropSecondInColQPair.iteratorSetting(1))
     val plusIter = IteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, DoubleSummingCombiner::class.java)
