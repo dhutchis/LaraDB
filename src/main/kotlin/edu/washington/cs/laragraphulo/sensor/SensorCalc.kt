@@ -44,11 +44,11 @@ fun Set<SensorCalc.SensorOpt>.printSet() = this.sorted().joinToString("") { it.r
 fun Set<SensorCalc.SensorOpt>.printSetAll() =
     SensorCalc.SensorOpt.values().joinToString("") { if (it in this) it.rep.toString() else " " }
 
-private data class TimedResult<out R>(
+data class TimedResult<out R>(
     val result: R,
     val time: Double
 )
-private inline fun <R> time(f: () -> R): TimedResult<R> {
+inline fun <R> time(f: () -> R): TimedResult<R> {
   val start = System.currentTimeMillis()
   val result = f()
   val time = (System.currentTimeMillis() - start)/1000.0
@@ -124,6 +124,7 @@ class SensorCalc(
 
   
   fun timeAll(minTime: Long, maxTime: Long): SensorCalcTimes {
+    println("SensorCalc with opts ${opts.printSetAll()}")
     _pre_binAndDiff()
     _pre_meanAndSubtract()
     _pre_covariance()
@@ -285,27 +286,26 @@ class SensorCalc(
       recreateWithSpitsFrom(null, sensorF)
   }
   fun _covariance(tCount: Long) {
-    val keepT = AggregatePush !in opts
-    val dis = DynamicIteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, if (keepT) "summer" else "dropSummer")
-    if (keepT) dis.append(DropSecondInColQPair.iteratorSetting(1))
+    val dis = DynamicIteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, if (AggregatePush in opts) "summer" else "dropSummer")
+    if (AggregatePush !in opts) dis.append(DropSecondInColQPair.iteratorSetting(1))
     val plusIter = IteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, DoubleSummingCombiner::class.java)
     DoubleSummingCombiner.setEncodingType(plusIter, if (Encode !in opts) DoubleCombiner.Type.STRING else DoubleCombiner.Type.BYTE)
     DoubleSummingCombiner.setCombineAllColumns(plusIter, true)
     dis.append(plusIter)
 
-    val allPlusIter = if (keepT) dis.toIteratorSetting() else null
+    val allPlusIter = if (AggregatePush in opts) dis.toIteratorSetting() else null
     val keepZeros = ZeroDiscard !in opts
     val firstTable = if (ReuseSource in opts) CLONESOURCE_TABLENAME else sensorU
 
     G.TableMult(firstTable, sensorU, sensorC, null,
         -1, Multiply::class.java, Multiply.optionMap(Encode in opts,
-            keep_zero = keepZeros, keepT = keepT, upperTriangle = SymmetricCovariance in opts),
+            keep_zero = keepZeros, keepT = AggregatePush !in opts, upperTriangle = SymmetricCovariance in opts),
         allPlusIter,
         null, null, null, false, false,
         null, null, null,
         null, null, -1, null, null)
 
-    if (!keepT) {
+    if (AggregatePush !in opts) {
       GraphuloUtil.applyIteratorSoft(
           GraphuloUtil.addOnScopeOption(
               dis.toIteratorSetting(),
@@ -804,7 +804,7 @@ class DropSecondInColQPair : ApplyOp {
     private fun decodePairBytes(all: ByteArray): Pair<ByteArray,ByteArray> {
       val fields = org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.split(all, 0, all.size)
       if (fields.size != 2) {
-        throw RuntimeException("Data does not have 2 fields, it has " + fields.size)
+        throw RuntimeException("Data ${fields.joinToString { String(it) }} does not have 2 fields, it has " + fields.size)
       }
       return Pair(org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.unescape(fields[0]),
           org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.unescape(fields[1]))
@@ -825,7 +825,6 @@ class DropSecondInColQPair : ApplyOp {
 
   override fun apply(k: Key, v: Value): MutableIterator<MutableMap.MutableEntry<Key, Value>> {
     val newq = decodePairBytes(k.columnQualifierData.toArray()).first
-
     val newk = Key(k.rowData.toArray(), k.columnFamilyData.toArray(), newq)
     return Iterators.singletonIterator(AbstractMap.SimpleImmutableEntry(newk, v))
   }

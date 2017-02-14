@@ -8,6 +8,7 @@ import org.junit.*
 import org.junit.jupiter.api.Disabled
 import org.junit.runners.MethodSorters
 import java.io.File
+import java.io.FilenameFilter
 import java.net.URL
 import java.util.*
 import kotlin.system.measureTimeMillis
@@ -34,9 +35,9 @@ const val tPartitions = 2  // change to split after every file except the last
 //val minTime = dateParserNoTime.parse("2017-02-06").time // start at 6th - 1486339200000
 //val maxTime = dateParserNoTime.parse("2017-02-12").time // end at 11th  -
 
-
-private inline fun time(s: String, f: () -> Unit) {
-  println("TIME $s ${measureTimeMillis(f)/1000.0}")
+private inline fun timePrint(s: String, f: () -> Any?) {
+  val (_, t) = time(f)
+  println("TIME $s: $t")
 }
 
 /**
@@ -50,14 +51,14 @@ class SensorInsertTest : AccumuloTestBase() {
   private val opts: Set<SensorCalc.SensorOpt> = {
     val s = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
 //    s.add(SensorCalc.SensorOpt.Encode)
-    s.add(SensorCalc.SensorOpt.FilterPush)
-    s.add(SensorCalc.SensorOpt.MonotoneSortElim)
-    s.add(SensorCalc.SensorOpt.ZeroDiscard)
-    s.add(SensorCalc.SensorOpt.AggregatePush)
-    s.add(SensorCalc.SensorOpt.PropagatePartition)
-    s.add(SensorCalc.SensorOpt.SymmetricCovariance)
-    s.add(SensorCalc.SensorOpt.Defer)
-    s.add(SensorCalc.SensorOpt.ReuseSource)
+//    s.add(SensorCalc.SensorOpt.FilterPush)
+//    s.add(SensorCalc.SensorOpt.MonotoneSortElim)
+//    s.add(SensorCalc.SensorOpt.ZeroDiscard)
+//    s.add(SensorCalc.SensorOpt.AggregatePush)
+//    s.add(SensorCalc.SensorOpt.PropagatePartition)
+//    s.add(SensorCalc.SensorOpt.SymmetricCovariance)
+//    s.add(SensorCalc.SensorOpt.Defer)
+//    s.add(SensorCalc.SensorOpt.ReuseSource)
     s
   }()
 
@@ -78,20 +79,27 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
   @Test
-  @Disabled
-  @Ignore
-  fun realInsertToOne() {
-    val tn = "bee_uw_denver"
+  @Disabled @Ignore
+  fun doReal() {
     val dir = Thread.currentThread().contextClassLoader.getResource("data/sensor/input/").path.run(::File)
     println("Input Dir: $dir")
-    val fs = dir.listFiles()
-    println("Files    : ${fs.joinToString {it.name}}")
-    insertToOne(fs.toSet(), tn)
+    val fs = dir.listFiles({ _, name -> name.startsWith("bee-") && name.endsWith(".txt") })
+    val (fsA, fsB) = fs.partition { it.name.contains("-uw-") }
+    println("FilesA   : ${fsA.joinToString {it.name}}")
+    println("FilesB   : ${fsB.joinToString {it.name}}")
+    val tA = "bee_uw"
+    val tB = "bee_denver"
+    val mint = dateParserNoTime.parse("2017-02-06").time // start at 6th - 1486339200000
+    val maxt = dateParserNoTime.parse("2017-02-12").time // end at 11th  -
+    val cp = 10
+    SensorCalcDriver(fsA.toSet(), fsB.toSet(), tA, tB, mint, maxt,
+        cp, conn, tester.accumuloConfig.authenticationToken as PasswordToken)
+        .doMany()
   }
 
 
   fun insertToOne(fs: Set<File>, tn: String) {
-    time("insertToOne") {
+    timePrint("insertToOne") {
       SensorFileListInsert(fs,
           conn, tn, SensorCalc.SensorOpt.Encode in opts).run()
     }
@@ -115,9 +123,9 @@ class SensorInsertTest : AccumuloTestBase() {
 //    return
 
     // insert file set A to table A
-    time("aInsert") { aInsert() }
+    timePrint("aInsert") { aInsert() }
     // insert file set B to table B
-    time("bInsert") { bInsert() }
+    timePrint("bInsert") { bInsert() }
     if (!DODB) return
 
     println("Running: ${opts.printSet()}")
