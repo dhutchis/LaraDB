@@ -91,7 +91,7 @@ class SensorInsertTest : AccumuloTestBase() {
     val tB = "bee_denver"
     val mint = dateParserNoTime.parse("2017-02-06").time // start at 6th - 1486339200000
     val maxt = dateParserNoTime.parse("2017-02-12").time // end at 11th  -
-    val cp = 10
+    val cp = 5
     SensorCalcDriver(fsA.toSet(), fsB.toSet(), tA, tB, mint, maxt,
         cp, conn, tester.accumuloConfig.authenticationToken as PasswordToken)
         .doMany()

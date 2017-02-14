@@ -170,7 +170,7 @@ class SensorCalc(
       recreateWithSpitsFrom(sensorA, sensorA2)
       recreateWithSpitsFrom(sensorB, sensorB2)
     }
-    recreateWithSpitsFrom(null, sensorX)
+    recreateWithSpitsFrom(sensorB, sensorX) // choose B arbitrarily
   }
   private fun _binAndDiff(minTime: Long, maxTime: Long): Long {
     val rowFilter: String?
@@ -214,6 +214,7 @@ class SensorCalc(
         dis.append(MinMaxFilter.iteratorSetting(1, minTime, maxTime, Encode in opts))
       dis.append(BinRowApply.iteratorSetting(1, Encode in opts))
       val iters = dis.iteratorSettingList
+
       G.OneTable(sensorA, sensorA2, null,
           null, -1, null, null, null,
           rowFilter, null, iters, null, null)
@@ -281,9 +282,9 @@ class SensorCalc(
   fun _pre_covariance() {
 //    require(tCount > 1) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
-    recreateWithSpitsFrom(null, sensorC)
+    recreateWithSpitsFrom(sensorX, sensorC)
     if (Defer !in opts)
-      recreateWithSpitsFrom(null, sensorF)
+      recreateWithSpitsFrom(sensorX, sensorF)
   }
   fun _covariance(tCount: Long) {
     val dis = DynamicIteratorSetting(Graphulo.DEFAULT_COMBINER_PRIORITY, if (AggregatePush in opts) "summer" else "dropSummer")

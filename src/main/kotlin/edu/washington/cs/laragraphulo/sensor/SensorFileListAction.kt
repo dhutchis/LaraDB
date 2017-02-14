@@ -28,9 +28,11 @@ class SensorFileListInsert(
     if (!t.exists(table)) {
       // only do this if we are the original table creator
       t.create(table)
-      // Splits - set at date boundaries except highest date
-      val dates = files.map { Text(it.date.toByteArray(encode)) }.toSortedSet()
-          .let { it.headSet(it.last()) }
+      // Splits - set at odd date boundaries, after removing first // clean 350k entries x 5 tablets per table
+      val dates = files.map { it.date }.sorted()
+          .let { it.subList(1,it.size) }
+          .filterIndexed { index, l -> index % 2 == 1 }
+          .map { Text(it.toByteArray(encode)) }.toSortedSet()
       t.addSplits(table, dates)
 //      println(files)
 //      println(files.map { it.type to it.date })
