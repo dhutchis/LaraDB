@@ -50,15 +50,15 @@ class SensorInsertTest : AccumuloTestBase() {
 
   private val opts: Set<SensorCalc.SensorOpt> = {
     val s = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
-//    s.add(SensorCalc.SensorOpt.Encode)
-//    s.add(SensorCalc.SensorOpt.FilterPush)
-//    s.add(SensorCalc.SensorOpt.MonotoneSortElim)
-//    s.add(SensorCalc.SensorOpt.ZeroDiscard)
-//    s.add(SensorCalc.SensorOpt.AggregatePush)
-//    s.add(SensorCalc.SensorOpt.PropagatePartition)
-//    s.add(SensorCalc.SensorOpt.SymmetricCovariance)
-//    s.add(SensorCalc.SensorOpt.Defer)
-//    s.add(SensorCalc.SensorOpt.ReuseSource)
+    s.add(SensorCalc.SensorOpt.Encode)
+    s.add(SensorCalc.SensorOpt.FilterPush)
+    s.add(SensorCalc.SensorOpt.MonotoneSortElim)
+    s.add(SensorCalc.SensorOpt.ZeroDiscard)
+    s.add(SensorCalc.SensorOpt.AggregatePush)
+    s.add(SensorCalc.SensorOpt.PropagatePartition)
+    s.add(SensorCalc.SensorOpt.SymmetricCovariance)
+    s.add(SensorCalc.SensorOpt.Defer)
+    s.add(SensorCalc.SensorOpt.ReuseSource)
     s
   }()
 
@@ -69,7 +69,7 @@ class SensorInsertTest : AccumuloTestBase() {
   private val SHOW: List<String> = listOf() //scc.sensorC, scc.sensorM if Defer
 
 
-  @Test
+  //@Test
   fun testInsertToOne() {
     val tn = "testInsertBoth"
     val fs = setOf(filepathA, filepathB)
@@ -79,7 +79,7 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
   @Test
-  @Disabled @Ignore
+//  @Disabled @Ignore
   fun doReal() {
     val dir = Thread.currentThread().contextClassLoader.getResource("data/sensor/input/").path.run(::File)
     println("Input Dir: $dir")
@@ -89,9 +89,9 @@ class SensorInsertTest : AccumuloTestBase() {
     println("FilesB   : ${fsB.joinToString {it.name}}")
     val tA = "bee_uw"
     val tB = "bee_denver"
-    val mint = dateParserNoTime.parse("2017-02-06").time // start at 6th - 1486339200000
-    val maxt = dateParserNoTime.parse("2017-02-12").time // end at 11th  -
-    val cp = 5
+    val mint = dateParserNoTime.parse("2017-01-10").time 
+    val maxt = dateParserNoTime.parse("2017-02-10").time 
+    val cp = 10
     SensorCalcDriver(fsA.toSet(), fsB.toSet(), tA, tB, mint, maxt,
         cp, conn, tester.accumuloConfig.authenticationToken as PasswordToken)
         .doMany()
@@ -108,7 +108,7 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
 
-  @Test
+  //11111111@Test
   fun testAll() {
 //    val t = conn.tableOperations()
 //    val tn = "test"

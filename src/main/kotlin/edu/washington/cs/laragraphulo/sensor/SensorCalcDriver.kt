@@ -41,29 +41,33 @@ class SensorCalcDriver(
         opts, cPartitions)
     val times = scc.timeAll(minTime, maxTime)
     println(times)
+    scc.deleteAll()
     return times
   }
 
   fun doMany() {
     ingest(false)
     ingest(true)
-    val noOpts: Set<SensorCalc.SensorOpt> = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
-    val listStart = listOf(doPipeline(noOpts))
+//    val noOpts: Set<SensorCalc.SensorOpt> = EnumSet.noneOf(SensorCalc.SensorOpt::class.java)
+//    val listStart = listOf(doPipeline(noOpts))
 
     val optList = listOf(
         "",
-        "A",
-        "AD",
-        "ADE",
-        "ADEF",
-        "ADEFM",
-        "ADEFMP",
-        "ADEFMPR",
-        "ADEFMPRS",
-        "ADEFMPRSZ"
-    ).map { SensorCalc.SensorOpt.parseRep(it) }
+        "M",
+        "R",
+        "P",
+        "F",
+        "E",
+        "D",
+        "S",
+        "Z",
+	"A",
+	"ADEFMPRSZ"
+    ).map { Thread.sleep(25000); SensorCalc.SensorOpt.parseRep(it) }
 
-    val results = optList.map { doPipeline(it) }
+    val results = optList.map { 
+println(it)
+doPipeline(it) }
 
 //    val (_, results) = SensorCalc.SensorOpt.values().fold(noOpts to listStart) { pair, opt ->
 //      if (opt == SensorCalc.SensorOpt.MonotoneSortElim)

@@ -142,6 +142,17 @@ class SensorCalc(
   }
 
 
+  fun deleteAll() {
+    val l: MutableList<String> = ArrayList()
+    l += listOf(sensorX, sensorU, sensorC)
+    if (MonotoneSortElim !in opts) l += listOf(sensorA2, sensorB2)
+    if (Defer !in opts) l += listOf(sensorM, sensorF)
+    l.forEach {
+      if (conn.tableOperations().exists(it))
+        conn.tableOperations().delete(it)
+    }
+  }
+
 
   private fun recreateWithSplitsFrom(from: String?, vararg tns: String) {
     val t = conn.tableOperations()

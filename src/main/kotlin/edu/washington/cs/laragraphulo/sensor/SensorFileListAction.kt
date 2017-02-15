@@ -31,7 +31,7 @@ class SensorFileListInsert(
       // Splits - set at odd date boundaries, after removing first // clean 350k entries x 5 tablets per table
       val dates = files.map { it.date }.sorted()
           .let { it.subList(1,it.size) }
-          .filterIndexed { index, l -> index % 2 == 1 }
+          .filterIndexed { index, l -> index % 3 == 1 }
           .map { Text(it.toByteArray(encode)) }.toSortedSet()
       t.addSplits(table, dates)
 //      println(files)
