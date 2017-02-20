@@ -69,7 +69,7 @@ class SensorInsertTest : AccumuloTestBase() {
   private val SHOW: List<String> = listOf() //scc.sensorC, scc.sensorM if Defer
 
 
-  //@Test
+  @Test
   fun testInsertToOne() {
     val tn = "testInsertBoth"
     val fs = setOf(filepathA, filepathB)
@@ -79,7 +79,7 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
   @Test
-//  @Disabled @Ignore
+  @Disabled @Ignore
   fun doReal() {
     val dir = Thread.currentThread().contextClassLoader.getResource("data/sensor/input/").path.run(::File)
     println("Input Dir: $dir")
@@ -108,7 +108,7 @@ class SensorInsertTest : AccumuloTestBase() {
   }
 
 
-  //11111111@Test
+  @Test
   fun testAll() {
 //    val t = conn.tableOperations()
 //    val tn = "test"
