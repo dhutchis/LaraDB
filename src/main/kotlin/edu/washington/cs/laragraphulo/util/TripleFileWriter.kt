@@ -2,7 +2,6 @@ package edu.washington.cs.laragraphulo.util
 
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.logger
-import kotlinx.support.jdk7.use
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.data.Mutation
 import org.apache.accumulo.core.data.Range

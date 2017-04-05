@@ -7,9 +7,6 @@ import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.opt.raco.PTree
 import edu.washington.cs.laragraphulo.opt.raco.RacoOperator
 import edu.washington.cs.laragraphulo.opt.raco.RelationKey
-import edu.washington.cs.laragraphulo.util.DebugUtil
-import kotlinx.support.jdk7.use
-import org.apache.accumulo.core.security.Authorizations
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,8 +15,6 @@ import org.slf4j.Logger
 import java.io.File
 import java.io.StringReader
 import java.util.concurrent.Callable
-
-//import edu.washington.cs.laragraphulo.*
 
 /**
  * Start with a Raco query, compile it, and execute the result.

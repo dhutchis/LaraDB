@@ -31,17 +31,17 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <kotlin.version>1.1.0-beta-38</kotlin.version>
+    <kotlin.version>1.1.1</kotlin.version>
     <java.version>1.8</java.version>
-    <accumulo.version>1.8.0</accumulo.version>
-    <junit.jupiter.version>5.0.0-M3</junit.jupiter.version>
-    <junit.vintage.version>4.12.0-M3</junit.vintage.version>
-    <junit.platform.version>1.0.0-M3</junit.platform.version>
+    <accumulo.version>1.8.1</accumulo.version>
+    <junit.jupiter.version>5.0.0-M4</junit.jupiter.version>
+    <junit.vintage.version>4.12.0-M4</junit.vintage.version>
+    <junit.platform.version>1.0.0-M4</junit.platform.version>
   </properties>
 
 
-  <repositories>
-    <!-- For kotlinx-support-jdk8 -->
+<!--   <repositories>
+    <! For kotlinx-support-jdk8
     <repository>
       <snapshots><enabled>false</enabled></snapshots>
       <id>jcenter</id>
@@ -62,25 +62,25 @@
       <url>https://dl.bintray.com/kotlin/kotlin-eap-1.1</url>
     </pluginRepository>
   </pluginRepositories>
-
+ -->
 
   <dependencies>
-    <dependency>
-      <groupId>org.jetbrains.kotlin</groupId>
-      <artifactId>kotlin-stdlib</artifactId>
-      <version>${kotlin.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.jetbrains.kotlinx</groupId>
-      <artifactId>kotlinx-support-jdk8</artifactId>
-      <version>0.3</version>
-    </dependency>
-    <dependency>
-      <groupId>org.jetbrains.kotlin</groupId>
-      <artifactId>kotlin-test-junit</artifactId>
-      <version>${kotlin.version}</version>
-      <scope>test</scope>
-    </dependency>
+    <!--    <dependency>
+          <groupId>org.jetbrains.kotlin</groupId>
+          <artifactId>kotlin-stdlib-jre8</artifactId>
+          <version>${kotlin.version}</version>
+        </dependency>
+         <dependency>
+          <groupId>org.jetbrains.kotlinx</groupId>
+          <artifactId>kotlinx-support-jdk8</artifactId>
+          <version>0.3</version>
+        </dependency> -->
+    <!--<dependency>-->
+      <!--<groupId>org.jetbrains.kotlin</groupId>-->
+      <!--<artifactId>kotlin-test-junit</artifactId>-->
+      <!--<version>${kotlin.version}</version>-->
+      <!--<scope>test</scope>-->
+    <!--</dependency>-->
     <!--<dependency>-->
       <!--<groupId>org.jetbrains.kotlin</groupId>-->
       <!--<artifactId>kotlin-reflect</artifactId>-->
@@ -153,6 +153,17 @@
       <artifactId>graphulo</artifactId>
       <version>1.0.0-SNAPSHOT</version>
     </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-test-junit</artifactId>
+      <version>${kotlin.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlin-stdlib-jre8</artifactId>
+      <version>${kotlin.version}</version>
+    </dependency>
 
   </dependencies>
 
@@ -168,7 +179,7 @@
         <executions>
           <execution>
             <id>compile</id>
-            <phase>process-sources</phase>
+            <phase>compile</phase>
             <goals>
               <goal>compile</goal>
             </goals>
@@ -187,6 +198,30 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.1</version>
+        <executions>
+          <execution>
+            <id>default-compile</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>default-testCompile</id>
+            <phase>none</phase>
+          </execution>
+          <execution>
+            <id>compile</id>
+            <phase>compile</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>testCompile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>testCompile</goal>
+            </goals>
+          </execution>
+        </executions>
         <configuration>
           <source>${java.version}</source>
           <target>${java.version}</target>
