@@ -116,7 +116,8 @@ Run `mvn clean` to delete output from previously run tests.
 [MiniAccumulo]: https://accumulo.apache.org/1.8/accumulo_user_manual.html#_mini_accumulo_cluster
 
 ### Develop
-If you're interested in using an IDE for development, [IntelliJ][] is a good choice.
+If you're interested in using an IDE for development, [IntelliJ](https://www.jetbrains.com/idea/) is a good choice.
+You can use the free Community Edition.
 
 One caveat is that IntelliJ's profiler listens by default on port 10001, which conflicts with Accumulo's
 [default master replication service port](https://accumulo.apache.org/1.8/accumulo_user_manual.html#_network).
@@ -223,3 +224,7 @@ For a bit more insight, see the `before()` method of [MiniAccumuloTester][].
 Code to ingest sensor data into Accumulo.
 Query to compute the means and covariances of sensor classes.
 
+### Cybersecurity data and RACO queries
+
+Used as part of this polystore Jupyter notebook: 
+<https://github.com/uwescience/raco/blob/SPJA_federation/HPDA_review.ipynb>
