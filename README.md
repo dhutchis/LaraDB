@@ -1,5 +1,5 @@
 # LaraDB
-[![Build Status](https://travis-ci.org/dhutchis/lara-graphulo.svg?branch=master)](https://travis-ci.org/dhutchis/lara-graphulo)
+[![Build Status](https://travis-ci.org/dhutchis/LaraDB.svg?branch=master)](https://travis-ci.org/dhutchis/lara-graphulo)
 
 LaraDB is an implementation of the [Lara Algebra](https://arxiv.org/abs/1703.07342) on the [Apache Accumulo](https://accumulo.apache.org/) database. 
 [Graphulo](http://graphulo.mit.edu/)-style server-side iterators implement the Lara operators.
@@ -50,6 +50,23 @@ GraphuloTest.conf.template  Example configuration file for testing
 ### Build
 Prerequisite: Install [Maven](https://maven.apache.org/download.cgi).
 
+#### Obtain Graphulo
+**LaraDB requires the Graphulo library**.
+Run the following to install Graphulo on your system. You can do this in any directory.
+
+```bash
+wget https://github.com/Accla/graphulo/archive/master.zip
+unzip master.zip
+cd graphulo-master
+mvn clean install -DskipTests -Dfindbugs.skip
+cd ..
+```
+
+If using your own standalone Accumulo instance, also install the Graphulo server JAR 
+per Graphulo's `deploy.sh` (see Graphulo's README).
+
+
+#### Build LaraDB
 Run `mvn package -DskipTests` to compile and build.
 This creates two LaraDB artifacts inside the `target/` sub-directory:
 
