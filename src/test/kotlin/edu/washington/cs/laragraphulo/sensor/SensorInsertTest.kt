@@ -5,8 +5,6 @@ import edu.washington.cs.laragraphulo.util.DebugUtil
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.hadoop.io.Text
 import org.junit.*
-import org.junit.jupiter.api.Disabled
-import org.junit.runners.MethodSorters
 import java.io.File
 import java.io.FilenameFilter
 import java.net.URL
@@ -44,7 +42,6 @@ private inline fun timePrint(s: String, f: () -> Any?) {
  * Insert sensor data from a file in test/resources/
  * into Accumulo.
  */
-//@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class SensorInsertTest : AccumuloTestBase() {
   private val conn = tester.accumuloConfig.connector
 
@@ -71,15 +68,15 @@ class SensorInsertTest : AccumuloTestBase() {
 
   @Test
   fun testInsertToOne() {
-    val tn = "testInsertBoth"
+    val tn = "testInsertToOne"
     val fs = setOf(filepathA, filepathB)
-        .map { Thread.currentThread().contextClassLoader.getResource(it).path.let { File(it) } }
+        .map { Thread.currentThread().contextClassLoader.getResource(it).path.let(::File) }
         .toSet()
     insertToOne(fs, tn)
   }
 
   @Test
-  @Disabled @Ignore
+  @Ignore
   fun doReal() {
     val dir = Thread.currentThread().contextClassLoader.getResource("data/sensor/input/").path.run(::File)
     println("Input Dir: $dir")
