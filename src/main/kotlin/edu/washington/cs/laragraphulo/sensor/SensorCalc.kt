@@ -180,7 +180,7 @@ class SensorCalc(
     _pre_binAndDiff()
     return _binAndDiff(minTime, maxTime)
   }
-  fun _pre_binAndDiff() {
+  private fun _pre_binAndDiff() {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
 
@@ -256,13 +256,13 @@ class SensorCalc(
     _pre_meanAndSubtract()
     _meanAndSubtract()
   }
-  fun _pre_meanAndSubtract() {
+  private fun _pre_meanAndSubtract() {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorX)) {"table $sensorX does not exist"}
     recreateWithSplitsFrom(sensorA, sensorU) // choose A arbitrarily
 
   }
-  fun _meanAndSubtract() {
+  private fun _meanAndSubtract() {
     if (Defer !in opts)
       recreateWithSplitsFrom(sensorX, sensorM)
 
@@ -300,13 +300,13 @@ class SensorCalc(
     _pre_covariance()
     _covariance(tCount)
   }
-  fun _pre_covariance() {
+  private fun _pre_covariance() {
 //    require(tCount > 1) {"Bad tCount: $tCount"}
     require(conn.tableOperations().exists(sensorU)) {"table $sensorU does not exist"}
     recreateWithSplitsFrom(sensorX, sensorC)
 
   }
-  fun _covariance(tCount: Long) {
+  private fun _covariance(tCount: Long) {
     if (Defer !in opts)
       recreateWithSplitsFrom(sensorX, sensorF)
 
