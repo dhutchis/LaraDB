@@ -68,6 +68,10 @@ class SensorExample : AccumuloTestBase() {
       }
       logger.debug(sw.toString())
     }
+
+    // In case you scan the result table from the console, this Formatter displays the covariances in human-readable form
+    if (SensorOpt.Encode in opts)
+      conn.tableOperations().setProperty(sensorQuery.sensorC, "table.formatter", "edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay")
   }
 
 

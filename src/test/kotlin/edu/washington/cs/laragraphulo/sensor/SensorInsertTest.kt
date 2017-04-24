@@ -139,7 +139,7 @@ class SensorInsertTest : AccumuloTestBase() {
 //    time("cBinAndDiff") { tCount = cBinAndDiff() }
 //    time("dMeanAndSubtract") { dMeanAndSubtract() }
 //    time("eCovariance") { eCovariance(tCount) }
-    if (SensorCalc.SensorOpt.Encode !in opts)
+    if (SensorCalc.SensorOpt.Encode in opts)
       conn.tableOperations().setProperty(scc.sensorC, "table.formatter", "edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay")
   }
 
