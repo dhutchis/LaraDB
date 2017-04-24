@@ -140,7 +140,8 @@ in Accumulo, so that you may inspect them more closely after the example finishe
 Here is a list of included examples:
 
 1. HelloWorldExample -- ingest data, perform a query with a map iterator, and scan the result.
-2. TODO
+2. SensorExample -- ingest [Array of Things](https://arrayofthings.github.io/) CSV data from two sensors, 
+perform a query to calculate measurement type covariance, and print the results.
 
 
 ### How to use LaraDB in Java client code

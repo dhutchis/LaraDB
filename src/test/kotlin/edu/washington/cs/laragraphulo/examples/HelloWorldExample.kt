@@ -36,7 +36,7 @@ class HelloWorldExample : AccumuloTestBase() {
     val table2 = "exHelloWorld2"
 
     /*  SETUP CONNECTOR
-    In your code, you would write something similar to
+    In your code, you would write something similar to:
       val cc = ClientConfiguration.loadDefault().withInstance("instance").withZkHosts("localhost:2181").withZkTimeout(5000)
       val instance = ZooKeeperInstance(cc)
       val conn = instance.getConnector("root", new PasswordToken("secret"))

@@ -1,11 +1,11 @@
 /**
  * A collection of functions to encode and decode ByteBuffers whose length may vary.
- * The main methods are [escapeAndJoin] and [splitAndUnescape].
+ * The main methods are `escapeAndJoin` and `splitAndUnescape`.
  *
  *
  * Idea: make the separator and/or escape character variable.
  * Place them at the beginning of the string.
- * Then we could choose characters that appear infrequently in the list of ByteBuffers to [escapeAndJoin].
+ * Then we could choose characters that appear infrequently in the list of ByteBuffers to `escapeAndJoin`.
  */
 package edu.washington.cs.laragraphulo.encoding
 
@@ -114,7 +114,7 @@ import java.util.*
     }
   }
 
-  val EMPTY_BUFFER = ByteBuffer.allocate(0)
+  val EMPTY_BUFFER: ByteBuffer = ByteBuffer.allocate(0)
 
   /**
    * Assuming 0 is the separator and 1 is the escape,

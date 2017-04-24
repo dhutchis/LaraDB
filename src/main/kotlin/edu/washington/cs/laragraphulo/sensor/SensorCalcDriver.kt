@@ -80,7 +80,7 @@ doPipeline(it) }
 //      }
 //    }
 
-    results.forEach { println(it) }
+    results.forEach(::println)
   }
 
 }

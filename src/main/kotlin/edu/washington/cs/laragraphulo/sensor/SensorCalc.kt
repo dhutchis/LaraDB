@@ -19,6 +19,7 @@ import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
 import org.apache.accumulo.core.client.lexicoder.PairLexicoder
 import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
 import org.apache.accumulo.core.client.lexicoder.impl.ByteUtils.concat
+import org.apache.accumulo.core.client.security.tokens.AuthenticationToken
 import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.*
@@ -60,7 +61,7 @@ inline fun <R> time(f: () -> R): TimedResult<R> {
 
 class SensorCalc(
     val conn: Connector,
-    val pw: PasswordToken,
+    val pw: AuthenticationToken,
     val sensorA: String,
     val sensorB: String,
     val opts: Set<SensorOpt>,
@@ -129,7 +130,7 @@ class SensorCalc(
 
 
   
-  fun timeAll(minTime: Long, maxTime: Long): SensorCalcTimes {
+  fun timeAll(minTime: Long = 0, maxTime: Long = Long.MAX_VALUE): SensorCalcTimes {
     println("SensorCalc with opts ${opts.printSetAll()}")
     _pre_binAndDiff()
     _pre_meanAndSubtract()
@@ -183,7 +184,6 @@ class SensorCalc(
   private fun _pre_binAndDiff() {
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorB)) {"table $sensorB does not exist"}
-
     recreateWithSplitsFrom(sensorB, sensorX) // choose B arbitrarily
   }
   private fun _binAndDiff(minTime: Long, maxTime: Long): Long {
@@ -260,7 +260,6 @@ class SensorCalc(
     require(conn.tableOperations().exists(sensorA)) {"table $sensorA does not exist"}
     require(conn.tableOperations().exists(sensorX)) {"table $sensorX does not exist"}
     recreateWithSplitsFrom(sensorA, sensorU) // choose A arbitrarily
-
   }
   private fun _meanAndSubtract() {
     if (Defer !in opts)
