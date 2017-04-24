@@ -9,6 +9,8 @@ import java.util.*
 
 /**
  * Do a [SensorFileAction] on many files in parallel.
+ *
+ * Apparently this works with two files. Need to test more files.
  */
 class SensorFileListInsert(
     fs: Set<File>,
@@ -31,7 +33,7 @@ class SensorFileListInsert(
       // Splits - set at odd date boundaries, after removing first // clean 350k entries x 5 tablets per table
       val dates = files.map { it.date }.sorted()
           .let { it.subList(1,it.size) }
-          .filterIndexed { index, l -> index % 3 == 1 }
+          .filterIndexed { index, _ -> index % 3 == 1 }
           .map { Text(it.toByteArray(encode)) }.toSortedSet()
       t.addSplits(table, dates)
 //      println(files)
