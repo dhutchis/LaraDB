@@ -127,7 +127,7 @@ Otherwise if you don't fix it, you may not be able to run IntelliJ and Accumulo 
 You could also change Accumulo's ports from their default.
 
 ### Examples
-The classes in [`src/test/kotlin/edu/washington/cs/laragraphulo`](src/test/kotlin/edu/washington/cs/laragraphulo)
+The classes in [`src/test/kotlin/edu/washington/cs/laragraphulo/examples`](src/test/kotlin/edu/washington/cs/laragraphulo/examples)
 contain simple, well-commented examples of how to use LaraDB.
 To run an example, use the command `mvn test -Dtest=TESTNAME`, replacing `TESTNAME` with the name of the test.
 To run every example, use the command `mvn test -Dtest=*Example`.
@@ -139,8 +139,8 @@ in Accumulo, so that you may inspect them more closely after the example finishe
 
 Here is a list of included examples:
 
-1. HelloWorldExample -- ingest data, perform a query with a map iterator, and scan the result.
-2. SensorExample -- ingest [Array of Things](https://arrayofthings.github.io/) CSV data from two sensors, 
+1. [HelloWorldExample](src/test/kotlin/edu/washington/cs/laragraphulo/examples/HelloWorldExample.kt) -- ingest data, perform a query with a map iterator, and scan the result.
+2. [SensorExample](src/test/kotlin/edu/washington/cs/laragraphulo/examples/SensorExample.kt) -- ingest [Array of Things](https://arrayofthings.github.io/) CSV data from two sensors, 
 perform a query to calculate measurement type covariance, and print the results.
 
 
