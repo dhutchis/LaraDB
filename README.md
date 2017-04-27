@@ -1,5 +1,5 @@
 # LaraDB
-[![Build Status](https://travis-ci.org/dhutchis/LaraDB.svg?branch=master)](https://travis-ci.org/dhutchis/lara-graphulo)
+[![Build Status](https://travis-ci.org/dhutchis/LaraDB.svg?branch=master)](https://travis-ci.org/dhutchis/LaraDB)
 
 LaraDB is an implementation of the [Lara Algebra](https://arxiv.org/abs/1703.07342) on the [Apache Accumulo](https://accumulo.apache.org/) database. 
 [Graphulo](http://graphulo.mit.edu/)-style server-side iterators implement the Lara operators.

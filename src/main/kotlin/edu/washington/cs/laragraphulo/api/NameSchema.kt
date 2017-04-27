@@ -42,6 +42,15 @@ interface ValAttribute<out T> : Attribute<T> {
   val default: T
 }
 
+data class AttributeImpl<out T>(
+    override val type: Class<out T>
+) : Attribute<T>
+
+data class ValAttributeImpl<out T>(
+    override val type: Class<out T>,
+    override val default: T
+) : ValAttribute<T>
+
 ///** ND for No Default */
 //interface NameSchemaND {
 //  val keyTypes: Map<String,Attribute<*>>
@@ -53,12 +62,26 @@ interface NameSchema {
   val valTypes: Map<String,ValAttribute<*>>
   fun validate() {
     // check key and val types disjoint
-    require(keyTypes.keys.disjoint(valTypes.keys)) {"keys and vals overlap: $keyTypes, $valTypes"}
+    require(keyTypes.keys.disjoint(valTypes.keys)) { "keys and vals overlap: $keyTypes, $valTypes" }
   }
 }
 
-interface NameTuple {
-  val attrs: Map<String,*>
+data class NameSchemaImpl(
+    override val keyTypes: Map<String,Attribute<*>>,
+    override val valTypes: Map<String,ValAttribute<*>>
+) : NameSchema
+
+
+typealias NameTuple = Map<String,*>
+
+/**
+ * Return a NameTuple with the same keys but the values set to the default values.
+ */
+fun NameTuple.copyDefault(ns: NameSchema): NameTuple {
+  require(this.keys == (ns.keyTypes.keys + ns.valTypes.keys))
+  return this.mapValues { (attr, value) ->
+    ns.valTypes[attr]?.default ?: value
+  }
 }
 
 interface NameTupleOp {
@@ -81,7 +104,7 @@ interface NameMapFun : (NameTuple) -> NameTuple {
   }
 }
 
-class NameExt(
+data class NameExt(
     val parent: NameTupleOp,
     val extFun: NameExtFun
 ): NameTupleOp {
@@ -89,14 +112,11 @@ class NameExt(
     val pk = parent.schema.keyTypes
     val s2 = extFun.schema
     require(s2.keyTypes.keys.disjoint(pk.keys)) {"keys and new keys overlap: $pk, ${s2.keyTypes}"}
-    object : NameSchema {
-      override val keyTypes = pk + s2.keyTypes
-      override val valTypes = s2.valTypes
-    }
+    NameSchemaImpl(pk + s2.keyTypes, s2.valTypes)
   }()
 }
 
-class NameLoad(
+data class NameLoad(
     val table: String,
     override val schema: NameSchema
 ): NameTupleOp
@@ -131,10 +151,8 @@ class NameMergeUnion(
     plusFuns0: Map<String,NamePlusFun<*>>
 ): NameTupleOp {
   override val schema: NameSchema =
-    object : NameSchema {
-      override val keyTypes = listOf(p1.schema.keyTypes,p2.schema.keyTypes).intersectAndCheckMatching()
-      override val valTypes = listOf(p1.schema.valTypes,p2.schema.valTypes).unionAndCheckMatching()
-    }
+    NameSchemaImpl(keyTypes = listOf(p1.schema.keyTypes,p2.schema.keyTypes).intersectAndCheckMatching(),
+      valTypes = listOf(p1.schema.valTypes,p2.schema.valTypes).unionAndCheckMatching())
   init {
     schema.validate()
     require(schema.valTypes.keys.containsAll(plusFuns0.keys)) {"plus functions provided for values that do not exist"}
@@ -142,18 +160,40 @@ class NameMergeUnion(
   val plusFuns: Map<String,NamePlusFun<*>> = schema.valTypes.map { (k,v) ->
     k to (plusFuns0[k] ?: NamePlusFun.errorNamePlusFun(v.default))
   }.toMap()
+
+  override fun toString(): String {
+    return "NameMergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
+  }
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as NameMergeUnion
+
+    if (p1 != other.p1) return false
+    if (p2 != other.p2) return false
+    if (plusFuns != other.plusFuns) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = p1.hashCode()
+    result = 31 * result + p2.hashCode()
+    result = 31 * result + plusFuns.hashCode()
+    return result
+  }
 }
 
-class NameMergeJoin(
+data class NameMergeJoin(
     val p1: NameTupleOp,
     val p2: NameTupleOp,
     val timesFuns: Map<String,NameTimesFun<*,*,*>>
 ): NameTupleOp {
   override val schema: NameSchema =
-      object : NameSchema {
-        override val keyTypes = listOf(p1.schema.keyTypes,p2.schema.keyTypes).unionAndCheckMatching()
-        override val valTypes = intersectAndMultiplyMatching(p1.schema.valTypes,p2.schema.valTypes)
-      }
+    NameSchemaImpl(keyTypes = listOf(p1.schema.keyTypes,p2.schema.keyTypes).unionAndCheckMatching(),
+      valTypes = intersectAndMultiplyMatching(p1.schema.valTypes,p2.schema.valTypes))
 
   init {
     schema.validate()
