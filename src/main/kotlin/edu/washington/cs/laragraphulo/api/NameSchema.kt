@@ -98,9 +98,31 @@ interface NameExtFun : (NameTuple) -> List<NameTuple> {
 interface NameMapFun : (NameTuple) -> NameTuple {
   val schema: NameSchema
 
+  fun validate() {
+    // no keys allowed
+    require(schema.keyTypes.isEmpty()) { "no keys allowed in a map: ${schema.keyTypes}" }
+  }
+
   fun asNameExtFun(): NameExtFun = object : NameExtFun {
     override fun invoke(p1: NameTuple): List<NameTuple> = listOf(this@NameMapFun(p1))
     override val schema: NameSchema = this@NameMapFun.schema
+  }
+}
+
+class NameExtFunImpl(
+    override val schema: NameSchema,
+    val extFun: (NameTuple) -> List<NameTuple>
+) : NameExtFun {
+  override fun invoke(p1: NameTuple) = extFun(p1)
+}
+
+class NameMapFunImpl(
+    override val schema: NameSchema,
+    val mapFun: (NameTuple) -> NameTuple
+) : NameMapFun {
+  override fun invoke(p1: NameTuple): NameTuple = mapFun(p1)
+  init {
+    validate()
   }
 }
 
@@ -137,9 +159,25 @@ interface NamePlusFun<T>: (T, T) -> T {
   }
 }
 
+class NamePlusFunImpl<T>(
+    override val identity: T,
+    val plusFun: (T, T) -> T
+): NamePlusFun<T> {
+  override fun invoke(p1: T, p2: T): T = plusFun(p1, p2)
+}
+
+
 interface NameTimesFun<T1,T2,out T3>: (T1, T2) -> T3 {
   val leftAnnihilator: T1
   val rightAnnihilator: T2
+}
+
+class NameTimesFunImpl<T1,T2,out T3>(
+    override val leftAnnihilator: T1,
+    override val rightAnnihilator: T2,
+    val timesFun: (T1, T2) -> T3
+): NameTimesFun<T1,T2,T3> {
+  override fun invoke(p1: T1, p2: T2): T3 = timesFun(p1, p2)
 }
 
 /**
