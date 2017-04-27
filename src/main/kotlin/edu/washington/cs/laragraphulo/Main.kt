@@ -11,6 +11,9 @@ import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.slf4j.Logger
 import java.util.*
 
+/**
+ * This class is the main entry point for running a RACO relational query through LaraDB.
+ */
 class Main {
 
   // maybe later adapt this from ShellOptionsJC in Accumulo's shell
@@ -42,8 +45,6 @@ class Main {
      * Select Project(Apply) FileStore
      * java -cp /home/dhutchis/gits/lara-graphulo/target/lara-graphulo-1.0-SNAPSHOT-all.jar edu.washington.cs.laragraphulo.Main "FileStore('/home/dhutchis/gits/raco/raco/backends/federated/tests/Vtest', 'CSV', {}, Apply([('src_ip', NamedAttributeRef('SrcAddr')), ('dst_ip', NamedAttributeRef('DstAddr')), ('value', NumericLiteral(1.0))], Select(GT(UnnamedAttributeRef(0, None), NumericLiteral(5120)), Scan(RelationKey('public','adhoc','netflow'), Scheme([(u'TotBytes', 'INT_TYPE'), (u'StartTime', 'STRING_TYPE'), (u'SrcAddr', 'STRING_TYPE'), (u'DstAddr', 'STRING_TYPE'), (u'RATE', 'DOUBLE_TYPE'), (u'Dur', 'DOUBLE_TYPE'), (u'Dir', 'STRING_TYPE'), (u'Proto', 'STRING_TYPE'), (u'Sport', 'STRING_TYPE'), (u'Dport', 'STRING_TYPE'), (u'State', 'STRING_TYPE'), (u'sTos', 'LONG_TYPE'), (u'dTos', 'LONG_TYPE'), (u'TotPkts', 'LONG_TYPE'), (u'SrcBytes', 'LONG_TYPE'), (u'Label', 'STRING_TYPE')]), (<raco.backends.myria.catalog.MyriaCatalog object at 0x7f207134fbd0>, 7), RepresentationProperties(frozenset([UnnamedAttributeRef(0, None), UnnamedAttributeRef(1, None)]), None, None)))))"
      * ```
-     *
-     *
      */
     @JvmStatic
     fun main(args: Array<String>) {

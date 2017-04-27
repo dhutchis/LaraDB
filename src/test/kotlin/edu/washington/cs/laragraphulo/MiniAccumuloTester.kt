@@ -43,8 +43,12 @@ class MiniAccumuloTester(
       tempDir = tmpdir
       if (tmpdir.exists())
         tmpdir.deleteRecursively()
+      var mul = 1
+      while (tmpdir.exists()) {
+        Thread.sleep(100L*mul)
+        mul++
+      }
       tmpdir.mkdir()
-
 
       logger.info("Temp directory: " + tempDir!!.path)
 
