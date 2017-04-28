@@ -8,80 +8,104 @@ fun <E> Collection<E>.disjoint(other: Collection<E>): Boolean {
 }
 
 /**
- * Intersect maps by key. Check that entries with the same key have the same value.
- */
-fun <K,V> List<Map<K,V>>.intersectAndCheckMatching(): Map<K,V> {
-  val first = this.first()
-  val rest = this.subList(1, this.size)
-  return first.filter { (fk, fv) ->
-    rest.all {
-      if (it.containsKey(fk)) {
-        require(it[fk] == fv) {"matching keys $fk have different types $fv, ${it[fk]}"}
-        true
-      } else false
-    }
-  }
-}
-
-/**
- * Union maps by key. Check that entries with the same key have the same value.
- */
-fun <K,V> List<Map<K,V>>.unionAndCheckMatching(): Map<K,V> {
-  return this.subList(1, this.size).fold(this.first()) { acc, map ->
-    acc + map.filter { (k, v) ->
-      if (acc.containsKey(k)) {
-        require(acc[k] == v)
-        false
-      } else true
-    }
-  }
-}
-
-/**
  * Return a NameTuple with the same keys but the values set to the default values.
  */
 fun NameTuple.copyDefault(ns: NameSchema): NameTuple {
-  require(this.keys == (ns.keyTypes.keys + ns.valTypes.keys))
+  require(this.keys == (ns.keys + ns.vals).toSet())
   return this.mapValues { (attr, value) ->
-    ns.valTypes[attr]?.default ?: value
+    ns.getValue(attr)?.default ?: value
   }
 }
 
 
 // ======================= ATTRIBUTES
 
-interface Attribute<out T> {
-  val type: Class<out T>
-}
-interface ValAttribute<out T> : Attribute<T> {
-  val default: T
+open class Attribute<out T>(
+    val name: String,
+    val type: Class<out T>
+) : Comparable<Attribute<*>> {
+
+  open fun withNewName(n: String) = Attribute(n, type)
+
+  override fun toString(): String {
+    return "Attribute(name='$name', type=$type)"
+  }
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as Attribute<*>
+
+    if (name != other.name) return false
+    if (type != other.type) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = name.hashCode()
+    result = 31 * result + type.hashCode()
+    return result
+  }
+
+  /** Careful: this returns 0 on objects that are not equal */
+  override fun compareTo(other: Attribute<*>): Int = name.compareTo(other.name)
 }
 
-data class AttributeImpl<out T>(
-    override val type: Class<out T>
-) : Attribute<T>
+class ValAttribute<out T>(
+    name: String,
+    type: Class<out T>,
+    val default: T
+) : Attribute<T>(name, type) {
 
-data class ValAttributeImpl<out T>(
-    override val type: Class<out T>,
-    override val default: T
-) : ValAttribute<T>
+  override fun withNewName(n: String) = ValAttribute(n, type, default)
+
+  override fun toString(): String {
+    return "ValAttribute(name='$name', type=$type, default=$default)"
+  }
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+    if (!super.equals(other)) return false
+
+    other as ValAttribute<*>
+
+    if (default != other.default) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = super.hashCode()
+    result = 31 * result + (default?.hashCode() ?: 0)
+    return result
+  }
+}
+
 
 
 // ======================= SCHEMA
 
-interface NameSchema {
-  val keyTypes: Map<String,Attribute<*>>
-  val valTypes: Map<String,ValAttribute<*>>
-  fun validate() {
-    require(keyTypes.keys.disjoint(valTypes.keys)) { "keys and vals overlap: $keyTypes, $valTypes" }
+data class NameSchema(
+  val keys: List<Attribute<*>>,
+  val vals: List<ValAttribute<*>>
+) {
+  init {
+    val kns = keys.map(Attribute<*>::name)
+    val vns = vals.map(ValAttribute<*>::name)
+    require(kns.let { it.size == it.toSet().size }) {"there is a duplicate key attribute name: $keys"}
+    require(vns.let { it.size == it.toSet().size }) {"there is a duplicate value attribute name: $vals"}
+    require(kns.disjoint(vns)) { "keys and vals overlap: $keys, $vals" }
   }
+
+  operator fun get(n: String): Attribute<*>? =
+      keys.find { it.name == n } ?: vals.find { it.name == n }
+
+  fun getValue(n: String): ValAttribute<*>? =
+      vals.find { it.name == n }
 }
-
-data class NameSchemaImpl(
-    override val keyTypes: Map<String,Attribute<*>>,
-    override val valTypes: Map<String,ValAttribute<*>>
-) : NameSchema
-
 
 // ======================= TUPLE
 
@@ -91,220 +115,288 @@ typealias NameTuple = Map<String,*>
 
 // ======================= UDFs
 
-interface NameExtFun : (NameTuple) -> List<NameTuple> {
-  val schema: NameSchema
-}
+open class NameExtFun(
+    /** The (to be appended) new key attributes and value attributes that the extFun produces */
+    val extSchema: NameSchema,
+    val extFun: (NameTuple) -> List<NameTuple>
+)
 
 /**
  * Must return default values when passed default values, for any key.
  */
-interface NameMapFun : (NameTuple) -> NameTuple {
-  val schema: NameSchema
-
-  fun validate() {
-    // no keys allowed
-    require(schema.keyTypes.isEmpty()) { "no keys allowed in a map: ${schema.keyTypes}" }
-  }
-
-  fun asNameExtFun(): NameExtFun = object : NameExtFun {
-    override fun invoke(p1: NameTuple): List<NameTuple> = listOf(this@NameMapFun(p1))
-    override val schema: NameSchema = this@NameMapFun.schema
-  }
-}
-
-class NameExtFunImpl(
-    override val schema: NameSchema,
-    val extFun: (NameTuple) -> List<NameTuple>
-) : NameExtFun {
-  override fun invoke(p1: NameTuple) = extFun(p1)
-}
-
-class NameMapFunImpl(
-    override val schema: NameSchema,
+class NameMapFun(
+    /** The value attributes that the mapFun produces */
+    val mapValues: List<ValAttribute<*>>,
     val mapFun: (NameTuple) -> NameTuple
-) : NameMapFun {
-  override fun invoke(p1: NameTuple): NameTuple = mapFun(p1)
-  init {
-    validate()
-  }
-}
+) : NameExtFun(extSchema = NameSchema(listOf(), mapValues),
+               extFun = { tuple -> listOf(mapFun(tuple)) })
 
-interface NamePlusFun<T>: (T, T) -> T {
-  val identity: T
+
+
+class PlusFun<T>(
+    val identity: T,
+    val plusFun: (T, T) -> T
+) {
+  fun verifyIdentity(a: T = identity) {
+    check(plusFun(a,identity) == a && plusFun(identity,a) == a) {"Value $a violates the identity requirement of plus for identity $identity"}
+  }
 
   companion object {
-    fun <T> errorNamePlusFun(id: T) = object : NamePlusFun<T> {
-      override val identity: T = id
-      override fun invoke(p1: T, p2: T): T = when {
-        p1 == identity -> p2
-        p2 == identity -> p1
-        else -> throw IllegalStateException("no plus function defined for this attribute, yet non-identity values $p1 and $p2 are to be added")
+    /** Forces a function to have an identity. */
+    inline fun <T> plusWithIdentityFun(id: T, crossinline plusFun: (T,T) -> T) = PlusFun(id) { a, b ->
+      when {
+        a == id -> b
+        b == id -> a
+        else -> plusFun(a,b)
+      }
+    }
+
+    /** Forces a function to have identity null. */
+    inline fun <T : Any> plusWithNullIdentityFun(crossinline plusFun: (T,T) -> T): PlusFun<T?> {
+      return PlusFun<T?>(null) { a, b ->
+        when {
+          a == null -> b
+          b == null -> a
+          else -> plusFun(a,b)
+        }
+      }
+    }
+
+    /** Use this when you know that summation will never occur. Throws an error when summing two non-identities. */
+    fun <T> plusErrorFun(id: T) = PlusFun(id) { a, b ->
+      when {
+        a == id -> b
+        b == id -> a
+        else -> throw IllegalStateException("no plus function defined for this attribute, yet non-identity ($id) values $a and $b are to be added")
       }
     }
   }
 }
 
-class NamePlusFunImpl<T>(
-    override val identity: T,
-    val plusFun: (T, T) -> T
-): NamePlusFun<T> {
-  override fun invoke(p1: T, p2: T): T = plusFun(p1, p2)
-}
 
 
-interface NameTimesFun<T1,T2,out T3>: (T1, T2) -> T3 {
-  val leftAnnihilator: T1
-  val rightAnnihilator: T2
-}
-
-class NameTimesFunImpl<T1,T2,out T3>(
-    override val leftAnnihilator: T1,
-    override val rightAnnihilator: T2,
+class TimesFun<T1,T2,out T3>(
+    val leftAnnihilator: T1,
+    val rightAnnihilator: T2,
     val timesFun: (T1, T2) -> T3
-): NameTimesFun<T1,T2,T3> {
-  override fun invoke(p1: T1, p2: T2): T3 = timesFun(p1, p2)
-}
-
-
-// ======================= OPERATORS
-
-
-interface NameTupleOp {
-  val schema: NameSchema
-}
-
-
-
-data class NameExt(
-    val parent: NameTupleOp,
-    val extFun: NameExtFun
-): NameTupleOp {
-  override val schema: NameSchema = {
-    val pk = parent.schema.keyTypes
-    val s2 = extFun.schema
-    require(s2.keyTypes.keys.disjoint(pk.keys)) {"keys and new keys overlap: $pk, ${s2.keyTypes}"}
-    NameSchemaImpl(pk + s2.keyTypes, s2.valTypes)
-  }()
-}
-
-data class NameLoad(
-    val table: String,
-    override val schema: NameSchema
-): NameTupleOp
-
-
-
-
-/**
- * Restricted to two parents. Future work could extend this to any number of parents.
- */
-open class NameMergeUnion(
-    val p1: NameTupleOp,
-    val p2: NameTupleOp,
-    plusFuns0: Map<String, NamePlusFun<*>>
-): NameTupleOp {
-  override val schema: NameSchema =
-    NameSchemaImpl(keyTypes = listOf(p1.schema.keyTypes,p2.schema.keyTypes).intersectAndCheckMatching(),
-      valTypes = listOf(p1.schema.valTypes,p2.schema.valTypes).unionAndCheckMatching())
-  init {
-    schema.validate()
-    require(schema.valTypes.keys.containsAll(plusFuns0.keys)) {"plus functions provided for values that do not exist"}
-  }
-  val plusFuns: Map<String,NamePlusFun<*>> = schema.valTypes.map { (k,v) ->
-    k to (plusFuns0[k] ?: NamePlusFun.errorNamePlusFun(v.default))
-  }.toMap()
-
-  override fun toString(): String {
-    return "NameMergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
+) {
+  val resultZero = timesFun(leftAnnihilator, rightAnnihilator)
+  fun verifyAnnihilator(a: T1 = leftAnnihilator, b: T2 = rightAnnihilator) {
+    check(timesFun(a,rightAnnihilator) == resultZero && timesFun(leftAnnihilator,b) == resultZero)
+    { "Value $a and $b violate the annihilator requirement of times for annihilators $leftAnnihilator and $rightAnnihilator" }
   }
 
-  override fun equals(other: Any?): Boolean {
-    if (this === other) return true
-    if (other?.javaClass != javaClass) return false
-
-    other as NameMergeUnion
-
-    if (p1 != other.p1) return false
-    if (p2 != other.p2) return false
-    if (plusFuns != other.plusFuns) return false
-
-    return true
-  }
-
-  override fun hashCode(): Int {
-    var result = p1.hashCode()
-    result = 31 * result + p2.hashCode()
-    result = 31 * result + plusFuns.hashCode()
-    return result
-  }
-}
-
-class NameMergeAgg(
-    p: NameTupleOp,
-    keysKept: Collection<String>,
-    plusFuns0: Map<String, NamePlusFun<*>>
-) : NameMergeUnion(p,
-      p2 = NameEmpty(NameSchemaImpl(p.schema.keyTypes.filterKeys { it in keysKept }, mapOf())),
-      plusFuns0 = plusFuns0)
-
-data class NameEmpty(
-    override val schema: NameSchema
-) : NameTupleOp
-
-data class NameRename(
-    val p: NameTupleOp,
-    val renameMap: Map<String,String>
-) : NameTupleOp {
-  override val schema = p.schema.let { NameSchemaImpl(
-      it.keyTypes.mapKeys { (k,_) -> renameMap[k] ?: k },
-      it.valTypes.mapKeys { (k,_) -> renameMap[k] ?: k }
-  ) }
-}
-
-// idea: make NameTupleOp into a sealed class
-
-data class NameMergeJoin(
-    val p1: NameTupleOp,
-    val p2: NameTupleOp,
-    val timesFuns: Map<String,NameTimesFun<*,*,*>>
-): NameTupleOp {
-  override val schema: NameSchema =
-    NameSchemaImpl(keyTypes = listOf(p1.schema.keyTypes,p2.schema.keyTypes).unionAndCheckMatching(),
-      valTypes = intersectAndMultiplyMatching(p1.schema.valTypes,p2.schema.valTypes))
-
-  init {
-    schema.validate()
-  }
-
-  private fun intersectAndMultiplyMatching(valTypes1: Map<String, ValAttribute<*>>, valTypes2: Map<String, ValAttribute<*>>): Map<String, ValAttribute<*>> {
-    return valTypes1.filter { (k,_) -> valTypes2.containsKey(k) }.map { (k,v) ->
-      require(timesFuns.containsKey(k)) {"no times operator for matching value attributes $k"}
-      val times = timesFuns[k]!!
-      k to (multiply(times, v.default, valTypes2[k]!!.default))
-    }.toMap()
-  }
-
-  /* d1 and d2 must be Any?, to satisfy type-checker */
-  private inline fun <T1,T2,reified T3> multiply(times: NameTimesFun<T1,T2,T3>, d1: Any?, d2: Any?): ValAttribute<T3> {
-    require(times.leftAnnihilator == d1) {"leftAnnihilator ${times.leftAnnihilator} != d1.default $d1"}
-    require(times.rightAnnihilator == d2) {"rightAnnihilator ${times.rightAnnihilator} != d2.default $d2"}
-    return object : ValAttribute<T3> {
-      override val type: Class<out T3> = T3::class.java
-      override val default: T3 = times(times.leftAnnihilator, times.rightAnnihilator)
+  companion object {
+    /** Forces a function to have these annihilators. */
+    inline fun <T1, T2, T3> timesWithAnnihilatorsFun(
+        leftAnnihilator: T1, rightAnnihilator: T2,
+        crossinline timesFun: (T1, T2) -> T3
+    ): TimesFun<T1, T2, T3> {
+      val resultZero = timesFun(leftAnnihilator, rightAnnihilator)
+      return TimesFun(leftAnnihilator, rightAnnihilator) { a, b ->
+        if (a == leftAnnihilator || b == rightAnnihilator) resultZero else timesFun(a, b)
+      }
     }
   }
 }
 
 
 
+// ======================= OPERATORS
 
-/* First lower to keep the names with the scheams. Then erase the names.
- */
 
-interface PosSchema {
-  val names: List<String>
-  val types: List<Attribute<*>>
+sealed class NameTupleOp(
+    val resultSchema: NameSchema
+) {
+//  abstract fun run(t: Iterator<NameTuple>): Iterator<NameTuple>
+
+  data class Ext(
+      val parent: NameTupleOp,
+      /** This can also be a [NameMapFun] */
+      val extFun: NameExtFun
+  ): NameTupleOp(NameSchema(
+      keys = parent.resultSchema.keys + extFun.extSchema.keys,
+      vals = extFun.extSchema.vals
+  ))
+
+  data class Load(
+      val table: String,
+      val schema: NameSchema
+  ): NameTupleOp(schema)
+
+  data class Empty(
+      val schema: NameSchema
+  ) : NameTupleOp(schema)
+
+
+  /**
+   * Restricted to two parents. Future work could extend this to any number of parents.
+   */
+  sealed class MergeUnion0(
+      val p1: NameTupleOp,
+      val p2: NameTupleOp,
+      plusFuns0: Map<String, PlusFun<*>>
+  ): NameTupleOp(NameSchema(
+      keys = intersectKeys(p1.resultSchema.keys,p2.resultSchema.keys),
+      vals = unionValues(p1.resultSchema.vals,p2.resultSchema.vals)
+  )) {
+    init {
+      require(resultSchema.vals.map(ValAttribute<*>::name).containsAll(plusFuns0.keys)) {"plus functions provided for values that do not exist"}
+    }
+
+    val plusFuns: Map<String, PlusFun<*>> = resultSchema.vals.map { va ->
+      va.name to (plusFuns0[va.name] ?: PlusFun.plusErrorFun(va.default))
+    }.toMap()
+
+    override fun toString(): String {
+      return "NameMergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
+    }
+
+    override fun equals(other: Any?): Boolean {
+      if (this === other) return true
+      if (other?.javaClass != javaClass) return false
+
+      other as MergeUnion
+
+      if (p1 != other.p1) return false
+      if (p2 != other.p2) return false
+      if (plusFuns != other.plusFuns) return false
+
+      return true
+    }
+
+    override fun hashCode(): Int {
+      var result = p1.hashCode()
+      result = 31 * result + p2.hashCode()
+      result = 31 * result + plusFuns.hashCode()
+      return result
+    }
+
+    companion object {
+      /**
+       * If A has access path (c,a) and B has access path (c,b),
+       * then MergeUnion(A,B) has access path (c).
+       */
+      private fun intersectKeys(a: List<Attribute<*>>, b: List<Attribute<*>>): List<Attribute<*>> {
+        var i = 0
+        val minSize = Math.min(a.size,b.size)
+        val c: MutableList<Attribute<*>> = ArrayList(minSize)
+        while (i < minSize && a[i].name == b[i].name) {
+          require(a[i] == b[i]) {"MergeUnion: matching keys ${a[i].name} has different types in parents: ${a[i].type} and ${b[i].type}"}
+          c += a[i]
+          i++
+        }
+        // make sure no more keys match
+        require((a.subList(i,a.size) + b.subList(i,b.size)).map(Attribute<*>::name).let { it.size == it.toSet().size })
+          {"MergeUnion: key attributes $a and $b have matching keys that are not in their common prefix"}
+        return c
+      }
+      /**
+       * Union maps by key. Check that entries with the same key have the same value.
+       */
+      private fun unionValues(a: List<ValAttribute<*>>, b: List<ValAttribute<*>>): List<ValAttribute<*>> {
+        return a + b.filter { bv ->
+          val av = a.find { it.name == bv.name }
+          if (av != null) {
+            require(av == bv) // calls equals() method
+            {"MergeUnion: value attributes $a and $b have an attribute with the same name but different types"}
+            false
+          } else true
+        }
+      }
+    }
+
+    class MergeUnion(
+        p1: NameTupleOp,
+        p2: NameTupleOp,
+        plusFuns0: Map<String, PlusFun<*>>
+    ) : MergeUnion0(p1,p2,plusFuns0)
+
+    class MergeAgg(
+        p: NameTupleOp,
+        keysKept: Collection<String>,
+        plusFuns0: Map<String, PlusFun<*>>
+    ) : MergeUnion0(p,
+        p2 = Empty(NameSchema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
+        plusFuns0 = plusFuns0)
+  }
+
+  data class NameRename(
+      val p: NameTupleOp,
+      val renameMap: Map<String,String>
+  ) : NameTupleOp(p.resultSchema.let { NameSchema(
+      it.keys.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr },
+      it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
+  ) })
+
+
+  data class MergeJoin(
+      val p1: NameTupleOp,
+      val p2: NameTupleOp,
+      val timesFuns: Map<String,TimesFun<*,*,*>>
+  ): NameTupleOp(NameSchema(
+      keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
+      vals = intersectValues(p1.resultSchema.vals,p2.resultSchema.vals, timesFuns)
+  )) {
+    init {
+
+    }
+
+    companion object {
+      // similar to unionValues() in MergeUnion
+      private fun unionKeys(a: List<Attribute<*>>, b: List<Attribute<*>>): List<Attribute<*>> {
+        return a + b.filter { bv ->
+          val av = a.find { it.name == bv.name }
+          if (av != null) {
+            require(av == bv) // calls equals() method
+            {"MergeJoin: key attributes $a and $b have an attribute with the same name but different types"}
+            false
+          } else true
+        }
+      }
+
+      private fun intersectValues(a: List<ValAttribute<*>>, b: List<ValAttribute<*>>,
+                                  timesFuns: Map<String, TimesFun<*, *, *>>): List<ValAttribute<*>> {
+        val res = a.filter { attr -> b.any { it.name == attr.name }
+//          val battr = b.findLast { it.name == attr.name }
+        }.map { attr ->
+          require(attr.name in timesFuns) {"no times operator for matching value attributes $attr"}
+          val battr = b.find { it.name == attr.name }!!
+          val times = timesFuns[attr.name]!!
+          require(attr.default == times.leftAnnihilator)
+          {"for attribute ${attr.name}, left default value ${attr.default} != times fun left annihilator ${times.leftAnnihilator}"}
+          require(battr.default == times.rightAnnihilator)
+          {"for attribute ${attr.name}, right default value ${battr.default} != times fun right annihilator ${times.rightAnnihilator}"}
+          multiplyTypeGet(attr.name, times)
+        }
+        require(timesFuns.size == res.size) {"mismatched number of times functions provided, $timesFuns for result value attributes $res"}
+        return res
+      }
+
+      /* d1 and d2 must be Any?, to satisfy type-checker */
+      private inline fun <T1,T2,reified T3> multiplyTypeGet(name: String, times: TimesFun<T1,T2,T3>) = ValAttribute(
+          name,
+          T3::class.java,
+          times.resultZero
+      )
+
+    }
+
+  }
+
+
 }
-interface PosTuple {
-  val attrs: List<*>
-}
+
+
+
+
+///* First lower to keep the names with the scheams. Then erase the names.
+// */
+//
+//interface PosSchema {
+//  val names: List<String>
+//  val types: List<Attribute<*>>
+//}
+//interface PosTuple {
+//  val attrs: List<*>
+//}
