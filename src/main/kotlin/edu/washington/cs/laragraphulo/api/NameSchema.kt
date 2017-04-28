@@ -1,5 +1,8 @@
 package edu.washington.cs.laragraphulo.api
 
+import org.apache.accumulo.core.client.lexicoder.Lexicoder
+import org.apache.accumulo.core.client.lexicoder.impl.AbstractLexicoder
+
 
 // ======================= HELPER FUNCTIONS
 
@@ -19,11 +22,41 @@ fun NameTuple.copyDefault(ns: NameSchema): NameTuple {
 
 
 // ======================= ATTRIBUTES
+const val ZERO_BYTE: Byte = 0
+val SINGLE_ZERO = byteArrayOf(ZERO_BYTE) // sort null values first
+
+/** Would this come in handy? Uses an extra byte to flag null values. Probably not. */
+class NullLexicoder<T>(
+    private val lexicoder: Lexicoder<T>
+) : AbstractLexicoder<T>() {
+  override fun encode(v: T): ByteArray {
+    return if (v == null) {
+      SINGLE_ZERO
+    } else {
+      val e = lexicoder.encode(v)
+      val r = ByteArray(e.size+1)
+      r[0] = 1
+      System.arraycopy(e,0,r,1,e.size)
+      r
+    }
+  }
+
+  override fun decodeUnchecked(b: ByteArray, offset: Int, len: Int): T? {
+    return if (b.size == 1 && b[0] == ZERO_BYTE) null
+    else decodeUnchecked(b, 1, b.size-1)
+  }
+}
+
+// Idea: create a Type class instead of this class approach
+// See the sealed Type class in the other package
+//sealed class Type<T> {
+//}
 
 open class Attribute<out T>(
     val name: String,
     val type: Class<out T>
 ) : Comparable<Attribute<*>> {
+//  val type = sample0 ?: throw IllegalArgumentException("passed in a null type for attribute $name")
 
   open fun withNewName(n: String) = Attribute(n, type)
 
@@ -251,10 +284,16 @@ sealed class NameTupleOp(
   )) {
     init {
       require(resultSchema.vals.map(ValAttribute<*>::name).containsAll(plusFuns0.keys)) {"plus functions provided for values that do not exist"}
+      plusFuns0.forEach { name, pf ->
+        val d = resultSchema.vals.find { it.name == name }!!.default
+        pf.verifyIdentity()
+        require(pf.identity == d) {"plus function for $name does not match identity of parent: $d"}
+      }
     }
 
     val plusFuns: Map<String, PlusFun<*>> = resultSchema.vals.map { va ->
-      va.name to (plusFuns0[va.name] ?: PlusFun.plusErrorFun(va.default))
+      val pf = plusFuns0[va.name] ?: PlusFun.plusErrorFun(va.default)
+      va.name to pf
     }.toMap()
 
     override fun toString(): String {

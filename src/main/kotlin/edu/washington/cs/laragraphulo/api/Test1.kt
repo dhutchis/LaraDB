@@ -13,7 +13,7 @@ val attrC = Attribute("c", String::class.java)
 val attrTp = Attribute("t'", Long::class.java)
 val attrVn = ValAttribute("v", Double::class.java, null) // May need to revisit including type class objects, w.r.t. nullability
 val attrV0 = ValAttribute("v", Int::class.java, 0) 
-val attrV00 = ValAttribute("v", Double::class.java, 0.0) 
+//val attrV00 = ValAttribute("v", Double::class.java, 0.0)
 val attrCnt = ValAttribute("cnt", Int::class.java, 0)
 
 val nullTuple: NameTuple = mapOf("v" to null)
