@@ -2,11 +2,12 @@ package edu.washington.cs.laragraphulo.api
 import edu.washington.cs.laragraphulo.api.NameTupleOp.*
 import edu.washington.cs.laragraphulo.api.NameTupleOp.MergeUnion0.*
 
-/**
- * Example queries given with the NameSchema Lara API.
+/*
+ * Example queries given with the a Lara API based on attributes-by-name.
  */
 
-// =========== ATTRIBUTEs
+
+// =============== ATTRIBUTEs
 val attrT = Attribute("t", Long::class.java)
 val attrC = Attribute("c", String::class.java)
 val attrTp = Attribute("t'", Long::class.java)
@@ -19,14 +20,14 @@ val nullTuple: NameTuple = mapOf("v" to null)
 val zeroIntTuple: NameTuple = mapOf("v" to 0)
 
 
-// =========== SCHEMAs
+// =============== SCHEMAs
 val initialSchema = NameSchema(
     keys = listOf(attrT, attrC),
     vals = listOf(attrVn)
 )
 
 
-// =========== UDFs
+// =============== UDFs
 const val MIN_TIME = 0L
 const val MAX_TIME = Long.MAX_VALUE
 const val BIN_SIZE = 60
@@ -53,12 +54,8 @@ val divideVnCntFun = NameMapFun(listOf(attrVn)) { tuple ->
   tuple - "cnt" + ("v" to res)
 }
 
-val subtractVn = TimesFun<Double?,Double?,Double?>(null, null) { a, b ->
-  if (a != null && b != null) a - b else null
-}
-val multiplyVn = TimesFun<Double?,Double?,Double?>(null, null) { a, b ->
-  if (a != null && b != null) a * b else null
-}
+val subtractVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(Double::minus)
+val multiplyVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(Double::times)
 val divideMinusOneFun = TimesFun<Double?,Int,Double?>(null, 0) { a, b ->
   if (a != null && b != 0) a / (b - 1) else null
 }
@@ -71,7 +68,7 @@ val plusIntFun = PlusFun(0, Int::plus)
 val plusDoubleNullFun = PlusFun.plusWithNullIdentityFun<Double>(Double::plus)
 
 
-// =========== QUERY
+// =============== QUERY
 val X = listOf(
     Load("tableA", initialSchema),
     Load("tableB", initialSchema)

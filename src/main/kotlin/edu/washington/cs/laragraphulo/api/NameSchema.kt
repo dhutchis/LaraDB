@@ -142,7 +142,7 @@ class PlusFun<T>(
   }
 
   companion object {
-    /** Forces a function to have an identity. */
+    /** Wraps a function to have an identity. */
     inline fun <T> plusWithIdentityFun(id: T, crossinline plusFun: (T,T) -> T) = PlusFun(id) { a, b ->
       when {
         a == id -> b
@@ -151,7 +151,7 @@ class PlusFun<T>(
       }
     }
 
-    /** Forces a function to have identity null. */
+    /** Wraps a function to have identity null (that is zero-sum-free). */
     inline fun <T : Any> plusWithNullIdentityFun(crossinline plusFun: (T,T) -> T): PlusFun<T?> {
       return PlusFun<T?>(null) { a, b ->
         when {
@@ -187,7 +187,7 @@ class TimesFun<T1,T2,out T3>(
   }
 
   companion object {
-    /** Forces a function to have these annihilators. */
+    /** Wraps a function to have these annihilators. */
     inline fun <T1, T2, T3> timesWithAnnihilatorsFun(
         leftAnnihilator: T1, rightAnnihilator: T2,
         crossinline timesFun: (T1, T2) -> T3
@@ -195,6 +195,15 @@ class TimesFun<T1,T2,out T3>(
       val resultZero = timesFun(leftAnnihilator, rightAnnihilator)
       return TimesFun(leftAnnihilator, rightAnnihilator) { a, b ->
         if (a == leftAnnihilator || b == rightAnnihilator) resultZero else timesFun(a, b)
+      }
+    }
+
+    /** Wraps a function to have null annihilators (with zero product property). */
+    inline fun <T1, T2, T3> timesWithNullAnnihilatorsFun(
+        crossinline timesFun: (T1, T2) -> T3
+    ): TimesFun<T1?, T2?, T3?> {
+      return TimesFun<T1?, T2?, T3?>(null, null) { a, b ->
+        if (a == null || b == null) null else timesFun(a, b)
       }
     }
   }
