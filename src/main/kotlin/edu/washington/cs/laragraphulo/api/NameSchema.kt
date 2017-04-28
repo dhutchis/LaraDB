@@ -1,5 +1,8 @@
 package edu.washington.cs.laragraphulo.api
 
+
+// ======================= HELPER FUNCTIONS
+
 fun <E> Collection<E>.disjoint(other: Collection<E>): Boolean {
   return this.none { other.contains(it) }
 }
@@ -34,6 +37,18 @@ fun <K,V> List<Map<K,V>>.unionAndCheckMatching(): Map<K,V> {
   }
 }
 
+/**
+ * Return a NameTuple with the same keys but the values set to the default values.
+ */
+fun NameTuple.copyDefault(ns: NameSchema): NameTuple {
+  require(this.keys == (ns.keyTypes.keys + ns.valTypes.keys))
+  return this.mapValues { (attr, value) ->
+    ns.valTypes[attr]?.default ?: value
+  }
+}
+
+
+// ======================= ATTRIBUTES
 
 interface Attribute<out T> {
   val type: Class<out T>
@@ -51,17 +66,13 @@ data class ValAttributeImpl<out T>(
     override val default: T
 ) : ValAttribute<T>
 
-///** ND for No Default */
-//interface NameSchemaND {
-//  val keyTypes: Map<String,Attribute<*>>
-//  val valTypes: Map<String,Attribute<*>>
-//}
+
+// ======================= SCHEMA
 
 interface NameSchema {
   val keyTypes: Map<String,Attribute<*>>
   val valTypes: Map<String,ValAttribute<*>>
   fun validate() {
-    // check key and val types disjoint
     require(keyTypes.keys.disjoint(valTypes.keys)) { "keys and vals overlap: $keyTypes, $valTypes" }
   }
 }
@@ -72,21 +83,13 @@ data class NameSchemaImpl(
 ) : NameSchema
 
 
+// ======================= TUPLE
+
 typealias NameTuple = Map<String,*>
 
-/**
- * Return a NameTuple with the same keys but the values set to the default values.
- */
-fun NameTuple.copyDefault(ns: NameSchema): NameTuple {
-  require(this.keys == (ns.keyTypes.keys + ns.valTypes.keys))
-  return this.mapValues { (attr, value) ->
-    ns.valTypes[attr]?.default ?: value
-  }
-}
 
-interface NameTupleOp {
-  val schema: NameSchema
-}
+
+// ======================= UDFs
 
 interface NameExtFun : (NameTuple) -> List<NameTuple> {
   val schema: NameSchema
@@ -126,24 +129,6 @@ class NameMapFunImpl(
   }
 }
 
-data class NameExt(
-    val parent: NameTupleOp,
-    val extFun: NameExtFun
-): NameTupleOp {
-  override val schema: NameSchema = {
-    val pk = parent.schema.keyTypes
-    val s2 = extFun.schema
-    require(s2.keyTypes.keys.disjoint(pk.keys)) {"keys and new keys overlap: $pk, ${s2.keyTypes}"}
-    NameSchemaImpl(pk + s2.keyTypes, s2.valTypes)
-  }()
-}
-
-data class NameLoad(
-    val table: String,
-    override val schema: NameSchema
-): NameTupleOp
-
-
 interface NamePlusFun<T>: (T, T) -> T {
   val identity: T
 
@@ -151,10 +136,10 @@ interface NamePlusFun<T>: (T, T) -> T {
     fun <T> errorNamePlusFun(id: T) = object : NamePlusFun<T> {
       override val identity: T = id
       override fun invoke(p1: T, p2: T): T = when {
-         p1 == identity -> p2
-         p2 == identity -> p1
-         else -> throw IllegalStateException("no plus function defined for this attribute, yet non-identity values $p1 and $p2 are to be added")
-       }
+        p1 == identity -> p2
+        p2 == identity -> p1
+        else -> throw IllegalStateException("no plus function defined for this attribute, yet non-identity values $p1 and $p2 are to be added")
+      }
     }
   }
 }
@@ -179,6 +164,36 @@ class NameTimesFunImpl<T1,T2,out T3>(
 ): NameTimesFun<T1,T2,T3> {
   override fun invoke(p1: T1, p2: T2): T3 = timesFun(p1, p2)
 }
+
+
+// ======================= OPERATORS
+
+
+interface NameTupleOp {
+  val schema: NameSchema
+}
+
+
+
+data class NameExt(
+    val parent: NameTupleOp,
+    val extFun: NameExtFun
+): NameTupleOp {
+  override val schema: NameSchema = {
+    val pk = parent.schema.keyTypes
+    val s2 = extFun.schema
+    require(s2.keyTypes.keys.disjoint(pk.keys)) {"keys and new keys overlap: $pk, ${s2.keyTypes}"}
+    NameSchemaImpl(pk + s2.keyTypes, s2.valTypes)
+  }()
+}
+
+data class NameLoad(
+    val table: String,
+    override val schema: NameSchema
+): NameTupleOp
+
+
+
 
 /**
  * Restricted to two parents. Future work could extend this to any number of parents.
