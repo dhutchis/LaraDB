@@ -183,10 +183,10 @@ class NameTimesFunImpl<T1,T2,out T3>(
 /**
  * Restricted to two parents. Future work could extend this to any number of parents.
  */
-class NameMergeUnion(
+open class NameMergeUnion(
     val p1: NameTupleOp,
     val p2: NameTupleOp,
-    plusFuns0: Map<String,NamePlusFun<*>>
+    plusFuns0: Map<String, NamePlusFun<*>>
 ): NameTupleOp {
   override val schema: NameSchema =
     NameSchemaImpl(keyTypes = listOf(p1.schema.keyTypes,p2.schema.keyTypes).intersectAndCheckMatching(),
@@ -223,6 +223,30 @@ class NameMergeUnion(
     return result
   }
 }
+
+class NameMergeAgg(
+    p: NameTupleOp,
+    keysKept: Collection<String>,
+    plusFuns0: Map<String, NamePlusFun<*>>
+) : NameMergeUnion(p,
+      p2 = NameEmpty(NameSchemaImpl(p.schema.keyTypes.filterKeys { it in keysKept }, mapOf())),
+      plusFuns0 = plusFuns0)
+
+data class NameEmpty(
+    override val schema: NameSchema
+) : NameTupleOp
+
+data class NameRename(
+    val p: NameTupleOp,
+    val renameMap: Map<String,String>
+) : NameTupleOp {
+  override val schema = p.schema.let { NameSchemaImpl(
+      it.keyTypes.mapKeys { (k,_) -> renameMap[k] ?: k },
+      it.valTypes.mapKeys { (k,_) -> renameMap[k] ?: k }
+  ) }
+}
+
+// idea: make NameTupleOp into a sealed class
 
 data class NameMergeJoin(
     val p1: NameTupleOp,
