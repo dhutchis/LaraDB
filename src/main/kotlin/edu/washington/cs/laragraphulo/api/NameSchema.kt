@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.api
 
+import edu.washington.cs.laragraphulo.opt.Name
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import org.apache.accumulo.core.client.lexicoder.impl.AbstractLexicoder
 
@@ -53,12 +54,12 @@ class NullLexicoder<T>(
 //}
 
 open class Attribute<out T>(
-    val name: String,
+    val name: Name,
     val type: Class<out T>
 ) : Comparable<Attribute<*>> {
 //  val type = sample0 ?: throw IllegalArgumentException("passed in a null type for attribute $name")
 
-  open fun withNewName(n: String) = Attribute(n, type)
+  open fun withNewName(n: Name) = Attribute(n, type)
 
   override fun toString(): String {
     return "Attribute(name='$name', type=$type)"
@@ -87,12 +88,12 @@ open class Attribute<out T>(
 }
 
 class ValAttribute<out T>(
-    name: String,
+    name: Name,
     type: Class<out T>,
     val default: T
 ) : Attribute<T>(name, type) {
 
-  override fun withNewName(n: String) = ValAttribute(n, type, default)
+  override fun withNewName(n: Name) = ValAttribute(n, type, default)
 
   override fun toString(): String {
     return "ValAttribute(name='$name', type=$type, default=$default)"
@@ -133,16 +134,16 @@ data class NameSchema(
     require(kns.disjoint(vns)) { "keys and vals overlap: $keys, $vals" }
   }
 
-  operator fun get(n: String): Attribute<*>? =
+  operator fun get(n: Name): Attribute<*>? =
       keys.find { it.name == n } ?: vals.find { it.name == n }
 
-  fun getValue(n: String): ValAttribute<*>? =
+  fun getValue(n: Name): ValAttribute<*>? =
       vals.find { it.name == n }
 }
 
 // ======================= TUPLE
 
-typealias NameTuple = Map<String,*>
+typealias NameTuple = Map<Name,*>
 
 
 
@@ -277,7 +278,7 @@ sealed class NameTupleOp(
   sealed class MergeUnion0(
       val p1: NameTupleOp,
       val p2: NameTupleOp,
-      plusFuns0: Map<String, PlusFun<*>>
+      plusFuns0: Map<Name, PlusFun<*>>
   ): NameTupleOp(NameSchema(
       keys = intersectKeys(p1.resultSchema.keys,p2.resultSchema.keys),
       vals = unionValues(p1.resultSchema.vals,p2.resultSchema.vals)
@@ -291,7 +292,7 @@ sealed class NameTupleOp(
       }
     }
 
-    val plusFuns: Map<String, PlusFun<*>> = resultSchema.vals.map { va ->
+    val plusFuns: Map<Name, PlusFun<*>> = resultSchema.vals.map { va ->
       val pf = plusFuns0[va.name] ?: PlusFun.plusErrorFun(va.default)
       va.name to pf
     }.toMap()
@@ -357,13 +358,13 @@ sealed class NameTupleOp(
     class MergeUnion(
         p1: NameTupleOp,
         p2: NameTupleOp,
-        plusFuns0: Map<String, PlusFun<*>>
+        plusFuns0: Map<Name, PlusFun<*>>
     ) : MergeUnion0(p1,p2,plusFuns0)
 
     class MergeAgg(
         p: NameTupleOp,
-        keysKept: Collection<String>,
-        plusFuns0: Map<String, PlusFun<*>>
+        keysKept: Collection<Name>,
+        plusFuns0: Map<Name, PlusFun<*>>
     ) : MergeUnion0(p,
         p2 = Empty(NameSchema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
         plusFuns0 = plusFuns0)
@@ -371,7 +372,7 @@ sealed class NameTupleOp(
 
   data class NameRename(
       val p: NameTupleOp,
-      val renameMap: Map<String,String>
+      val renameMap: Map<Name,Name>
   ) : NameTupleOp(p.resultSchema.let { NameSchema(
       it.keys.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr },
       it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
@@ -381,7 +382,7 @@ sealed class NameTupleOp(
   data class MergeJoin(
       val p1: NameTupleOp,
       val p2: NameTupleOp,
-      val timesFuns: Map<String,TimesFun<*,*,*>>
+      val timesFuns: Map<Name,TimesFun<*,*,*>>
   ): NameTupleOp(NameSchema(
       keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
       vals = intersectValues(p1.resultSchema.vals,p2.resultSchema.vals, timesFuns)
@@ -404,7 +405,7 @@ sealed class NameTupleOp(
       }
 
       private fun intersectValues(a: List<ValAttribute<*>>, b: List<ValAttribute<*>>,
-                                  timesFuns: Map<String, TimesFun<*, *, *>>): List<ValAttribute<*>> {
+                                  timesFuns: Map<Name, TimesFun<*, *, *>>): List<ValAttribute<*>> {
         val res = a.filter { attr -> b.any { it.name == attr.name }
 //          val battr = b.findLast { it.name == attr.name }
         }.map { attr ->
@@ -422,7 +423,7 @@ sealed class NameTupleOp(
       }
 
       /* d1 and d2 must be Any?, to satisfy type-checker */
-      private inline fun <T1,T2,reified T3> multiplyTypeGet(name: String, times: TimesFun<T1,T2,T3>) = ValAttribute(
+      private inline fun <T1,T2,reified T3> multiplyTypeGet(name: Name, times: TimesFun<T1,T2,T3>) = ValAttribute(
           name,
           T3::class.java,
           times.resultZero
@@ -442,7 +443,7 @@ sealed class NameTupleOp(
 // */
 //
 //interface PosSchema {
-//  val names: List<String>
+//  val names: List<Name>
 //  val types: List<Attribute<*>>
 //}
 //interface PosTuple {
