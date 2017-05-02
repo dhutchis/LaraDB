@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.api
 import edu.washington.cs.laragraphulo.api.NameTupleOp.*
+import edu.washington.cs.laragraphulo.api.LType.*
 import edu.washington.cs.laragraphulo.api.NameTupleOp.MergeUnion0.*
 
 /*
@@ -8,13 +9,13 @@ import edu.washington.cs.laragraphulo.api.NameTupleOp.MergeUnion0.*
 
 
 // =============== ATTRIBUTEs
-val attrT = Attribute("t", Long::class.java)
-val attrC = Attribute("c", String::class.java)
-val attrTp = Attribute("t'", Long::class.java)
-val attrVn = ValAttribute("v", Double::class.java, null) // May need to revisit including type class objects, w.r.t. nullability
-val attrV0 = ValAttribute("v", Int::class.java, 0) 
+val attrT = Attribute("t", ULONG)
+val attrC = Attribute("c", STRING)
+val attrTp = Attribute("t'", ULONG)
+val attrVn = ValAttribute("v", NDOUBLE, null) // May need to revisit including type class objects, w.r.t. nullability
+val attrV0 = ValAttribute("v", DOUBLE, 0.0)
 //val attrV00 = ValAttribute("v", Double::class.java, 0.0)
-val attrCnt = ValAttribute("cnt", Int::class.java, 0)
+val attrCnt = ValAttribute("cnt", UINT, 0)
 
 val nullTuple: NameTuple = mapOf("v" to null)
 val zeroIntTuple: NameTuple = mapOf("v" to 0)
@@ -54,9 +55,9 @@ val divideVnCntFun = NameMapFun(listOf(attrVn)) { tuple ->
   tuple - "cnt" + ("v" to res)
 }
 
-val subtractVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(Double::minus)
-val multiplyVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(Double::times)
-val divideMinusOneFun = TimesFun<Double?,Int,Double?>(null, 0) { a, b ->
+val subtractVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(NDOUBLE, Double::minus)
+val multiplyVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(NDOUBLE, Double::times)
+val divideMinusOneFun = TimesFun<Double?,Int,Double?>(null, 0, NDOUBLE) { a, b ->
   if (a != null && b != 0) a / (b - 1) else null
 }
 

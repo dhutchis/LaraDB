@@ -48,16 +48,11 @@ class NullLexicoder<T>(
   }
 }
 
-// Idea: create a Type class instead of this class approach
-// See the sealed Type class in the other package
-//sealed class Type<T> {
-//}
 
-open class Attribute<out T>(
+open class Attribute<T>(
     val name: Name,
-    val type: Class<out T>
-) : Comparable<Attribute<*>> {
-//  val type = sample0 ?: throw IllegalArgumentException("passed in a null type for attribute $name")
+    val type: LType<T>
+) : Comparable<Attribute<T>> {
 
   open fun withNewName(n: Name) = Attribute(n, type)
 
@@ -84,12 +79,12 @@ open class Attribute<out T>(
   }
 
   /** Careful: this returns 0 on objects that are not equal */
-  override fun compareTo(other: Attribute<*>): Int = name.compareTo(other.name)
+  override fun compareTo(other: Attribute<T>): Int = name.compareTo(other.name)
 }
 
-class ValAttribute<out T>(
+class ValAttribute<T>(
     name: Name,
-    type: Class<out T>,
+    type: LType<T>,
     val default: T
 ) : Attribute<T>(name, type) {
 
@@ -169,10 +164,10 @@ class NameMapFun(
 
 class PlusFun<T>(
     val identity: T,
-    val plusFun: (T, T) -> T
+    val plus: (T, T) -> T
 ) {
   fun verifyIdentity(a: T = identity) {
-    check(plusFun(a,identity) == a && plusFun(identity,a) == a) {"Value $a violates the identity requirement of plus for identity $identity"}
+    check(plus(a,identity) == a && plus(identity,a) == a) {"Value $a violates the identity requirement of plus for identity $identity"}
   }
 
   companion object {
@@ -209,14 +204,15 @@ class PlusFun<T>(
 
 
 
-class TimesFun<T1,T2,out T3>(
+class TimesFun<T1,T2,T3>(
     val leftAnnihilator: T1,
     val rightAnnihilator: T2,
-    val timesFun: (T1, T2) -> T3
+    val resultType: LType<T3>, // (PType<T1>, PType<T2>) -> PType<T3>
+    val times: (T1, T2) -> T3
 ) {
-  val resultZero = timesFun(leftAnnihilator, rightAnnihilator)
+  val resultZero: T3 = times(leftAnnihilator, rightAnnihilator)
   fun verifyAnnihilator(a: T1 = leftAnnihilator, b: T2 = rightAnnihilator) {
-    check(timesFun(a,rightAnnihilator) == resultZero && timesFun(leftAnnihilator,b) == resultZero)
+    check(times(a,rightAnnihilator) == resultZero && times(leftAnnihilator,b) == resultZero)
     { "Value $a and $b violate the annihilator requirement of times for annihilators $leftAnnihilator and $rightAnnihilator" }
   }
 
@@ -224,25 +220,26 @@ class TimesFun<T1,T2,out T3>(
     /** Wraps a function to have these annihilators. */
     inline fun <T1, T2, T3> timesWithAnnihilatorsFun(
         leftAnnihilator: T1, rightAnnihilator: T2,
+        resultType: LType<T3>,
         crossinline timesFun: (T1, T2) -> T3
     ): TimesFun<T1, T2, T3> {
       val resultZero = timesFun(leftAnnihilator, rightAnnihilator)
-      return TimesFun(leftAnnihilator, rightAnnihilator) { a, b ->
+      return TimesFun(leftAnnihilator, rightAnnihilator, resultType) { a, b ->
         if (a == leftAnnihilator || b == rightAnnihilator) resultZero else timesFun(a, b)
       }
     }
 
     /** Wraps a function to have null annihilators (with zero product property). */
     inline fun <T1, T2, T3> timesWithNullAnnihilatorsFun(
+        resultType: LType<T3?>,
         crossinline timesFun: (T1, T2) -> T3
-    ): TimesFun<T1?, T2?, T3?> {
-      return TimesFun<T1?, T2?, T3?>(null, null) { a, b ->
-        if (a == null || b == null) null else timesFun(a, b)
-      }
+    ): TimesFun<T1?, T2?, T3?> = TimesFun<T1?, T2?, T3?>(null, null, resultType) { a, b ->
+      if (a == null || b == null) null else timesFun(a, b)
     }
   }
 }
 
+// use a map from Java class to most common PType for that class
 
 
 // ======================= OPERATORS
@@ -406,31 +403,28 @@ sealed class NameTupleOp(
 
       private fun intersectValues(a: List<ValAttribute<*>>, b: List<ValAttribute<*>>,
                                   timesFuns: Map<Name, TimesFun<*, *, *>>): List<ValAttribute<*>> {
-        val res = a.filter { attr -> b.any { it.name == attr.name }
-//          val battr = b.findLast { it.name == attr.name }
-        }.map { attr ->
-          require(attr.name in timesFuns) {"no times operator for matching value attributes $attr"}
-          val battr = b.find { it.name == attr.name }!!
-          val times = timesFuns[attr.name]!!
-          require(attr.default == times.leftAnnihilator)
-          {"for attribute ${attr.name}, left default value ${attr.default} != times fun left annihilator ${times.leftAnnihilator}"}
-          require(battr.default == times.rightAnnihilator)
-          {"for attribute ${attr.name}, right default value ${battr.default} != times fun right annihilator ${times.rightAnnihilator}"}
-          multiplyTypeGet(attr.name, times)
-        }
+        val res = a.filter { attr -> b.any { it.name == attr.name } }
+            .map { attr ->
+              require(attr.name in timesFuns) {"no times operator for matching value attributes $attr"}
+              val battr = b.find { it.name == attr.name }!!
+              val times: TimesFun<*, *, *> = timesFuns[attr.name]!!
+              require(attr.default == times.leftAnnihilator)
+              {"for attribute ${attr.name}, left default value ${attr.default} != times fun left annihilator ${times.leftAnnihilator}"}
+              require(battr.default == times.rightAnnihilator)
+              {"for attribute ${attr.name}, right default value ${battr.default} != times fun right annihilator ${times.rightAnnihilator}"}
+//              ValAttribute(attr.name, times.resultType, times.resultZero)
+              multiplyTypeGet(attr.name, times)
+            }
         require(timesFuns.size == res.size) {"mismatched number of times functions provided, $timesFuns for result value attributes $res"}
         return res
       }
 
-      /* d1 and d2 must be Any?, to satisfy type-checker */
-      private inline fun <T1,T2,reified T3> multiplyTypeGet(name: Name, times: TimesFun<T1,T2,T3>) = ValAttribute(
+      private fun <T1,T2,T3> multiplyTypeGet(name: Name, times: TimesFun<T1,T2,T3>) = ValAttribute<T3>(
           name,
-          T3::class.java,
+          times.resultType,
           times.resultZero
       )
-
     }
-
   }
 
 
