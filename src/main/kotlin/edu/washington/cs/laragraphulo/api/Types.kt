@@ -14,7 +14,7 @@ typealias NOPE = UnsupportedOperationException
 
 /** Logical Type. Used for specifying UDFs.
  * A default physical type that implements this logical type is [defaultPhysical]. */
-sealed class LType<T> {
+sealed class LType<T> : Comparator<T> {
   /** Example values of this type. */
   abstract val examples: Set<T>
   /** What values of T are valid for this type?
@@ -25,14 +25,14 @@ sealed class LType<T> {
   override abstract fun toString(): String
 
   /** ex: Measurement value, nullable */
-  object NDOUBLE : LType<Double?>() {
+  object NDOUBLE : LType<Double?>(), Comparator<Double?> by nullsFirst<Double>() {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE.nullable
     override fun toString() = "L-NDOUBLE"
   }
 
   /** Unsigned long, like a timestamp. */
-  object ULONG : LType<Long>() {
+  object ULONG : LType<Long>(), Comparator<Long> by naturalOrder<Long>() {
     override val examples: Set<Long> = setOf(0, 100, Long.MAX_VALUE)
     override fun valid(t: Long): Boolean = t >= 0
     override val defaultPhysical = PType.LONG // todo: add a ULONG physical type. Same with UINT below.
@@ -40,21 +40,21 @@ sealed class LType<T> {
   }
 
   /** ex: Measurement class */
-  object STRING : LType<String>() {
+  object STRING : LType<String>(), Comparator<String> by naturalOrder<String>() {
     override val examples: Set<String> = setOf("", "temperature", "humidity")
     override val defaultPhysical = PType.STRING
     override fun toString() = "L-STRING"
   }
 
   /** ex: Measurement value, always present */
-  object DOUBLE : LType<Double>() {
+  object DOUBLE : LType<Double>(), Comparator<Double> by naturalOrder<Double>() {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE
     override fun toString() = "L-DOUBLE"
   }
 
   /** ex: Count */
-  object UINT : LType<Int>() {
+  object UINT : LType<Int>(), Comparator<Int> by naturalOrder<Int>() {
     override val examples: Set<Int> = setOf(0, 1, 2, 20, Int.MAX_VALUE)
     override fun valid(t: Int): Boolean = t >= 0
     override val defaultPhysical = PType.INT
@@ -110,9 +110,9 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
 
   abstract val nullable: PType<T?>
 
-  private class NPType<T>(
+  private class NPType<T : Any>(
       val p: PType<T>
-  ) : PType<T?>() {
+  ) : PType<T?>(), Comparator<T?> by nullsFirst(p) {
     override fun decode(b: ByteArray, off: Int, len: Int) = p.decode(b, off, len)
     override val examples = p.examples
     override fun encode(v: T?): ByteArray {
@@ -150,7 +150,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   }
 
 
-  object UNKNOWN : PType<ABS>() {
+  object UNKNOWN : PType<ABS>(), Comparator<ABS> by naturalOrder<ABS>() {
     override val examples = setOf(EMPTY)
     override fun encode(v: ABS): ByteArray = v.toArray()
     override fun decode(b: ByteArray, off: Int, len: Int) = ABS(b,off,len)
@@ -167,7 +167,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   /** Fixed width int encoding.
    * This might not preserve the order of unsigned integers.
    * */
-  object INT : PType<Int>() {
+  object INT : PType<Int>(), Comparator<Int> by naturalOrder<Int>() {
     override val examples = setOf(0, -1, 1, Int.MIN_VALUE, Int.MAX_VALUE)
     override fun encode(v: Int): ByteArray = Ints.toByteArray(v)
     override fun decode(b: ByteArray, off: Int, len: Int): Int {
@@ -184,7 +184,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Int?> = NPType(this)
   }
   /** See [IntegerLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
-  object INT_VARIABLE : PType<Int>() {
+  object INT_VARIABLE : PType<Int>(), Comparator<Int> by naturalOrder() {
     override val examples = setOf(0, -1, 1, Int.MIN_VALUE, Int.MAX_VALUE)
     val lex = IntegerLexicoder()
     override fun encode(v: Int): ByteArray = lex.encode(v)
@@ -198,7 +198,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val defaultPhysical = this
     override val nullable: PType<Int?> = NPType(this)
   }
-  object LONG : PType<Long>() {
+  object LONG : PType<Long>(), Comparator<Long> by naturalOrder() {
     override val examples = setOf(0, -1, 1, Long.MIN_VALUE, Long.MAX_VALUE)
     override fun decode(b: ByteArray, off: Int, len: Int): Long = Longs.fromBytes(b[off],b[off+1],b[off+2],b[off+3],b[off+4],b[off+5],b[off+6],b[off+7])
     override fun encode(v: Long): ByteArray = Longs.toByteArray(v)
@@ -212,7 +212,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Long?> = NPType(this)
   }
   /** See [LongLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
-  object LONG_VARIABLE : PType<Long>() {
+  object LONG_VARIABLE : PType<Long>(), Comparator<Long> by naturalOrder() {
     override val examples = setOf(0, -1, 1, Long.MIN_VALUE, Long.MAX_VALUE)
     val lex = LongLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): Long = lex.decode(b, off, len)
@@ -226,7 +226,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val defaultPhysical = this
     override val nullable: PType<Long?> = NPType(this)
   }
-  object BOOLEAN : PType<Boolean>() {
+  object BOOLEAN : PType<Boolean>(), Comparator<Boolean> by naturalOrder() {
     override val examples = setOf(true, false)
     const val ZERO: Byte = 0
     override fun decode(b: ByteArray, off: Int, len: Int): Boolean = b[off] != ZERO
@@ -243,7 +243,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Boolean?> = NPType(this)
   }
   /** Encode in terms of long bits. Probably does not preserve order. */
-  object DOUBLE : PType<Double>() {
+  object DOUBLE : PType<Double>(), Comparator<Double> by naturalOrder() {
     override val examples = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override fun decode(b: ByteArray, off: Int, len: Int): Double = java.lang.Double.longBitsToDouble(LONG.decode(b, off, len))
     override fun encode(v: Double): ByteArray = LONG.encode(java.lang.Double.doubleToLongBits(v))
@@ -257,7 +257,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Double?> = NPType(this)
   }
   /** See [DoubleLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
-  object DOUBLE_VARIABLE : PType<Double>() {
+  object DOUBLE_VARIABLE : PType<Double>(), Comparator<Double> by naturalOrder() {
     override val examples = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     val lex = DoubleLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): Double = lex.decode(b, off, len)
@@ -272,7 +272,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Double?> = NPType(this)
   }
   /** UTF8 string encoding */
-  object STRING : PType<String>() {
+  object STRING : PType<String>(), Comparator<String> by naturalOrder() {
     override val examples = setOf("", "a", "A", "abcdefg")
     val lex = StringLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): String = lex.decode(b, off, len)
@@ -292,7 +292,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
 //    override fun encode(v: DateTime?): ByteArray = lex.encode(v)
 //  }
   /** 4 byte constant width. Probably does not preserve order */
-  object FLOAT : PType<Float>() {
+  object FLOAT : PType<Float>(), Comparator<Float> by naturalOrder() {
     override val examples = setOf(0.0f, 3.1f, 1.0f, -2.0f, -2.5f, Float.MAX_VALUE, -Float.MAX_VALUE, Float.MIN_VALUE, -Float.MIN_VALUE)
     override fun decode(b: ByteArray, off: Int, len: Int): Float = java.lang.Float.intBitsToFloat(INT.decode(b, off, len))
     override fun encode(v: Float): ByteArray = INT.encode(java.lang.Float.floatToIntBits(v))
@@ -306,7 +306,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Float?> = NPType(this)
   }
   /** See [FloatLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
-  object FLOAT_VARIABLE : PType<Float>() {
+  object FLOAT_VARIABLE : PType<Float>(), Comparator<Float> by naturalOrder() {
     override val examples = setOf(0.0f, 3.1f, 1.0f, -2.0f, -2.5f, Float.MAX_VALUE, -Float.MAX_VALUE, Float.MIN_VALUE, -Float.MIN_VALUE)
     val lex = FloatLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): Float = lex.decode(b, off, len)

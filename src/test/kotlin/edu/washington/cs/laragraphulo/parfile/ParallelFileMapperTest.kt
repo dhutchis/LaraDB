@@ -3,6 +3,7 @@ package edu.washington.cs.laragraphulo.parfile
 import org.junit.Assert
 import org.junit.Test
 import java.io.File
+import java.net.URL
 import java.nio.file.Files
 
 /**
@@ -35,9 +36,13 @@ class ParallelFileMapperTest {
 
 
     val ACTION = object : FileAction {
-      override fun run(f: File) {
-        val i = f.nameWithoutExtension.toInt()
-        Assert.assertEquals("Bad file $f; expected $i", i, f.readLines().first().toInt())
+      override fun run(f: URL) {
+        val p = f.path
+        println(p)
+        val lastPeriod = p.lastIndexOf('.')
+        val lastPeriod2 = p.lastIndexOf(File.separatorChar, lastPeriod-1)
+        val i = p.substring(lastPeriod2+1,lastPeriod).toInt()
+        Assert.assertEquals("Bad file $f; expected $i", i, f.openStream().reader().buffered().readLines().first().toInt())
       }
     }
 

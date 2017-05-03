@@ -1,6 +1,7 @@
 package edu.washington.cs.laragraphulo.parfile
 
 import java.io.File
+import java.net.URL
 import java.util.*
 
 
@@ -9,8 +10,8 @@ import java.util.*
  */
 @FunctionalInterface
 interface FileAction {
-  fun run(f: File) {
-    println(f.name)
+  fun run(f: URL) {
+    println(f.file)
   }
 }
 
@@ -55,7 +56,7 @@ class ParallelFileMapper(
   private fun tryFile(file: File) {
     val claimFile = lockDirectory.resolve(file.name + ".claim")
     if (claimFile.createNewFile()) {
-      action.run(file)
+      action.run(file.toURI().toURL())
       Thread.`yield`()
     }
   }

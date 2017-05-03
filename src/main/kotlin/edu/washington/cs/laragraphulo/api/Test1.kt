@@ -34,11 +34,11 @@ const val MAX_TIME = Long.MAX_VALUE
 const val BIN_SIZE = 60
 
 // idea: remove default value from schema in value attributes; compute in Ext NameTupleOp class
-val filterFun = NameMapFun(mapValues = listOf(attrVn)) { tuple ->
+val filterFun = MapFun(mapValues = listOf(attrVn)) { tuple ->
   if (tuple["t"] as Long in MIN_TIME..MAX_TIME) tuple else nullTuple
 }
 
-val binFun = NameExtFun(extSchema = NameSchema(listOf(attrTp), listOf(attrVn))) { tuple ->
+val binFun = ExtFun(extSchema = NameSchema(listOf(attrTp), listOf(attrVn))) { tuple ->
   val t = tuple["t"] as Long
   val tm = t % BIN_SIZE
   val tb = t - tm + (if (tm >= BIN_SIZE /2) BIN_SIZE else 0) // new t
@@ -46,10 +46,10 @@ val binFun = NameExtFun(extSchema = NameSchema(listOf(attrTp), listOf(attrVn))) 
   listOf(res)
 }
 
-val createCntFun = NameMapFun(listOf(attrVn, attrCnt)) { tuple ->
+val createCntFun = MapFun(listOf(attrVn, attrCnt)) { tuple ->
   tuple + ("cnt" to if (tuple["v"] != null) 1 else 0)
 }
-val divideVnCntFun = NameMapFun(listOf(attrVn)) { tuple ->
+val divideVnCntFun = MapFun(listOf(attrVn)) { tuple ->
   val v = tuple["v"]
   val res = if (v != null) v as Double / tuple["cnt"] as Int else null
   tuple - "cnt" + ("v" to res)
@@ -61,7 +61,7 @@ val divideMinusOneFun = TimesFun<Double?,Int,Double?>(null, 0, NDOUBLE) { a, b -
   if (a != null && b != 0) a / (b - 1) else null
 }
 
-val notNullFun = NameMapFun(listOf(attrV0)) { tuple ->
+val notNullFun = MapFun(listOf(attrV0)) { tuple ->
   if (tuple["v"] != null) tuple else zeroIntTuple
 }
 val anyFun = PlusFun(0) { a, b -> if (a != 0 || b != 0) 1 else 0 }
@@ -98,4 +98,6 @@ val C = MergeJoin(U, Rename(U, mapOf("c" to "c'")), mapOf("v" to multiplyVn))
     .run { Sort(this, listOf("c", "c'", "t'")) }
     .run { MergeAgg(this, setOf("c", "c'"), mapOf("v" to plusDoubleNullFun)) }
     .run { MergeJoin(this, N, mapOf("v" to divideMinusOneFun)) }
+
+//val S = Store(C, "tableC")
 

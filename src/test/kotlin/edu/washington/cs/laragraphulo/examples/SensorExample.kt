@@ -126,7 +126,7 @@ class SensorExample : AccumuloTestBase() {
       // Find the file that contains the sensor data and check that it exists.
       val url: URL = Thread.currentThread().contextClassLoader.getResource(filepath)
       Assert.assertNotNull(url)
-      val file = File(url.path)
+      val file = url
 
       // Create an action to parse the CSV file and ingest it into Accumulo.
       // See SensorFileAction for details.

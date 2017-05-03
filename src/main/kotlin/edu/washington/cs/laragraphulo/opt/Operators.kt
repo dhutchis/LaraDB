@@ -112,21 +112,19 @@ class CSVScan(
       }
       class ParseException : RuntimeException()
       try {
-        val attrs = csvRecord.zip(encoders).mapIndexed { i, pair ->
-          if (pair.second == null) null else {
+        val attrs = csvRecord.zip(encoders).mapIndexed { i, (record, encoder) ->
+          if (encoder == null) null else {
             try {
-              ArrayByteSequence(pair.second!!.encode(pair.first))
+              ArrayByteSequence(encoder.encode(record))
             } catch (e: Exception) {
-              logger.warn("Skipping row $linenumber column $i. Type: ${pair.second}. Value: ${pair.first}", e)
+              logger.warn("Skipping row $linenumber column $i. Type: ${encoder}. Value: ${record}", e)
               badrowCount++
               throw ParseException()
             }
           }
         }.filterNotNull()
         top = TupleImpl(attrs, EMPTY, ImmutableListMultimap.of())
-      } catch (e: ParseException) {
-
-      }
+      } catch (e: ParseException) {}
       linenumber++
     }
   }

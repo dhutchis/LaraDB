@@ -8,6 +8,7 @@ import org.apache.accumulo.core.data.Mutation
 import org.apache.hadoop.io.Text
 import java.io.File
 import java.io.PrintStream
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -20,14 +21,14 @@ val dateParserNoTime = SimpleDateFormat("yyyy-MM-dd").apply { timeZone = TimeZon
  */
 interface SensorFileAction : FileAction {
 
-  override fun run(f: File) {
+  override fun run(f: URL) {
     invoke(f)
   }
 
   /**
    * Run the action on the sensor file
    */
-  operator fun invoke(file: File): Long
+  operator fun invoke(file: URL): Long
 
 
   companion object {
@@ -36,13 +37,7 @@ interface SensorFileAction : FileAction {
       return SensorFileActionImpl({}, { _, t, c, v -> out.println("t:$t\tc:$c\tv:$v") }, { _ -> Unit })
     }
 
-    /** This should be defined inside the ingestAction method but some Kotlin Compiler error in 1.1-Beta2 prevents it. */
-    private data class IngestState(
-        val bw: BatchWriter,
-        var m: Mutation,// = Mutation(tConv(0L)),
-        var ms: Long = 0L
-//          , var cnt: Long = 0
-    )
+
 
     fun ingestAction(conn: Connector, table: String, encode: Boolean,
                      recreateTable: Boolean = false,
@@ -52,8 +47,15 @@ interface SensorFileAction : FileAction {
     ): SensorFileAction {
       require(partitions >= 1) {"bad partitions: $partitions"}
 
-      val tFirstFun: (File) -> Long = { file: File ->
-        file.useLines { lines ->
+      data class IngestState(
+          val bw: BatchWriter,
+          var m: Mutation,// = Mutation(tConv(0L)),
+          var ms: Long = 0L
+//          , var cnt: Long = 0
+      )
+
+      val tFirstFun: (URL) -> Long = { file ->
+        file.openStream().reader().buffered().useLines { lines ->
           for (line in lines) {
             if (line.isBlank()) continue
             val parts = line.split(';')
@@ -65,7 +67,7 @@ interface SensorFileAction : FileAction {
         }
       }
 
-      val beforeAction = { file: File ->
+      val beforeAction = { file: URL ->
         println("before: $file")
         val t = conn.tableOperations()
         if (recreateTable) {
@@ -120,16 +122,16 @@ interface SensorFileAction : FileAction {
 
 
   class SensorFileActionImpl<State>(
-      private val beforeAction: (File) -> State,
+      private val beforeAction: (URL) -> State,
       private val tcvAction: (s: State, t: Long, c: String, v: Double) -> State,
       private val afterAction: (s: State) -> Unit
   ) : SensorFileAction {
 
-    override operator fun invoke(file: File): Long {
+    override operator fun invoke(file: URL): Long {
       var s = beforeAction(file)
       var cnt = 0L
       try {
-        file.bufferedReader().useLines { lines ->
+        file.openStream().reader().buffered().useLines { lines ->
           lines.forEach { line ->
             //        2017-02-06 11:27:44.976000;coresense:3;TSYS01;temperature;8.22;NO_UNIT
 //        DATE;_;(CLASS;FAMILY);VALUE;_
