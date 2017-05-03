@@ -394,13 +394,22 @@ sealed class NameTupleOp(
     }
   }
 
-  data class NameRename(
+  data class Rename(
       val p: NameTupleOp,
       val renameMap: Map<Name,Name>
   ) : NameTupleOp(p.resultSchema.let { NameSchema(
       it.keys.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr },
       it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
   ) })
+
+  data class Sort(
+      val p: NameTupleOp,
+      val newSort: List<Name>
+  ) : NameTupleOp(NameSchema(
+      newSort.apply { require(this.toSet() == p.resultSchema.keys.map { it.name }.toSet()) {"not all names re-sorted: $newSort on ${p.resultSchema}"} }
+          .map { name -> p.resultSchema.keys.find{it.name == name}!! },
+      p.resultSchema.vals
+  ))
 
 
   data class MergeJoin(

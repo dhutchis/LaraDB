@@ -13,7 +13,7 @@ val attrT = Attribute("t", ULONG)
 val attrC = Attribute("c", STRING)
 val attrTp = Attribute("t'", ULONG)
 val attrVn = ValAttribute("v", NDOUBLE, null) // May need to revisit including type class objects, w.r.t. nullability
-val attrV0 = ValAttribute("v", DOUBLE, 0.0)
+val attrV0 = ValAttribute("v", UINT, 0)
 //val attrV00 = ValAttribute("v", Double::class.java, 0.0)
 val attrCnt = ValAttribute("cnt", UINT, 0)
 
@@ -76,7 +76,8 @@ val X = listOf(
 ).map { Ext(it, filterFun) }
     .map { Ext(it, binFun) }
     .map { Ext(it, createCntFun) }
-    .apply { println("after ext and create cnt: ${this.first()}") }
+//    .apply { println("after ext and create cnt: ${this.first().resultSchema}") }
+    .map { Sort(it, listOf("t'","c","t")) }
     .map { MergeAgg(it, setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) } // fails here; need a re-sort operation
     .map { Ext(it, divideVnCntFun) }
     .run { MergeJoin(this[0], this[1], mapOf("v" to subtractVn)) }
@@ -85,13 +86,16 @@ val N = Ext(X, notNullFun)
     .run { MergeAgg(this, setOf("t'"), mapOf("v" to anyFun)) }
     .run { MergeAgg(this, setOf(), mapOf("v" to plusIntFun)) }
 
-val M = Ext(X, createCntFun)
+val X0 = Sort(X, listOf("c", "t'"))
+
+val M = Ext(X0, createCntFun)
     .run { MergeAgg(this, setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) }
     .run { Ext(this, divideVnCntFun) }
 
-val U = MergeJoin(X, M, mapOf("v" to subtractVn))
+val U = MergeJoin(X0, M, mapOf("v" to subtractVn))
 
-val C = MergeJoin(U, NameRename(U, mapOf("c" to "c'")), mapOf("v" to multiplyVn))
+val C = MergeJoin(U, Rename(U, mapOf("c" to "c'")), mapOf("v" to multiplyVn))
+    .run { Sort(this, listOf("c", "c'", "t'")) }
     .run { MergeAgg(this, setOf("c", "c'"), mapOf("v" to plusDoubleNullFun)) }
     .run { MergeJoin(this, N, mapOf("v" to divideMinusOneFun)) }
 
