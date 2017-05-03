@@ -8,7 +8,7 @@ import edu.washington.cs.laragraphulo.api.NameTupleOp.MergeUnion0.*
  */
 
 
-// =============== ATTRIBUTEs
+// =============== ATTRIBUTEs (Types are given in Types.kt)
 val attrT = Attribute("t", ULONG)
 val attrC = Attribute("c", STRING)
 val attrTp = Attribute("t'", ULONG)
@@ -55,8 +55,8 @@ val divideVnCntFun = NameMapFun(listOf(attrVn)) { tuple ->
   tuple - "cnt" + ("v" to res)
 }
 
-val subtractVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(NDOUBLE, Double::minus)
-val multiplyVn = TimesFun.timesWithNullAnnihilatorsFun<Double,Double,Double>(NDOUBLE, Double::times)
+val subtractVn = TimesFun.withNullAnnihilators<Double,Double,Double>(NDOUBLE, Double::minus)
+val multiplyVn = TimesFun.withNullAnnihilators<Double,Double,Double>(NDOUBLE, Double::times)
 val divideMinusOneFun = TimesFun<Double?,Int,Double?>(null, 0, NDOUBLE) { a, b ->
   if (a != null && b != 0) a / (b - 1) else null
 }
@@ -66,7 +66,7 @@ val notNullFun = NameMapFun(listOf(attrV0)) { tuple ->
 }
 val anyFun = PlusFun(0) { a, b -> if (a != 0 || b != 0) 1 else 0 }
 val plusIntFun = PlusFun(0, Int::plus)
-val plusDoubleNullFun = PlusFun.plusWithNullIdentityFun<Double>(Double::plus)
+val plusDoubleNullFun = PlusFun.withNullIdentity<Double>(Double::plus)
 
 
 // =============== QUERY
@@ -76,7 +76,8 @@ val X = listOf(
 ).map { Ext(it, filterFun) }
     .map { Ext(it, binFun) }
     .map { Ext(it, createCntFun) }
-    .map { MergeAgg(it, setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) }
+    .apply { println("after ext and create cnt: ${this.first()}") }
+    .map { MergeAgg(it, setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) } // fails here; need a re-sort operation
     .map { Ext(it, divideVnCntFun) }
     .run { MergeJoin(this[0], this[1], mapOf("v" to subtractVn)) }
 

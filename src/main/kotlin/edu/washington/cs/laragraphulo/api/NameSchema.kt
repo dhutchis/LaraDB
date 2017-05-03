@@ -148,7 +148,11 @@ open class NameExtFun(
     /** The (to be appended) new key attributes and value attributes that the extFun produces */
     val extSchema: NameSchema,
     val extFun: (NameTuple) -> List<NameTuple>
-)
+) {
+  override fun toString(): String {
+    return "NameExtFun(extSchema=$extSchema, extFun=$extFun)"
+  }
+}
 
 /**
  * Must return default values when passed default values, for any key.
@@ -158,11 +162,15 @@ class NameMapFun(
     val mapValues: List<ValAttribute<*>>,
     val mapFun: (NameTuple) -> NameTuple
 ) : NameExtFun(extSchema = NameSchema(listOf(), mapValues),
-               extFun = { tuple -> listOf(mapFun(tuple)) })
+               extFun = { tuple -> listOf(mapFun(tuple)) }) {
+  override fun toString(): String {
+    return "NameMapFun(mapValues=$mapValues, mapFun=$mapFun)"
+  }
+}
 
 
 
-class PlusFun<T>(
+data class PlusFun<T>(
     val identity: T,
     val plus: (T, T) -> T
 ) {
@@ -172,7 +180,7 @@ class PlusFun<T>(
 
   companion object {
     /** Wraps a function to have an identity. */
-    inline fun <T> plusWithIdentityFun(id: T, crossinline plusFun: (T,T) -> T) = PlusFun(id) { a, b ->
+    inline fun <T> withIdentity(id: T, crossinline plusFun: (T,T) -> T) = PlusFun(id) { a, b ->
       when {
         a == id -> b
         b == id -> a
@@ -181,7 +189,7 @@ class PlusFun<T>(
     }
 
     /** Wraps a function to have identity null (that is zero-sum-free). */
-    inline fun <T : Any> plusWithNullIdentityFun(crossinline plusFun: (T,T) -> T): PlusFun<T?> {
+    inline fun <T : Any> withNullIdentity(crossinline plusFun: (T, T) -> T): PlusFun<T?> {
       return PlusFun<T?>(null) { a, b ->
         when {
           a == null -> b
@@ -204,7 +212,7 @@ class PlusFun<T>(
 
 
 
-class TimesFun<T1,T2,T3>(
+data class TimesFun<T1,T2,T3>(
     val leftAnnihilator: T1,
     val rightAnnihilator: T2,
     val resultType: LType<T3>, // (PType<T1>, PType<T2>) -> PType<T3>
@@ -218,7 +226,7 @@ class TimesFun<T1,T2,T3>(
 
   companion object {
     /** Wraps a function to have these annihilators. */
-    inline fun <T1, T2, T3> timesWithAnnihilatorsFun(
+    inline fun <T1, T2, T3> withAnnihilators(
         leftAnnihilator: T1, rightAnnihilator: T2,
         resultType: LType<T3>,
         crossinline timesFun: (T1, T2) -> T3
@@ -230,7 +238,7 @@ class TimesFun<T1,T2,T3>(
     }
 
     /** Wraps a function to have null annihilators (with zero product property). */
-    inline fun <T1, T2, T3> timesWithNullAnnihilatorsFun(
+    inline fun <T1, T2, T3> withNullAnnihilators(
         resultType: LType<T3?>,
         crossinline timesFun: (T1, T2) -> T3
     ): TimesFun<T1?, T2?, T3?> = TimesFun<T1?, T2?, T3?>(null, null, resultType) { a, b ->
@@ -257,7 +265,21 @@ sealed class NameTupleOp(
   ): NameTupleOp(NameSchema(
       keys = parent.resultSchema.keys + extFun.extSchema.keys,
       vals = extFun.extSchema.vals
-  ))
+  )) {
+//    companion object {
+//      fun runExtFunctionOnDefaultValues(ps: NameSchema, f: NameExtFun): List<ValAttribute<*>> {
+//        val tuple = (ps.keys.map { it.name to it.type.examples.first() } +
+//            ps.vals.map { it.name to it.default }).toMap()
+//        val result = f.extFun(tuple)
+//        if (result.isEmpty()) {
+//          require()
+//        }
+//        f.extVals.map { va ->
+//          require(va.name in result)
+//        }
+//      }
+//    }
+  }
 
   data class Load(
       val table: String,
@@ -295,7 +317,7 @@ sealed class NameTupleOp(
     }.toMap()
 
     override fun toString(): String {
-      return "NameMergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
+      return "MergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
     }
 
     override fun equals(other: Any?): Boolean {
@@ -352,6 +374,7 @@ sealed class NameTupleOp(
       }
     }
 
+
     class MergeUnion(
         p1: NameTupleOp,
         p2: NameTupleOp,
@@ -360,11 +383,15 @@ sealed class NameTupleOp(
 
     class MergeAgg(
         p: NameTupleOp,
-        keysKept: Collection<Name>,
+        val keysKept: Collection<Name>,
         plusFuns0: Map<Name, PlusFun<*>>
     ) : MergeUnion0(p,
         p2 = Empty(NameSchema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
-        plusFuns0 = plusFuns0)
+        plusFuns0 = plusFuns0) {
+      override fun toString(): String {
+        return "MergeAgg(p=$p1, keysKept=$keysKept, plusFuns=$plusFuns)"
+      }
+    }
   }
 
   data class NameRename(
@@ -384,9 +411,6 @@ sealed class NameTupleOp(
       keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
       vals = intersectValues(p1.resultSchema.vals,p2.resultSchema.vals, timesFuns)
   )) {
-    init {
-
-    }
 
     companion object {
       // similar to unionValues() in MergeUnion

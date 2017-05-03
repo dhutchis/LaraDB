@@ -15,7 +15,6 @@ typealias NOPE = UnsupportedOperationException
 /** Logical Type. Used for specifying UDFs.
  * A default physical type that implements this logical type is [defaultPhysical]. */
 sealed class LType<T> {
-
   /** Example values of this type. */
   abstract val examples: Set<T>
   /** What values of T are valid for this type?
@@ -23,11 +22,13 @@ sealed class LType<T> {
   open fun valid(t: T): Boolean = true
   /** Default physical type implementing this logical type */
   abstract val defaultPhysical: PType<T>
+  override abstract fun toString(): String
 
   /** ex: Measurement value, nullable */
   object NDOUBLE : LType<Double?>() {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE.nullable
+    override fun toString() = "L-NDOUBLE"
   }
 
   /** Unsigned long, like a timestamp. */
@@ -35,27 +36,29 @@ sealed class LType<T> {
     override val examples: Set<Long> = setOf(0, 100, Long.MAX_VALUE)
     override fun valid(t: Long): Boolean = t >= 0
     override val defaultPhysical = PType.LONG // todo: add a ULONG physical type. Same with UINT below.
+    override fun toString() = "L-ULONG"
   }
 
   /** ex: Measurement class */
   object STRING : LType<String>() {
     override val examples: Set<String> = setOf("", "temperature", "humidity")
     override val defaultPhysical = PType.STRING
+    override fun toString() = "L-STRING"
   }
 
   /** ex: Measurement value, always present */
   object DOUBLE : LType<Double>() {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE
+    override fun toString() = "L-DOUBLE"
   }
-
-
 
   /** ex: Count */
   object UINT : LType<Int>() {
     override val examples: Set<Int> = setOf(0, 1, 2, 20, Int.MAX_VALUE)
     override fun valid(t: Int): Boolean = t >= 0
     override val defaultPhysical = PType.INT
+    override fun toString() = "L-UINT"
   }
 
 
@@ -104,7 +107,6 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   abstract val naturalWidth: Int
   abstract val naturalDefault: T
   val naturalDefaultEncoded: ByteArray by lazy { encode(naturalDefault) }
-  override abstract fun toString(): String
 
   abstract val nullable: PType<T?>
 
@@ -114,7 +116,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decode(b: ByteArray, off: Int, len: Int) = p.decode(b, off, len)
     override val examples = p.examples
     override fun encode(v: T?): ByteArray {
-      require(v != null) {"not encoding null"}
+      require(v != null) {"not encoding null"} // use NullLexicoder to encode null, if necessary
       return p.encode(v!!)
     }
     override val defaultPhysical = this
