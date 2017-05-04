@@ -19,6 +19,7 @@ val attrCnt = ValAttribute("cnt", UINT, 0)
 
 val nullTuple: NameTuple = mapOf("v" to null)
 val zeroIntTuple: NameTuple = mapOf("v" to 0)
+val oneIntTuple: NameTuple = mapOf("v" to 1)
 
 
 // =============== SCHEMAs
@@ -31,7 +32,7 @@ val initialSchema = NameSchema(
 // =============== UDFs
 const val MIN_TIME = 0L
 const val MAX_TIME = Long.MAX_VALUE
-const val BIN_SIZE = 60
+const val BIN_SIZE = 120000
 
 // idea: remove default value from schema in value attributes; compute in Ext NameTupleOp class
 val filterFun = MapFun(mapValues = listOf(attrVn)) { tuple ->
@@ -47,12 +48,14 @@ val binFun = ExtFun(extSchema = NameSchema(listOf(attrTp), listOf(attrVn))) { tu
 }
 
 val createCntFun = MapFun(listOf(attrVn, attrCnt)) { tuple ->
-  tuple + ("cnt" to if (tuple["v"] != null) 1 else 0)
+  val v = tuple["v"]
+  mapOf("v" to v, "cnt" to if (v != null) 1 else 0)
 }
 val divideVnCntFun = MapFun(listOf(attrVn)) { tuple ->
   val v = tuple["v"]
   val res = if (v != null) v as Double / tuple["cnt"] as Int else null
-  tuple - "cnt" + ("v" to res)
+  mapOf("v" to res)
+//  tuple - "cnt" + ("v" to res)
 }
 
 val subtractVn = TimesFun.withNullAnnihilators<Double,Double,Double>(NDOUBLE, Double::minus)
@@ -62,7 +65,7 @@ val divideMinusOneFun = TimesFun<Double?,Int,Double?>(null, 0, NDOUBLE) { a, b -
 }
 
 val notNullFun = MapFun(listOf(attrV0)) { tuple ->
-  if (tuple["v"] != null) tuple else zeroIntTuple
+  if (tuple["v"] != null) oneIntTuple else zeroIntTuple
 }
 val anyFun = PlusFun(0) { a, b -> if (a != 0 || b != 0) 1 else 0 }
 val plusIntFun = PlusFun(0, Int::plus)
@@ -73,31 +76,34 @@ val plusDoubleNullFun = PlusFun.withNullIdentity<Double>(Double::plus)
 val X = listOf(
     Load("tableA", initialSchema),
     Load("tableB", initialSchema)
-).map { Ext(it, filterFun) }
-    .map { Ext(it, binFun) }
-    .map { Ext(it, createCntFun) }
-//    .apply { println("after ext and create cnt: ${this.first().resultSchema}") }
-    .map { Sort(it, listOf("t'","c","t")) }
-    .map { MergeAgg(it, setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) } // fails here; need a re-sort operation
-    .map { Ext(it, divideVnCntFun) }
-    .run { MergeJoin(this[0], this[1], mapOf("v" to subtractVn)) }
+)
+    .map { NameTupleOp.Ext(it, filterFun) }
+    .map { NameTupleOp.Ext(it, binFun) }
+    .map { NameTupleOp.Ext(it, createCntFun) }
+    .map { NameTupleOp.Sort(it, listOf("t'", "c", "t")) }
+    .map { NameTupleOp.MergeUnion0.MergeAgg(it, setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) } // fails here; need a re-sort operation
+    .map { NameTupleOp.Ext(it, divideVnCntFun) }
+    .run { NameTupleOp.MergeJoin(this[0], this[1], mapOf("v" to subtractVn)) }
 
-val N = Ext(X, notNullFun)
-    .run { MergeAgg(this, setOf("t'"), mapOf("v" to anyFun)) }
-    .run { MergeAgg(this, setOf(), mapOf("v" to plusIntFun)) }
+val N = NameTupleOp.Ext(X, notNullFun)
+    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("t'"), mapOf("v" to anyFun)) }
+    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf(), mapOf("v" to plusIntFun)) }
 
-val X0 = Sort(X, listOf("c", "t'"))
+val X0 = NameTupleOp.Sort(X, listOf("c", "t'"))
 
-val M = Ext(X0, createCntFun)
-    .run { MergeAgg(this, setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) }
-    .run { Ext(this, divideVnCntFun) }
+val M = NameTupleOp.Ext(X0, createCntFun)
+    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) }
+    .run { NameTupleOp.Ext(this, divideVnCntFun) }
 
-val U = MergeJoin(X0, M, mapOf("v" to subtractVn))
+val U = NameTupleOp.MergeJoin(X0, M, mapOf("v" to subtractVn))
+    .run { NameTupleOp.Sort(this, listOf("t'","c")) }
 
-val C = MergeJoin(U, Rename(U, mapOf("c" to "c'")), mapOf("v" to multiplyVn))
-    .run { Sort(this, listOf("c", "c'", "t'")) }
-    .run { MergeAgg(this, setOf("c", "c'"), mapOf("v" to plusDoubleNullFun)) }
-    .run { MergeJoin(this, N, mapOf("v" to divideMinusOneFun)) }
+val C = NameTupleOp.MergeJoin(U, NameTupleOp.Rename(U, mapOf("c" to "c'")), mapOf("v" to multiplyVn))
+    .apply { println(this.resultSchema) }
+    .apply { this.run().forEach { println(it) } }
+    .run { NameTupleOp.Sort(this, listOf("c", "c'", "t'")) }
+    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("c", "c'"), mapOf("v" to plusDoubleNullFun)) }
+    .run { NameTupleOp.MergeJoin(this, N, mapOf("v" to divideMinusOneFun)) }
 
 //val S = Store(C, "tableC")
 

@@ -3,9 +3,11 @@ package edu.washington.cs.laragraphulo.api
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
 import edu.washington.cs.laragraphulo.opt.Name
+import org.apache.accumulo.core.client.lexicoder.IntegerLexicoder
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import org.apache.accumulo.core.client.lexicoder.impl.AbstractLexicoder
 import java.util.*
+import kotlin.NoSuchElementException
 import kotlin.collections.ArrayList
 
 
@@ -290,8 +292,8 @@ sealed class NameTupleOp(
     }
 
     inner class ExtIterator : Iterator<NameTuple> {
-      var top = findTop()
       val iter = parent.run()
+      var top = findTop()
 
 
       fun findTop(): Iterator<NameTuple> {
@@ -309,7 +311,7 @@ sealed class NameTupleOp(
       override fun hasNext(): Boolean = top.hasNext()
       override fun next(): NameTuple {
         val r = top.next()
-        if (!top.hasNext()) findTop()
+        if (!top.hasNext()) top = findTop()
         return r
       }
 
@@ -323,8 +325,8 @@ sealed class NameTupleOp(
       val parentKeys = parent.filterKeys { it in keysToPrepend }
       override fun hasNext(): Boolean = iter.hasNext()
       override fun next(): NameTuple {
-        val n = iter.next()
-        check(parentKeys.keys.all { it !in n }) {"the tuple resulting from this ext emitted a key that is present in the parent keys. Tuple: $n. ParentKeys: $parentKeys"}
+        val n = iter.next().filterKeys { it !in parentKeys }
+//        check(parentKeys.keys.all { it !in n }) {"the tuple resulting from this ext emitted a key that is present in the parent keys. Tuple: $n. ParentKeys: $parentKeys"}
         return parentKeys + n
       }
     }
@@ -443,26 +445,55 @@ sealed class NameTupleOp(
       val comparator = KeyComparator(keys)
       val keysAndValues = keys.map { it.name } + plusFuns.keys
       val keyNames = keys.map { it.name }
+      var old: NameTuple = keys.map { it.name to it.type.examples.first() }.toMap()
 
       override fun hasNext(): Boolean {
         return i1.hasNext() || i2.hasNext()
       }
 
+      fun getCompare(): Int = when {
+        i1.hasNext() && i2.hasNext() -> comparator.compare(i1.peek(), i2.peek())
+        i1.hasNext() -> -1
+        i2.hasNext() -> 1
+        else -> throw NoSuchElementException()
+      }.let { Integer.signum(it) }
+
       override fun next(): NameTuple {
-        val c = comparator.compare(i1.peek(), i2.peek())
-        val r: NameTuple =
-          when (Integer.signum(c)) {
-            -1 -> putDefault(i1.next()).filterKeys { it in keysAndValues } // add value attributes of parent2 with their default values
-            1 -> putDefault(i2.next()).filterKeys { it in keysAndValues }
-            else -> i1.next().let { t1 -> addValues(t1, i2.next()) + t1.filterKeys { it in keyNames } }
+        var c = getCompare()
+        val old = if (c == 1) i2.peek() else i1.peek()
+        var cur = old
+
+        // first iteration: set result to the values from i1 or i2
+        var result = when (c) {
+          -1 -> putDefault(i1.next())
+          1 -> putDefault(i2.next())
+          else -> addValues(i1.next(), i2.next())
+        }
+
+        if (hasNext()) {
+          c = getCompare()
+          cur = if (c == 1) i2.peek() else i1.peek()
+
+          while (comparator.compare(old, cur) == 0) {
+            // add the current matching values into the result
+            result = addValues(result,
+                when (c) {
+                  -1 -> putDefault(i1.next())
+                  1 -> putDefault(i2.next())
+                  else -> addValues(i1.next(), i2.next())
+                })
+            if (!hasNext()) break
+            c = getCompare()
+            cur = if (c == 1) i2.peek() else i1.peek()
           }
-        return r
+        }
+        return result + old.filterKeys { it in keyNames }
       }
 
       private fun putDefault(t: NameTuple): NameTuple {
-        return plusFuns.toList().fold(t) { t, (name,f) ->
-          if (name in t) t
-          else t + (name to f.identity)
+        return plusFuns.mapValues { (name,f) ->
+          if (name in t) t[name]!!
+          else f.identity
         }
       }
 
@@ -507,15 +538,16 @@ sealed class NameTupleOp(
       it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
   ) }) {
     override fun run(): Iterator<NameTuple> {
+      val iter = p.run()
       return object : AbstractIterator<NameTuple>() {
-        val iter = p.run()
         override fun computeNext() {
           if (!iter.hasNext()) {
             done()
           } else {
             val n = iter.next().mapKeys { (k,_) ->
-              if (k in renameMap) renameMap[k] else k
+              if (k in renameMap) renameMap[k]!! else k
             }
+            setNext(n)
           }
         }
       }
@@ -566,14 +598,20 @@ sealed class NameTupleOp(
 
       // similar to unionValues() in MergeUnion
       private fun unionKeys(a: List<Attribute<*>>, b: List<Attribute<*>>): List<Attribute<*>> {
-        return a + b.filter { bv ->
-          val av = a.find { it.name == bv.name }
-          if (av != null) {
-            require(av == bv) // calls equals() method
+        val commonIdxs = ArrayList<Int>(Math.min(a.size,b.size))
+        val r = a + b.filter { bv ->
+          val avidx = a.indexOfFirst { it.name == bv.name }
+          if (avidx != -1) {
+            require(a[avidx] == bv) // calls equals() method
             {"MergeJoin: key attributes $a and $b have an attribute with the same name but different types"}
+            commonIdxs.add(avidx)
             false
           } else true
         }
+        commonIdxs.sort()
+        val x = Array(commonIdxs.size) {it}.toList()
+        require(commonIdxs == x) {"some common key attributes of this MergeJoin are not in the prefix: $commonIdxs, $x, $a, $b"}
+        return r
       }
 
       private fun intersectValues(a: List<ValAttribute<*>>, b: List<ValAttribute<*>>,
@@ -608,7 +646,7 @@ sealed class NameTupleOp(
           Iterators.peekingIterator(p2.run()), timesFuns)
     }
 
-    class MergeJoinIterator(
+    data class MergeJoinIterator(
         val keys: List<Attribute<*>>, // common keys
         val p1keys: List<Name>,
         val p2keys: List<Name>,
@@ -729,6 +767,13 @@ sealed class NameTupleOp(
     }
   }
 
+
+  data class ScanFromData(
+      val schema: NameSchema,
+      val iter: Iterable<NameTuple>
+  ) : NameTupleOp(schema) {
+    override fun run(): Iterator<NameTuple> = iter.iterator()
+  }
 
 }
 
