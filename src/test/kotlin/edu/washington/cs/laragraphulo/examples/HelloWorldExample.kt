@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.examples
 
+import com.google.common.collect.Iterators
 import edu.mit.ll.graphulo.Graphulo
 import edu.mit.ll.graphulo.apply.ApplyIterator
 import edu.mit.ll.graphulo.apply.ApplyOp
@@ -107,6 +108,8 @@ class HelloWorldExample : AccumuloTestBase() {
         "msg2" to "Hello Glorious World!",
         "msg3" to "Hello Rainy World!"
     )
+
+    private val expectedResult = exampleData.map {(k,v) -> k to v.replace(RAINY, SUNNY)}
     
     
     /** Ingest example data into table */
@@ -142,17 +145,9 @@ class HelloWorldExample : AccumuloTestBase() {
     /** View the contents of the second table and verify that it produced the expected result. */
     private fun viewAndVerifyResult(conn: Connector, table: String) {
       conn.createScanner(table, Authorizations.EMPTY).use { scanner ->
-        val scannedData = scanner.toList()
-
-        scannedData.zip(exampleData).forEach { (actual, expected) ->
-          val (ak, av) = actual
-          val (ek, ev) = expected
-          logger.debug {"${ak.toStringNoTime()} -> $av"}
-          Assert.assertEquals(ak.row.toString(), ek)
-          Assert.assertEquals(av.toString(), ev.replace(RAINY, SUNNY))
-        }
-
-        Assert.assertEquals(scannedData.size, exampleData.size)
+        val scannedData = scanner.map { (k,v) -> k.row.toString() to v.toString() }
+        scannedData.forEach { logger.debug {it} }
+        Assert.assertEquals(scannedData, expectedResult)
       }
     }
 
