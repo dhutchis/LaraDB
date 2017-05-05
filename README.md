@@ -8,11 +8,18 @@ LaraDB is implemented in [Kotlin](https://www.kotlinlang.org/), a modern program
 
 LaraDB is tested on Accumulo 1.8.
 
+### Publications
+
+* D. Hutchison, B. Howe, and D. Suciu, [LaraDB: A Minimalist Kernel for Linear and Relational Algebra Computation](https://arxiv.org/abs/1703.07342), in SIGMOD Workshop on Algorithms and Systems for MapReduce and Beyond (BeyondMR), ACM, May 2017.
+* D. Hutchison, B. Howe, and D. Suciu, [Lara: A key-value algebra underlying arrays and relations](https://arxiv.org/abs/1604.03607), Apr. 2016. arXiv: 1604.03607 \[cs.DB].
+
 
 ### How do I get started?
-Read and run the examples-- see below for how.
+Read and run the examples-- see the below [Examples](#Examples) section for how.
 
 ### Directory Structure
+The project's organization follows the Maven [Project Object Model](https://maven.apache.org/guides/introduction/introduction-to-the-pom.html).
+See [`pom.xml`](pom.xml) for detailed build configuration information.
 
 <pre>
 src/
@@ -45,7 +52,6 @@ GraphuloTest.conf.template  Example configuration file for testing
 .travis.yml           Travis continuous integration testing
 </pre>
 
-[Project Object Model]: https://maven.apache.org/guides/introduction/introduction-to-the-pom.html
 
 ### Build
 Prerequisite: Install [Maven](https://maven.apache.org/download.cgi).
