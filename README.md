@@ -1,8 +1,26 @@
-# LaraDB
+
+![LaraDB](img/lara-logo.png)
+
 [![Build Status](https://travis-ci.org/dhutchis/LaraDB.svg?branch=master)](https://travis-ci.org/dhutchis/LaraDB)
 
 LaraDB is an implementation of the [Lara Algebra](https://arxiv.org/abs/1703.07342) on the [Apache Accumulo](https://accumulo.apache.org/) database. 
 [Graphulo](http://graphulo.mit.edu/)-style server-side iterators implement the Lara operators.
+
+Handy Links:
+
+* [Publications](#publications)
+* [People](#people)
+* [Sponsors](#sponsors)
+* [LaraDB Code](#laradb-code)
+  * [Directory Structure](#directory-structure)
+  * [Build](#build)
+  * [Test](#test)
+  * [Develop](#develop)
+  * **[Code Examples](#examples) -- Get started here!**
+  * [Debug](#debug)
+
+
+
 
 LaraDB is implemented in [Kotlin](https://www.kotlinlang.org/), a modern programming language that is fully compatible with Java. You can call Java methods from Kotlin and Kotlin methods from Java.
 
@@ -14,8 +32,32 @@ LaraDB is tested on Accumulo 1.8.
 * D. Hutchison, B. Howe, and D. Suciu, [Lara: A key-value algebra underlying arrays and relations](https://arxiv.org/abs/1604.03607), Apr. 2016. arXiv: 1604.03607 \[cs.DB].
 
 
-### How do I get started?
-Read and run the examples-- see the below [Examples](#examples) section for how.
+### People
+UW Lara team:
+
+* [Dylan Hutchison](https://www.linkedin.com/in/dylanhutchison/)
+* [Bill Howe](https://faculty.washington.edu/billhowe/)
+* [Dan Suciu](https://homes.cs.washington.edu/~suciu/)
+
+Collaborators:
+
+* [David Maier](http://web.cecs.pdx.edu/~maier/)
+* [Tim Mattson](https://www.linkedin.com/in/tim-mattson-70b1774/)
+* [Jeremy Kepner](http://www.mit.edu/~kepner/)
+* [Vijay Gadepally](https://vijayg.mit.edu/)
+
+
+### Sponsors
+
+* [National Science Foundation](https://www.nsf.gov/) -- [Graduate Research Fellowship Program](https://www.nsfgrfp.org/)
+* [Pacific Northwest National Laboratory](https://www.pnnl.gov/)
+
+![NSF](img/NSF_red.png) &nbsp;&nbsp;&nbsp;
+![PNNL](img/pnnl_red.png)
+
+
+
+## LaraDB Code
 
 ### Directory Structure
 The project's organization follows the Maven [Project Object Model](https://maven.apache.org/guides/introduction/introduction-to-the-pom.html).
@@ -180,7 +222,7 @@ Graphulo graphulo = new Graphulo(connector, PASSWORD_TOKEN);
 See Examples above for more elaborate client code usage.
 
 
-### Debugging
+### Debug
 Before debugging a problem, consider 
 
 1. checking the Accumulo monitor, running by default on <http://localhost:9995/> for Accumulo 1.8;
