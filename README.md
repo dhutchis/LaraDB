@@ -15,7 +15,7 @@ LaraDB is tested on Accumulo 1.8.
 
 
 ### How do I get started?
-Read and run the examples-- see the below [Examples](#Examples) section for how.
+Read and run the examples-- see the below [Examples](#examples) section for how.
 
 ### Directory Structure
 The project's organization follows the Maven [Project Object Model](https://maven.apache.org/guides/introduction/introduction-to-the-pom.html).
