@@ -1,7 +1,7 @@
 package edu.washington.cs.laragraphulo.api
-import edu.washington.cs.laragraphulo.api.NameTupleOp.*
+import edu.washington.cs.laragraphulo.api.*
 import edu.washington.cs.laragraphulo.api.LType.*
-import edu.washington.cs.laragraphulo.api.NameTupleOp.MergeUnion0.*
+import edu.washington.cs.laragraphulo.api.NameTupleOp.*
 
 /*
  * Example queries given with the a Lara API based on attributes-by-name.
@@ -34,7 +34,7 @@ const val MIN_TIME = 0L
 const val MAX_TIME = Long.MAX_VALUE
 const val BIN_SIZE = 120000
 
-// idea: remove default value from schema in value attributes; compute in Ext NameTupleOp class
+// idea: remove default value from schema in value attributes; compute in .ext NameTupleOp class
 val filterFun = MapFun(mapValues = listOf(attrVn)) { tuple ->
   if (tuple["t"] as Long in MIN_TIME..MAX_TIME) tuple else nullTuple
 }
@@ -73,37 +73,41 @@ val plusDoubleNullFun = PlusFun.withNullIdentity<Double>(Double::plus)
 
 
 // =============== QUERY
-val X = listOf(
-    Load("tableA", initialSchema),
-    Load("tableB", initialSchema)
-)
-    .map { NameTupleOp.Ext(it, filterFun) }
-    .map { NameTupleOp.Ext(it, binFun) }
-    .map { NameTupleOp.Ext(it, createCntFun) }
-    .map { NameTupleOp.Sort(it, listOf("t'", "c", "t")) }
-    .map { NameTupleOp.MergeUnion0.MergeAgg(it, setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) } // fails here; need a re-sort operation
-    .map { NameTupleOp.Ext(it, divideVnCntFun) }
-    .run { NameTupleOp.MergeJoin(this[0], this[1], mapOf("v" to subtractVn)) }
+val A = Load("tableA", initialSchema)
+    .ext(filterFun)
+    .ext(binFun)
+    .ext(createCntFun)
+    .sort(listOf("t'", "c", "t"))
+    .agg(setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
+    .ext(divideVnCntFun)
 
-val N = NameTupleOp.Ext(X, notNullFun)
-    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("t'"), mapOf("v" to anyFun)) }
-    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf(), mapOf("v" to plusIntFun)) }
+val B = Load("tableB", initialSchema)
+    .ext(filterFun)
+    .ext(binFun)
+    .ext(createCntFun)
+    .sort(listOf("t'", "c", "t"))
+    .agg(setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
+    .ext(divideVnCntFun)
 
-val X0 = NameTupleOp.Sort(X, listOf("c", "t'"))
+val X = A.join(B, mapOf("v" to subtractVn))
 
-val M = NameTupleOp.Ext(X0, createCntFun)
-    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) }
-    .run { NameTupleOp.Ext(this, divideVnCntFun) }
+val N = X.ext(notNullFun)
+    .agg(setOf("t'"), mapOf("v" to anyFun))
+    .agg(setOf(), mapOf("v" to plusIntFun))
 
-val U = NameTupleOp.MergeJoin(X0, M, mapOf("v" to subtractVn))
-    .run { NameTupleOp.Sort(this, listOf("t'","c")) }
+val X0 = X.sort(listOf("c", "t'"))
 
-val C = NameTupleOp.MergeJoin(U, NameTupleOp.Rename(U, mapOf("c" to "c'")), mapOf("v" to multiplyVn))
-    .apply { println(this.resultSchema) }
-    .apply { this.run().forEach { println(it) } }
-    .run { NameTupleOp.Sort(this, listOf("c", "c'", "t'")) }
-    .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("c", "c'"), mapOf("v" to plusDoubleNullFun)) }
-    .run { NameTupleOp.MergeJoin(this, N, mapOf("v" to divideMinusOneFun)) }
+val M = X0.ext(createCntFun)
+    .agg(setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
+    .ext(divideVnCntFun)
+
+val U = X0.join(M, mapOf("v" to subtractVn))
+    .sort(listOf("t'","c"))
+
+val C = U.join(U.rename(mapOf("c" to "c'")), mapOf("v" to multiplyVn))
+    .sort(listOf("c", "c'", "t'"))
+    .agg(setOf("c", "c'"), mapOf("v" to plusDoubleNullFun))
+    .join(N, mapOf("v" to divideMinusOneFun))
 
 //val S = Store(C, "tableC")
 

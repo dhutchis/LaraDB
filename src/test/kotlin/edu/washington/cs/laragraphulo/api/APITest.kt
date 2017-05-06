@@ -2,6 +2,7 @@ package edu.washington.cs.laragraphulo.api
 
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.sensor.SensorFileAction
+import edu.washington.cs.laragraphulo.api.NameTupleOp.*
 import edu.washington.cs.laragraphulo.sensor.dateParser
 import edu.washington.cs.laragraphulo.sensor.dateParserNoMilli
 import org.apache.accumulo.core.data.Mutation
@@ -51,40 +52,41 @@ class APITest  { // : AccumuloTestBase()
     tcvListFileAction.invoke(urlA)
     data1.sortWith(NameTupleOp.KeyComparator(initialSchema.keys))
 
-    val X = listOf(
-        NameTupleOp.ScanFromData(initialSchema, data1),
-        NameTupleOp.ScanFromData(initialSchema, data1)
-    )
-        .map { NameTupleOp.Ext(it, filterFun) }
-        .map { NameTupleOp.Ext(it, binFun) }
-        .map { NameTupleOp.Ext(it, createCntFun) }
-//    .apply { println("after ext and create cnt: ${this.first().resultSchema}") }
-        .map { NameTupleOp.Sort(it, listOf("t'", "c", "t")) }
-        .map { NameTupleOp.MergeUnion0.MergeAgg(it, setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) } // fails here; need a re-sort operation
-        .map { NameTupleOp.Ext(it, divideVnCntFun) }
-//        .apply { this.first().run().forEach { println(it) } }
-        .run { NameTupleOp.MergeJoin(this[0], this[1], mapOf("v" to subtractVn)) }
+    val A = ScanFromData(initialSchema, data1)
+        .ext(filterFun)
+        .ext(binFun)
+        .ext(createCntFun)
+        .sort(listOf("t'", "c", "t"))
+        .agg(setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
+        .ext(divideVnCntFun)
 
-    val N = NameTupleOp.Ext(X, notNullFun)
-        .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("t'"), mapOf("v" to anyFun)) }
-//        .apply { this.run().forEach { println(it) } }
-        .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf(), mapOf("v" to plusIntFun)) }
+    val B = ScanFromData(initialSchema, data1)
+        .ext(filterFun)
+        .ext(binFun)
+        .ext(createCntFun)
+        .sort(listOf("t'", "c", "t"))
+        .agg(setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
+        .ext(divideVnCntFun)
 
-    val X0 = NameTupleOp.Sort(X, listOf("c", "t'"))
+    val X = A.join(B, mapOf("v" to subtractVn))
 
-    val M = NameTupleOp.Ext(X0, createCntFun)
-        .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun)) }
-        .run { NameTupleOp.Ext(this, divideVnCntFun) }
+    val N = X.ext(notNullFun)
+        .agg(setOf("t'"), mapOf("v" to anyFun))
+        .agg(setOf(), mapOf("v" to plusIntFun))
 
-    val U = NameTupleOp.MergeJoin(X0, M, mapOf("v" to subtractVn))
-        .run { NameTupleOp.Sort(this, listOf("t'","c")) }
+    val X0 = X.sort(listOf("c", "t'"))
 
-    val C = NameTupleOp.MergeJoin(U, NameTupleOp.Rename(U, mapOf("c" to "c'")), mapOf("v" to multiplyVn))
-//        .apply { println(this.resultSchema) }
-//        .apply { this.run().forEach { println(it) } }
-        .run { NameTupleOp.Sort(this, listOf("c", "c'", "t'")) }
-        .run { NameTupleOp.MergeUnion0.MergeAgg(this, setOf("c", "c'"), mapOf("v" to plusDoubleNullFun)) }
-        .run { NameTupleOp.MergeJoin(this, N, mapOf("v" to divideMinusOneFun)) }
+    val M = X0.ext(createCntFun)
+        .agg(setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
+        .ext(divideVnCntFun)
+
+    val U = X0.join(M, mapOf("v" to subtractVn))
+        .sort(listOf("t'","c"))
+
+    val C = U.join(U.rename(mapOf("c" to "c'")), mapOf("v" to multiplyVn))
+        .sort(listOf("c", "c'", "t'"))
+        .agg(setOf("c", "c'"), mapOf("v" to plusDoubleNullFun))
+        .join(N, mapOf("v" to divideMinusOneFun))
 
     println()
     C.run().forEach { println(it) }

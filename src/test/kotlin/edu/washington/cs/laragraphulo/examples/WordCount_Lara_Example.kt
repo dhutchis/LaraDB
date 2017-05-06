@@ -53,9 +53,9 @@ class WordCount_Lara_Example {
 
     // ============= QUERY
     val query = ScanFromData(initialSchema, exampleData)
-        .run { Ext(this, extFun) }
-        .run { Sort(this, listOf("word", "docid")) }
-        .run { MergeUnion0.MergeAgg(this, listOf("word"), mapOf("count" to plus)) }
+        .ext(extFun)
+        .sort(listOf("word", "docid"))
+        .agg(listOf("word"), mapOf("count" to plus))
 
     // ============= RUN! (and print the result)
     val scannedData = query.run().toList()

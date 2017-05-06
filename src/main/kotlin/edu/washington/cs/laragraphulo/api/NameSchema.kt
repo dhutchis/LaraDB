@@ -264,6 +264,7 @@ sealed class NameTupleOp(
 ) {
   abstract fun run(): Iterator<NameTuple>
 
+  fun ext(extFun: ExtFun): NameTupleOp = Ext(this, extFun)
   data class Ext(
       val parent: NameTupleOp,
       /** This can also be a [MapFun] */
@@ -529,7 +530,10 @@ sealed class NameTupleOp(
       }
     }
   }
+  fun union(p2: NameTupleOp, plusFuns0: Map<Name, PlusFun<*>>): NameTupleOp = MergeUnion0.MergeUnion(this, p2, plusFuns0)
+  fun agg(keysKept: Collection<Name>, plusFuns0: Map<Name, PlusFun<*>>): NameTupleOp = MergeUnion0.MergeAgg(this, keysKept, plusFuns0)
 
+  fun rename(renameMap: Map<Name,Name>): NameTupleOp = Rename(this, renameMap)
   data class Rename(
       val p: NameTupleOp,
       val renameMap: Map<Name,Name>
@@ -555,6 +559,8 @@ sealed class NameTupleOp(
     }
   }
 
+  fun sort(newSort: List<Name>): NameTupleOp = Sort(this, newSort)
+//  fun sort(vararg newSort: Name): NameTupleOp = Sort(this, newSort.toList())
   data class Sort(
       val p: NameTupleOp,
       val newSort: List<Name>
@@ -586,6 +592,7 @@ sealed class NameTupleOp(
     }
   }
 
+  fun join(p2: NameTupleOp, timesFuns: Map<Name,TimesFun<*,*,*>>): NameTupleOp = MergeJoin(this, p2, timesFuns)
   data class MergeJoin(
       val p1: NameTupleOp,
       val p2: NameTupleOp,
@@ -774,6 +781,8 @@ sealed class NameTupleOp(
   ) : NameTupleOp(schema) {
     override fun run(): Iterator<NameTuple> = iter.iterator()
   }
+
+
 
 }
 
