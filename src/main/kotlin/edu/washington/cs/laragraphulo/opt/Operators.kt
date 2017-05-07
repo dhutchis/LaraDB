@@ -164,7 +164,7 @@ class OpAccumuloBase(
   @Suppress("UNCHECKED_CAST")
   override fun invoke(reqs: List<*>): TupleIterator {
     logger.debug{"Invoke op: $this"}
-    require (reqs.size >= 1 && reqs[0] is SortedKeyValueIterator<*,*>) { "Bad argument passed to OpAccumuloBase invoke; expected an SKVI but got $reqs" }
+    require (reqs.isNotEmpty() && reqs[0] is SortedKeyValueIterator<*,*>) { "Bad argument passed to OpAccumuloBase invoke; expected an SKVI but got $reqs" }
     val skvi = reqs[0] as SortedKeyValueIterator<Key,Value>
     val kviter = SkviToKeyValueAdapter(skvi)
     val titer = KeyValueToTupleIterator(kviter, apKeySchema, widthSchema)

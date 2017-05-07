@@ -431,9 +431,7 @@ class AccumuloPipelineTask<D>(
 
 
 class DeserializeInvokeIterator : DelegatingIterator(), OptionDescriber {
-  companion object : SerializerSetting<Op<SKVI>>(DeserializeInvokeIterator::class.java) {
-
-  }
+  companion object : SerializerSetting<Op<SKVI>>(DeserializeInvokeIterator::class.java)
 
   override fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
     val op = deserializeFromOptions(options)

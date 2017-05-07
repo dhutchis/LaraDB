@@ -58,7 +58,7 @@ interface KVSchema : NameSchema {
 
 /** The [allNames] here are fully divided into [dapNames], [lapNames], [valNames]. */
 interface APSchema : APKeySchema, KVSchema {
-  override val keyNames: List<String>
+  override val keyNames: List<Name>
     get() = super.keyNames
 }
 
