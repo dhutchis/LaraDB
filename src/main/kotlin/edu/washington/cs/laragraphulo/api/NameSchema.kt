@@ -2,7 +2,6 @@ package edu.washington.cs.laragraphulo.api
 
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
-import edu.washington.cs.laragraphulo.opt.Name
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import org.apache.accumulo.core.client.lexicoder.impl.AbstractLexicoder
 import java.util.*
@@ -10,6 +9,7 @@ import kotlin.NoSuchElementException
 import kotlin.collections.ArrayList
 
 typealias Table = String
+typealias Name = String
 
 
 // ======================= HELPER FUNCTIONS
@@ -56,9 +56,10 @@ class NullLexicoder<T>(
 }
 
 
+
 open class Attribute<T>(
     val name: Name,
-    val type: LType<T>
+    open val type: LType<T>
 ) : Comparable<Attribute<T>> {
 
   open fun withNewName(n: Name) = Attribute(n, type)
@@ -89,7 +90,7 @@ open class Attribute<T>(
   override fun compareTo(other: Attribute<T>): Int = name.compareTo(other.name)
 }
 
-class ValAttribute<T>(
+open class ValAttribute<T>(
     name: Name,
     type: LType<T>,
     val default: T

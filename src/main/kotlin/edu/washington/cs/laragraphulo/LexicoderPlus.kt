@@ -18,5 +18,6 @@ interface LexicoderPlus<T> : Lexicoder<T>, Encode<T>, Serializable {
   fun decode(b: ByteArray, off: Int, len: Int): T
   override fun decode(b: ByteArray): T = decode(b, 0, b.size)
   override fun encode(v: T): ByteArray
+  fun encodeUnchecked(v: Any?) = @Suppress("UNCHECKED_CAST") encode(v as T)
   fun decode(abs: ArrayByteSequence): T = decode(abs.backingArray, abs.offset(), abs.length())
 }
