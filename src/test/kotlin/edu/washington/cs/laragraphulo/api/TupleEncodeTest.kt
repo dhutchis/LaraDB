@@ -67,7 +67,7 @@ class TupleEncodeTest {
     val (attrs,tuples) = pair
     val ps = genRandomSchema(attrs)
     val iter = KvToTupleAdapter(ps, TupleToKvAdapter(ps, tuples.iterator()))
-//    val iter = NameTupleOp.ScanFromData(ps, tuples.iterator())
+//    val iter = TupleOp.ScanFromData(ps, tuples.iterator())
     assertTrue(Iterators.elementsEqual(tuples.iterator(), iter))
   }
 }

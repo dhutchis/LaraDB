@@ -1,6 +1,6 @@
 package edu.washington.cs.laragraphulo.api
 import edu.washington.cs.laragraphulo.api.LType.*
-import edu.washington.cs.laragraphulo.api.NameTupleOp.*
+import edu.washington.cs.laragraphulo.api.TupleOp.*
 
 /*
  * Example queries given with the a Lara API based on attributes-by-name.
@@ -33,7 +33,7 @@ const val MIN_TIME = 0L
 const val MAX_TIME = Long.MAX_VALUE
 const val BIN_SIZE = 120000
 
-// idea: remove default value from schema in value attributes; compute in .ext NameTupleOp class
+// idea: remove default value from schema in value attributes; compute in .ext TupleOp class
 val filterFun = MapFun(mapValues = listOf(attrVn)) { tuple ->
   if (tuple["t"] as Long in MIN_TIME..MAX_TIME) tuple else nullTuple
 }

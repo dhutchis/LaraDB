@@ -1,14 +1,8 @@
 package edu.washington.cs.laragraphulo.api
 
-import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.sensor.SensorFileAction
-import edu.washington.cs.laragraphulo.api.NameTupleOp.*
-import edu.washington.cs.laragraphulo.sensor.dateParser
-import edu.washington.cs.laragraphulo.sensor.dateParserNoMilli
-import org.apache.accumulo.core.data.Mutation
+import edu.washington.cs.laragraphulo.api.TupleOp.*
 import org.junit.Test
-import java.io.File
-import java.net.URL
 import java.util.*
 
 /** Data for the first sensor */
@@ -50,7 +44,7 @@ class APITest  { // : AccumuloTestBase()
     )
     val urlA = Thread.currentThread().contextClassLoader.getResource(filepathA)
     tcvListFileAction.invoke(urlA)
-    data1.sortWith(NameTupleOp.KeyComparator(initialSchema.keys))
+    data1.sortWith(TupleOp.KeyComparator(initialSchema.keys))
 
     val A = ScanFromData(initialSchema, data1)
         .ext(filterFun)

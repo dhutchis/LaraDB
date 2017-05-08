@@ -2,7 +2,7 @@ package edu.washington.cs.laragraphulo.examples
 
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.api.*
-import edu.washington.cs.laragraphulo.api.NameTupleOp.*
+import edu.washington.cs.laragraphulo.api.TupleOp.*
 import edu.washington.cs.laragraphulo.api.LType.*
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
