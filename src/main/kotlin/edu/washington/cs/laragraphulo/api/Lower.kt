@@ -5,7 +5,9 @@ import edu.washington.cs.laragraphulo.api.NameTupleOp.MergeUnion0.*
 import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
 import edu.washington.cs.laragraphulo.opt.ABS
+import edu.washington.cs.laragraphulo.opt.EMPTY_B
 import edu.washington.cs.laragraphulo.opt.SKVI
+import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import java.nio.ByteBuffer
@@ -83,23 +85,41 @@ class PValAttribute<T>(
 // A more relaxed implementation would put the value attributes separately, or even group them based on vertical partitioning.
 // See FullValue and KeyValueToTuple for the more advanced multiple key-values per tuple ideas.
 data class PhysicalSchema(
-    val row: List<PAttribute<*>>,
-    val family: List<PAttribute<*>>,
-    val colq: List<PAttribute<*>>,
-    val vis: PAttribute<*>?,
-    val ts: PAttribute<*>?,
-    val vals: List<PValAttribute<*>>
+    val row: List<PAttribute<*>> = listOf(),
+    val family: List<PAttribute<*>> = listOf(),
+    val colq: List<PAttribute<*>> = listOf(),
+    val vis: PAttribute<*>? = null,
+    val ts: PAttribute<*>? = null,
+    val vals: List<PAttribute<*>>
 ) {
   val rowNames = row.map(PAttribute<*>::name)
   val familyNames = family.map(PAttribute<*>::name)
   val colqNames = colq.map(PAttribute<*>::name)
   val visName = vis?.name
   val tsName = ts?.name
-  val valNames = vals.map(PValAttribute<*>::name)
-  val allNames = rowNames + familyNames + colqNames + (if (visName != null) listOf(visName) else listOf()) +
-      (if (tsName != null) listOf(tsName) else listOf()) + valNames
+  val valNames = vals.map(PAttribute<*>::name)
+  val keyNames = rowNames + familyNames + colqNames + (if (visName != null) listOf(visName) else listOf()) +
+      (if (tsName != null) listOf(tsName) else listOf())
+  val allNames = keyNames + valNames
+  val keys = row + family + colq + (if (vis != null) listOf(vis) else listOf()) +
+      (if (ts != null) listOf(ts) else listOf())
+  val all = keys + vals
   init {
     require(allNames.size == allNames.toSet().size) {"one of the attributes' names is duplicated; $this"}
+  }
+
+  fun encodeToKeyValue(t: NameTuple): Pair<Key,Value> {
+    require(keyNames.all { it in t }) {"tuple is missing keys for schema $this; tuple is $t"}
+    val r = TupleByKeyValue.encodeJoin(row, t)
+    val cf = TupleByKeyValue.encodeJoin(family, t)
+    val cq = TupleByKeyValue.encodeJoin(colq, t)
+    val cv = if (vis == null) EMPTY_B else TupleByKeyValue.encodeJoin(vis, t)
+    val time = ts?.type?.encodeLongUnchecked(t[ts.name]) ?: Long.MAX_VALUE
+    val vs = TupleByKeyValue.encodeJoin(vals, t)
+
+    val k = Key(r, cf, cq, cv, time, false, false) // no copy
+    val v = Value(vs, false) // no copy
+    return k to v
   }
 
 }
@@ -177,14 +197,17 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,
       }
     }
 
-    // next step is to create a NameTuple whose values are backed by a key-value's data
+
+
+    fun encodeJoin(attr: PAttribute<*>, tuple: NameTuple): ByteArray = encodeJoin(listOf(attr), tuple)
 
     // this will be used on row, family, colq, vals, etc. of a NameTuple to get the parts to put together into a Key and Value
     // another, higher-level method will cobble these values together into the actual Key and Value
     // (if handed a previous NameTuple, could check to see if the new one has the same key, and then not need to translate again)
     fun encodeJoin(attrs: List<PAttribute<*>>, tuple: NameTuple): ByteArray {
-      // TODO special case if we are handed a NameTuple which is backed by a KeyValue - just use the KeyValue
-      val encodedDataList: List<ByteArray> = attrs.map { it.type.encodeUnchecked(tuple[it.name] ?: it.type.naturalDefault) } // TODO provide default value if tuple[it.name] is not present
+      // handled separately: special case if we are handed a NameTuple which is backed by a KeyValue - just use the KeyValue
+      val encodedDataList: List<ByteArray> = attrs.map { it.type.encodeUnchecked(tuple[it.name] ?:
+          (if (it is PValAttribute<*>) it.default else it.type.naturalDefault)) } // TODO provide default value if tuple[it.name] is not present
 
       val posWidthAttributePrefix = attrs.takeWhile { it.type.naturalWidth > 0 }
       /** The starting indexes of each attribute, up until the first -1 width.
@@ -237,5 +260,25 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,
   } // end companion object
 }
 
+/** Pass this to [ScanFromData] to create a NameTupleOp. */
+class KvToTupleAdapter(val ps: PhysicalSchema, val iter: Iterator<Pair<Key,Value>>): Iterator<NameTuple> {
+//  private val skviIter = SkviToIteratorAdapter(skvi)
 
+  override fun hasNext(): Boolean = iter.hasNext()
+
+  override fun next(): NameTuple {
+    val (k, v) = iter.next()
+    return TupleByKeyValue(ps, k, v)
+  }
+}
+
+class TupleToKvAdapter(val ps: PhysicalSchema, private val tupleIter: Iterator<NameTuple>): Iterator<Pair<Key,Value>> {
+  override fun hasNext(): Boolean = tupleIter.hasNext()
+  override fun next(): Pair<Key, Value> {
+    val tuple = tupleIter.next()
+    if (tuple is TupleByKeyValue)
+      return tuple.k to tuple.v
+    return ps.encodeToKeyValue(tuple)
+  }
+}
 

@@ -1,7 +1,6 @@
 package edu.washington.cs.laragraphulo.api
 
 import org.junit.Assert.*
-//import org.junit.Test
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.MethodSource
@@ -12,10 +11,10 @@ import edu.washington.cs.laragraphulo.opt.ABS
 import org.slf4j.Logger
 import java.util.*
 
-class LowerTest {
+class TupleEncodeFieldTest {
 
   companion object : Loggable {
-    override val logger: Logger = logger<LowerTest>()
+    override val logger: Logger = logger<TupleEncodeFieldTest>()
 
     val pschema0 = listOf<PAttribute<*>>()
     val tuples0 = listOf(mapOf<String,Any?>())
@@ -30,6 +29,8 @@ class LowerTest {
     val tuples4 = listOf(mapOf("t" to 1L, "c" to "", "v" to 0.0),mapOf("t" to Long.MAX_VALUE, "c" to "high", "v" to 1.0),mapOf("t" to 0L, "c" to "ZERO", "v" to -3.5))
     @JvmStatic @Suppress("UNUSED")
     fun testCases() = listOf(pschema0 to tuples0, pschema1 to tuples1, pschema2 to tuples2, pschema2r to tuples2, pschema3 to tuples3, pschema4 to tuples4)
+    @JvmStatic @Suppress("UNUSED")
+    fun extraDataCases() = listOf(pschema2 to tuples4, pschema2r to tuples4, pschema3 to tuples4)
   }
 
   @ParameterizedTest
@@ -44,6 +45,36 @@ class LowerTest {
       val decodedPaired = attrs.zip(decoded).map { (attr,f) -> attr.name to f.value }.toMap()
       logger.debug{"decoded: $decodedPaired"}
       assertEquals(tuple, decodedPaired)
+    }
+  }
+
+  @Test
+  fun testNoAttrs() {
+    val tuple = tuples1[0]
+    val attrs = pschema0
+    logger.debug{"before : $tuple"}
+    val encoded: ByteArray = TupleByKeyValue.encodeJoin(attrs, tuple)
+    logger.debug{"encoded: ${Arrays.toString(encoded)}"}
+    assertTrue(encoded.isEmpty())
+    val decoded: List<Lazy<Any?>> = TupleByKeyValue.decodeSplit(attrs, ABS(encoded))
+    assertTrue(decoded.isEmpty())
+    val decodedPaired = attrs.zip(decoded).map { (attr,f) -> attr.name to f.value }.toMap()
+    logger.debug{"decoded: $decodedPaired"}
+    assertTrue(decodedPaired.isEmpty())
+  }
+
+  @ParameterizedTest
+  @MethodSource(names = arrayOf("extraDataCases"))
+  fun testExtraData(pair: Pair<List<PAttribute<*>>, List<NameTuple>>) {
+    val (attrs,tuples) = pair
+    for (tuple in tuples) {
+      logger.debug{"before : $tuple"}
+      val encoded: ByteArray = TupleByKeyValue.encodeJoin(attrs, tuple)
+      logger.debug{"encoded: ${Arrays.toString(encoded)}"}
+      val decoded: List<Lazy<Any?>> = TupleByKeyValue.decodeSplit(attrs, ABS(encoded))
+      val decodedPaired = attrs.zip(decoded).map { (attr,f) -> attr.name to f.value }.toMap()
+      logger.debug{"decoded: $decodedPaired"}
+      assertEquals(tuple.filterKeys { it in listOf("t","c") }, decodedPaired)
     }
   }
 

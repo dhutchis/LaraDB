@@ -102,6 +102,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   abstract fun decodeString(s: String): T
   /** T -> L */
   abstract fun encodeLong(t: T): Long
+  fun encodeLongUnchecked(t: Any?) = @Suppress("UNCHECKED_CAST") encodeLong(t as T)
   /** L -> T */
   abstract fun decodeLong(l: Long): T
   abstract val naturalWidth: Int
