@@ -55,58 +55,86 @@ fun TupleOp.getBaseTables0(): Set<Table> = this.fold(setOf<Table>(), { a, b -> a
 // we want to create functions that obtain the data for each attribute:
 // tuple["t"] --> ptype.decode( key[row_idx] )
 
-open class PAttribute<T>(
-    name: Name,
-    override val type: PType<T>
-) : Attribute<T>(name, type) {
-  override fun withNewName(n: Name) = PAttribute(name, type)
-  override fun toString(): String {
-    return "P"+super.toString()
-  }
-  open fun asPValAttribute() = PValAttribute(name, type, type.naturalDefault)
-}
+interface PAttribute<T> : Attribute<T> {
+  override val type: PType<T>
+  override fun component2(): PType<T> = type
+  override fun withNewName(name: Name): PAttribute<T> = PAttribute(name, type)
+  fun asPValAttribute() = PValAttribute(name, type, type.naturalDefault)
 
+  companion object {
+    @JvmName(name = "AttributeImp")
+    operator fun <T> invoke(name: Name, type: PType<T>): PAttribute<T> = PAttributeImpl(name, type)
+  }
+
+  open class PAttributeImpl<T>(
+      name: Name,
+      override val type: PType<T>
+  ) : Attribute.AttributeImpl<T>(name, type), PAttribute<T> {
+    override fun toString(): String {
+      return "P" + super.toString()
+    }
+  }
+}
 
 // diamond problem: solved with interfaces: this should also inherit PAttribute<T>
-class PValAttribute<T>(
-    name: Name,
-    type: PType<T>,
-    val default: T
-) : PAttribute<T>(name, type) {
-  override fun withNewName(n: Name) = PValAttribute(name, type, default)
-  override fun toString(): String {
-    return "P"+super.toString()
-  }
+interface PValAttribute<T> : PAttribute<T>, ValAttribute<T> {
+  override val type: PType<T>
+  override fun component2(): PType<T> = type
+  override fun withNewName(name: Name): PValAttribute<T> = PValAttribute(name, type, default)
   override fun asPValAttribute() = this
-}
 
+  companion object {
+    operator fun <T> invoke(name: Name, type: PType<T>, default: T): PValAttribute<T> = PValAttributeImpl(name, type, default)
+  }
+
+  class PValAttributeImpl<T>(
+      name: Name,
+      override val type: PType<T>,
+      default: T
+  ) : ValAttribute.ValAttributeImpl<T>(name, type, default), PValAttribute<T> {
+    override fun toString(): String {
+      return "P" + super.toString()
+    }
+  }
+
+}
 
 // I am restricting this to one key-value pair per tuple.
 // A more relaxed implementation would put the value attributes separately, or even group them based on vertical partitioning.
 // See FullValue and KeyValueToTuple for the more advanced multiple key-values per tuple ideas.
-data class PhysicalSchema(
+class PhysicalSchema(
     val row: List<PAttribute<*>> = listOf(),
     val family: List<PAttribute<*>> = listOf(),
     val colq: List<PAttribute<*>> = listOf(),
     val vis: PAttribute<*>? = null,
     val ts: PAttribute<*>? = null,
-    val vals: List<PValAttribute<*>>
-)  {
+    val pvals: List<PValAttribute<*>>
+) : Schema(
+    keys = row + family + colq + (if (vis != null) listOf(vis) else listOf()) +
+    (if (ts != null) listOf(ts) else listOf()),
+    vals = pvals
+    ) {
   val rowNames = row.map(PAttribute<*>::name)
   val familyNames = family.map(PAttribute<*>::name)
   val colqNames = colq.map(PAttribute<*>::name)
   val visName = vis?.name
   val tsName = ts?.name
-  val valNames = vals.map(PAttribute<*>::name)
+  val valNames = pvals.map(PAttribute<*>::name)
   val keyNames = rowNames + familyNames + colqNames + (if (visName != null) listOf(visName) else listOf()) +
       (if (tsName != null) listOf(tsName) else listOf())
   val allNames = keyNames + valNames
-  val keys = row + family + colq + (if (vis != null) listOf(vis) else listOf()) +
+  val pkeys = row + family + colq + (if (vis != null) listOf(vis) else listOf()) +
       (if (ts != null) listOf(ts) else listOf())
-  val all = keys + vals
+  val all = keys + pvals
   init {
     require(allNames.size == allNames.toSet().size) {"one of the attributes' names is duplicated; $this"}
   }
+
+  override fun component1(): List<PAttribute<*>> = pkeys
+  override fun component2(): List<PValAttribute<*>> = pvals
+  override fun get(n: Name): PAttribute<*>? = pkeys.find { it.name == n } ?: pvals.find { it.name == n }
+  override fun getValue(n: Name): PValAttribute<*>? = pvals.find { it.name == n }
+
 
   fun encodeToKeyValue(t: NameTuple): Pair<Key,Value> {
     require(keyNames.all { it in t }) {"tuple is missing keys for schema $this; tuple is $t"}
@@ -115,12 +143,45 @@ data class PhysicalSchema(
     val cq = TupleByKeyValue.encodeJoin(colq, t)
     val cv = if (vis == null) EMPTY_B else TupleByKeyValue.encodeJoin(vis, t)
     val time = ts?.type?.encodeLongUnchecked(t[ts.name]) ?: Long.MAX_VALUE
-    val vs = TupleByKeyValue.encodeJoin(vals, t)
+    val vs = TupleByKeyValue.encodeJoin(pvals, t)
 
     val k = Key(r, cf, cq, cv, time, false, false) // no copy
     val v = Value(vs, false) // no copy
     return k to v
   }
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+    if (!super.equals(other)) return false
+
+    other as PhysicalSchema
+
+    if (row != other.row) return false
+    if (family != other.family) return false
+    if (colq != other.colq) return false
+    if (vis != other.vis) return false
+    if (ts != other.ts) return false
+    if (pvals != other.pvals) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = super.hashCode()
+    result = 31 * result + row.hashCode()
+    result = 31 * result + family.hashCode()
+    result = 31 * result + colq.hashCode()
+    result = 31 * result + (vis?.hashCode() ?: 0)
+    result = 31 * result + (ts?.hashCode() ?: 0)
+    result = 31 * result + pvals.hashCode()
+    return result
+  }
+
+  override fun toString(): String {
+    return "PhysicalSchema(row=$row, family=$family, colq=$colq, vis=$vis, ts=$ts, pvals=$pvals)"
+  }
+
 
 }
 
@@ -132,7 +193,7 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,
     val q = ps.colqNames.zip(decodeSplit(ps.colq, k.columnQualifierData as ABS)).toMap()
     val vis: Map<Name, Lazy<Any?>> = if (ps.vis == null) mapOf() else mapOf(ps.visName!! to decode(ps.vis, k.columnVisibilityData as ABS))
     val ts: Map<Name, Lazy<Any?>> = if (ps.ts == null) mapOf() else mapOf(ps.tsName!! to decodeTime(ps.ts, k.timestamp))
-    val vals = ps.valNames.zip(decodeSplit(ps.vals, v.get())).toMap()
+    val vals = ps.valNames.zip(decodeSplit(ps.pvals, v.get())).toMap()
     map = r+fam+q+vis+ts+vals
   }
   val mapForced = lazy { map.map { (n,v) -> n to v.value }.toMap() }
@@ -201,7 +262,7 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,
 
     fun encodeJoin(attr: PAttribute<*>, tuple: NameTuple): ByteArray = encodeJoin(listOf(attr), tuple)
 
-    // this will be used on row, family, colq, vals, etc. of a NameTuple to get the parts to put together into a Key and Value
+    // this will be used on row, family, colq, pvals, etc. of a NameTuple to get the parts to put together into a Key and Value
     // another, higher-level method will cobble these values together into the actual Key and Value
     // (if handed a previous NameTuple, could check to see if the new one has the same key, and then not need to translate again)
     fun encodeJoin(attrs: List<PAttribute<*>>, tuple: NameTuple): ByteArray {

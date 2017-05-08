@@ -56,76 +56,92 @@ class NullLexicoder<T>(
 }
 
 
+interface Attribute<T> : Comparable<Attribute<T>> {
+  val name: Name
+  val type: LType<T>
+  fun withNewName(name: Name) = Attribute(name, type)
+  operator fun component1() = name
+  operator fun component2() = type
 
-open class Attribute<T>(
-    val name: Name,
-    open val type: LType<T>
-) : Comparable<Attribute<T>> {
-
-  open fun withNewName(n: Name) = Attribute(n, type)
-
-  override fun toString(): String {
-    return "Attribute(name='$name', type=$type)"
+  companion object {
+    operator fun <T> invoke(name: Name, type: LType<T>): Attribute<T> = AttributeImpl(name, type)
   }
 
-  override fun equals(other: Any?): Boolean {
-    if (this === other) return true
-    if (other?.javaClass != javaClass) return false
+  open class AttributeImpl<T>(
+      override val name: Name,
+      override val type: LType<T>
+  ) : Attribute<T> {
 
-    other as Attribute<*>
+    override fun toString(): String {
+      return "Attribute(name='$name', type=$type)"
+    }
 
-    if (name != other.name) return false
-    if (type != other.type) return false
+    override fun equals(other: Any?): Boolean {
+      if (this === other) return true
+      if (other?.javaClass != javaClass) return false
 
-    return true
-  }
+      other as Attribute<*>
 
-  override fun hashCode(): Int {
-    var result = name.hashCode()
-    result = 31 * result + type.hashCode()
-    return result
-  }
+      if (name != other.name) return false
+      if (type != other.type) return false
 
-  /** Careful: this returns 0 on objects that are not equal */
-  override fun compareTo(other: Attribute<T>): Int = name.compareTo(other.name)
-}
+      return true
+    }
 
-open class ValAttribute<T>(
-    name: Name,
-    type: LType<T>,
-    val default: T
-) : Attribute<T>(name, type) {
+    override fun hashCode(): Int {
+      var result = name.hashCode()
+      result = 31 * result + type.hashCode()
+      return result
+    }
 
-  override fun withNewName(n: Name) = ValAttribute(n, type, default)
-
-  override fun toString(): String {
-    return "ValAttribute(name='$name', type=$type, default=$default)"
-  }
-
-  override fun equals(other: Any?): Boolean {
-    if (this === other) return true
-    if (other?.javaClass != javaClass) return false
-    if (!super.equals(other)) return false
-
-    other as ValAttribute<*>
-
-    if (default != other.default) return false
-
-    return true
-  }
-
-  override fun hashCode(): Int {
-    var result = super.hashCode()
-    result = 31 * result + (default?.hashCode() ?: 0)
-    return result
+    /** Careful: this returns 0 on objects that are not equal */
+    override fun compareTo(other: Attribute<T>): Int = name.compareTo(other.name)
   }
 }
 
+interface ValAttribute<T> : Attribute<T> {
+  val default: T
+  override fun withNewName(name: Name) = ValAttribute(name, type, default)
+  operator fun component3() = default
+
+  companion object {
+    operator fun <T> invoke(name: Name, type: LType<T>, default: T): ValAttribute<T> = ValAttributeImpl(name, type, default)
+  }
+
+  open class ValAttributeImpl<T>(
+      name: Name,
+      type: LType<T>,
+      override val default: T
+  ) : Attribute.AttributeImpl<T>(name, type), ValAttribute<T> {
+
+    override fun toString(): String {
+      return "ValAttribute(name='$name', type=$type, default=$default)"
+    }
+
+    override fun equals(other: Any?): Boolean {
+      if (this === other) return true
+      if (other?.javaClass != javaClass) return false
+      if (!super.equals(other)) return false
+
+      other as ValAttribute<*>
+
+      if (default != other.default) return false
+
+      return true
+    }
+
+    override fun hashCode(): Int {
+      var result = super.hashCode()
+      result = 31 * result + (default?.hashCode() ?: 0)
+      return result
+    }
+  }
+}
 
 
 // ======================= SCHEMA
 
-data class Schema(
+open class Schema(
   val keys: List<Attribute<*>>,
   val vals: List<ValAttribute<*>>
 ) {
@@ -137,11 +153,37 @@ data class Schema(
     require(kns.disjoint(vns)) { "keys and vals overlap: $keys, $vals" }
   }
 
-  operator fun get(n: Name): Attribute<*>? =
+  open operator fun get(n: Name): Attribute<*>? =
       keys.find { it.name == n } ?: vals.find { it.name == n }
 
-  fun getValue(n: Name): ValAttribute<*>? =
+  open fun getValue(n: Name): ValAttribute<*>? =
       vals.find { it.name == n }
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as Schema
+
+    if (keys != other.keys) return false
+    if (vals != other.vals) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = keys.hashCode()
+    result = 31 * result + vals.hashCode()
+    return result
+  }
+
+  open operator fun component1() = keys
+  open operator fun component2() = vals
+
+  override fun toString(): String {
+    return "Schema(keys=$keys, vals=$vals)"
+  }
+
 }
 
 // ======================= TUPLE
