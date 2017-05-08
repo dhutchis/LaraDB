@@ -6,6 +6,8 @@ import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
 import edu.washington.cs.laragraphulo.opt.ABS
 import edu.washington.cs.laragraphulo.opt.SKVI
+import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Value
 import java.nio.ByteBuffer
 import java.util.*
 
@@ -88,20 +90,54 @@ data class PhysicalSchema(
     val ts: PAttribute<*>?,
     val vals: List<PValAttribute<*>>
 ) {
+  val rowNames = row.map(PAttribute<*>::name)
+  val familyNames = family.map(PAttribute<*>::name)
+  val colqNames = colq.map(PAttribute<*>::name)
+  val visName = vis?.name
+  val tsName = ts?.name
+  val valNames = vals.map(PValAttribute<*>::name)
+  val allNames = rowNames + familyNames + colqNames + (if (visName != null) listOf(visName) else listOf()) +
+      (if (tsName != null) listOf(tsName) else listOf()) + valNames
   init {
-    val rowNames = row.map(PAttribute<*>::name)
-    val familyNames = family.map(PAttribute<*>::name)
-    val colqNames = colq.map(PAttribute<*>::name)
-    val visName = vis?.name ?: listOf<Name>()
-    val tsName = ts?.name ?: listOf<Name>()
-    val valNames = vals.map(PValAttribute<*>::name)
-    val allNames = rowNames + familyNames + colqNames + visName + tsName + valNames
     require(allNames.size == allNames.toSet().size) {"one of the attributes' names is duplicated; $this"}
   }
 
+}
+
+class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,Any?> {
+  val map: Map<Name, Lazy<Any?>>
+  init {
+    val r: Map<Name, Lazy<Any?>> = ps.rowNames.zip(decodeSplit(ps.row, k.rowData as ABS)).toMap()
+    val fam = ps.familyNames.zip(decodeSplit(ps.family, k.columnFamilyData as ABS)).toMap()
+    val q = ps.colqNames.zip(decodeSplit(ps.colq, k.columnQualifierData as ABS)).toMap()
+    val vis: Map<Name, Lazy<Any?>> = if (ps.vis == null) mapOf() else mapOf(ps.visName!! to decode(ps.vis, k.columnVisibilityData as ABS))
+    val ts: Map<Name, Lazy<Any?>> = if (ps.ts == null) mapOf() else mapOf(ps.tsName!! to decodeTime(ps.ts, k.timestamp))
+    val vals = ps.valNames.zip(decodeSplit(ps.vals, v.get())).toMap()
+    map = r+fam+q+vis+ts+vals
+  }
+  val mapForced = lazy { map.map { (n,v) -> n to v.value }.toMap() }
+
+  override val entries: Set<Map.Entry<String, Any?>> = map.entries.map { object : Map.Entry<String,Any?> {
+    override val key: String = it.key
+    override val value: Any?
+      get() = it.value.value
+  } }.toSet()
+  override val keys: Set<String> = map.keys
+  override val size: Int = map.size
+  /** Forces all values. */
+  override val values: Collection<Any?> = mapForced.value.values
+  override fun containsKey(key: String): Boolean = key in map
+  /** Forces all values. */
+  override fun containsValue(value: Any?): Boolean = mapForced.value.containsValue(value)
+  override fun get(key: String): Any? = map[key]?.value
+  override fun isEmpty(): Boolean = map.isEmpty()
 
   companion object {
-    fun decodeSplit(attrs: List<PAttribute<*>>, data: ABS): List<() -> Any?> {
+    fun decodeTime(attr: PAttribute<*>, ts: Long): Lazy<Any?> = lazy { attr.type.decodeLong(ts) }
+    fun decode(attr: PAttribute<*>, data: ByteArray): Lazy<Any?> = decodeSplit(listOf(attr), data)[0]
+    fun decode(attr: PAttribute<*>, data: ABS): Lazy<Any?> = decodeSplit(listOf(attr), data)[0]
+    fun decodeSplit(attrs: List<PAttribute<*>>, data: ByteArray): List<Lazy<Any?>> = decodeSplit(attrs, ABS(data))
+    fun decodeSplit(attrs: List<PAttribute<*>>, data: ABS): List<Lazy<Any?>> {
       require(data.isBackedByArray) {"not backed by array: $data"}
       // the prefix of attributes that have a positive width can be directly accessed
       // if the last attribute is -1 variable width and no others are, it can be directly accessed
@@ -111,13 +147,13 @@ data class PhysicalSchema(
        * E.g.: the widths 2, 2, 3 yield 0, 2, 4, 7. */
       val posWidthIndexes = posWidthAttributePrefix.fold(listOf(0)) { list, attr -> list + (list.last() + attr.type.naturalWidth) }
       require(data.length() >= posWidthIndexes.last()) {"Insufficient data provided for attributes $attrs: $data"}
-      val posWidthAccessors: List<() -> Any?> = posWidthAttributePrefix.mapIndexed { i, attr -> { attr.type.decode(data.backingArray, data.offset() + posWidthIndexes[i], attr.type.naturalWidth) }  }
+      val posWidthAccessors: List<Lazy<Any?>> = posWidthAttributePrefix.mapIndexed { i, attr -> lazy { attr.type.decode(data.backingArray, data.offset() + posWidthIndexes[i], attr.type.naturalWidth) }  }
 
       return if (posWidthAttributePrefix.size == attrs.size - 1) {
         // only last attribute is variable width case
         val lastAttr = attrs[attrs.size - 1]
         val startIdx = posWidthIndexes.last()
-        val lastAccessor = { lastAttr.type.decode(data.backingArray, data.offset() + startIdx, data.length() - startIdx) }
+        val lastAccessor = lazy { lastAttr.type.decode(data.backingArray, data.offset() + startIdx, data.length() - startIdx) }
         posWidthAccessors + lastAccessor
 
       } else if (posWidthAttributePrefix.size < attrs.size - 1) {
@@ -129,7 +165,7 @@ data class PhysicalSchema(
         val GetSplitData = lazy { splitAndUnescape(data.backingArray, data.offset() + startIdx, data.length() - startIdx).apply { require(this.size == remainingAttr.size) }  }
 
         posWidthAccessors + remainingAttr.mapIndexed { i, lastAttr ->
-          {
+          lazy {
             val splitData = GetSplitData.value[i]
             assert(splitData.hasArray())
             lastAttr.type.decode(splitData.array(), splitData.arrayOffset() + splitData.position(), splitData.remaining())
@@ -148,7 +184,7 @@ data class PhysicalSchema(
     // (if handed a previous NameTuple, could check to see if the new one has the same key, and then not need to translate again)
     fun encodeJoin(attrs: List<PAttribute<*>>, tuple: NameTuple): ByteArray {
       // TODO special case if we are handed a NameTuple which is backed by a KeyValue - just use the KeyValue
-      val encodedDataList: List<ByteArray> = attrs.map { it.type.encodeUnchecked(tuple[it.name]) } // TODO provide default value if tuple[it.name] is not present
+      val encodedDataList: List<ByteArray> = attrs.map { it.type.encodeUnchecked(tuple[it.name] ?: it.type.naturalDefault) } // TODO provide default value if tuple[it.name] is not present
 
       val posWidthAttributePrefix = attrs.takeWhile { it.type.naturalWidth > 0 }
       /** The starting indexes of each attribute, up until the first -1 width.
@@ -198,7 +234,8 @@ data class PhysicalSchema(
         posWidthArray
       }
     }
-  }
-
+  } // end companion object
 }
+
+
 
