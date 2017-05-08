@@ -36,7 +36,8 @@
     <java.version>1.8</java.version>
     <accumulo.version>1.8.1</accumulo.version>
     <junit.jupiter.version>5.0.0-M4</junit.jupiter.version>
-    <junit.vintage.version>4.12.0-M4</junit.vintage.version>
+    <junit.version>4.12</junit.version>
+    <junit.vintage.version>${junit.version}.0-M4</junit.vintage.version>
     <junit.platform.version>1.0.0-M4</junit.platform.version>
   </properties>
 
@@ -102,14 +103,20 @@
     <!-- JUnit 5 -->
     <dependency>
       <groupId>org.junit.jupiter</groupId>
-      <artifactId>junit-jupiter-engine</artifactId>
+      <artifactId>junit-jupiter-api</artifactId>
       <version>${junit.jupiter.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.junit.vintage</groupId>
-      <artifactId>junit-vintage-engine</artifactId>
-      <version>${junit.vintage.version}</version>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <version>${junit.jupiter.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
 
@@ -133,12 +140,12 @@
       <artifactId>graphulo</artifactId>
       <version>1.0.0-SNAPSHOT</version>
     </dependency>
-    <dependency>
-      <groupId>org.jetbrains.kotlin</groupId>
-      <artifactId>kotlin-test-junit</artifactId>
-      <version>${kotlin.version}</version>
-      <scope>test</scope>
-    </dependency>
+    <!--<dependency>-->
+      <!--<groupId>org.jetbrains.kotlin</groupId>-->
+      <!--<artifactId>kotlin-test-junit</artifactId>-->
+      <!--<version>${kotlin.version}</version>-->
+      <!--<scope>test</scope>-->
+    <!--</dependency>-->
     <dependency>
       <groupId>org.jetbrains.kotlin</groupId>
       <artifactId>kotlin-stdlib-jre8</artifactId>
@@ -219,6 +226,16 @@
             <groupId>org.junit.platform</groupId>
             <artifactId>junit-platform-surefire-provider</artifactId>
             <version>${junit.platform.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>${junit.jupiter.version}</version>
+          </dependency>
+          <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>${junit.vintage.version}</version>
           </dependency>
         </dependencies>
       </plugin>

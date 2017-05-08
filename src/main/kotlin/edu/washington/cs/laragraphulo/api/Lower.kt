@@ -171,19 +171,23 @@ data class PhysicalSchema(
         val remainingAttr = attrs.subList(posWidthAttributePrefix.size, attrs.size)
         val remainingDataList = encodedDataList.subList(posWidthAttributePrefix.size, attrs.size)
         assert(remainingAttr.size > 1)
-        posWidthIndexes.last()
 
         val joined: ByteBuffer = escapeAndJoin(remainingDataList.map { ByteBuffer.wrap(it) })
         val joinedLen = joined.remaining()
 
-        val res = ByteArray(posWidthIndexes.last() + joinedLen)
-        for (i in 0..posWidthIndexes.size-2) {
-          assert(encodedDataList[i].size == posWidthAttributePrefix[i].type.naturalWidth)
-          System.arraycopy(encodedDataList[i], 0, res, posWidthIndexes[i], encodedDataList[i].size)
+        if (posWidthIndexes.last() == 0 && joined.arrayOffset() == 0 && joined.array().size == joinedLen) {
+          // optimization where we use the ByteBuffer's array directly
+          joined.array()
+        } else {
+          val res = ByteArray(posWidthIndexes.last() + joinedLen)
+          for (i in 0..posWidthIndexes.size - 2) {
+            assert(encodedDataList[i].size == posWidthAttributePrefix[i].type.naturalWidth)
+            System.arraycopy(encodedDataList[i], 0, res, posWidthIndexes[i], encodedDataList[i].size)
+          }
+          //lastAttr.type.decode(splitData.array(), splitData.arrayOffset() + splitData.position(), splitData.remaining())
+          System.arraycopy(joined.array(), joined.arrayOffset() + joined.position(), res, posWidthIndexes.last(), joinedLen)
+          res
         }
-        System.arraycopy(joined, 0, res, posWidthIndexes.last(), joinedLen)
-
-        res
       } else {
         // no variable width attributes
         val posWidthArray = ByteArray(posWidthIndexes.last())

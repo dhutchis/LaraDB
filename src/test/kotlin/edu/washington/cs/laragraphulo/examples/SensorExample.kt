@@ -14,7 +14,6 @@ import org.apache.accumulo.core.client.Connector
 import org.junit.Assert
 import org.junit.Test
 import org.slf4j.Logger
-import java.io.File
 import java.io.StringWriter
 import java.net.URL
 import java.util.*
