@@ -1,5 +1,4 @@
 package edu.washington.cs.laragraphulo.api
-import edu.washington.cs.laragraphulo.api.*
 import edu.washington.cs.laragraphulo.api.LType.*
 import edu.washington.cs.laragraphulo.api.NameTupleOp.*
 
@@ -23,7 +22,7 @@ val oneIntTuple: NameTuple = mapOf("v" to 1)
 
 
 // =============== SCHEMAs
-val initialSchema = NameSchema(
+val initialSchema = Schema(
     keys = listOf(attrT, attrC),
     vals = listOf(attrVn)
 )
@@ -39,7 +38,7 @@ val filterFun = MapFun(mapValues = listOf(attrVn)) { tuple ->
   if (tuple["t"] as Long in MIN_TIME..MAX_TIME) tuple else nullTuple
 }
 
-val binFun = ExtFun(extSchema = NameSchema(listOf(attrTp), listOf(attrVn))) { tuple ->
+val binFun = ExtFun(extSchema = Schema(listOf(attrTp), listOf(attrVn))) { tuple ->
   val t = tuple["t"] as Long
   val tm = t % BIN_SIZE
   val tb = t - tm + (if (tm >= BIN_SIZE /2) BIN_SIZE else 0) // new t

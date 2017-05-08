@@ -49,7 +49,7 @@ fun NameTupleOp.getBaseTables0(): Set<Table> = this.fold(setOf<Table>(), { a, b 
 // Key, Value -> NameTuple
 // PType of each attribute
 // that has all the information we need to decode
-// map of Attribute in NameSchema to PType that implements that attribute
+// map of Attribute in Schema to PType that implements that attribute
 // + where the PType is stored: row, column family, column qualifier, timestamp, value
 // row --
 // colf --
@@ -65,6 +65,7 @@ open class PAttribute<T>(
   override fun toString(): String {
     return "P"+super.toString()
   }
+  open fun asPValAttribute() = PValAttribute(name, type, type.naturalDefault)
 }
 
 
@@ -78,6 +79,7 @@ class PValAttribute<T>(
   override fun toString(): String {
     return "P"+super.toString()
   }
+  override fun asPValAttribute() = this
 }
 
 
@@ -90,8 +92,8 @@ data class PhysicalSchema(
     val colq: List<PAttribute<*>> = listOf(),
     val vis: PAttribute<*>? = null,
     val ts: PAttribute<*>? = null,
-    val vals: List<PAttribute<*>>
-) {
+    val vals: List<PValAttribute<*>>
+)  {
   val rowNames = row.map(PAttribute<*>::name)
   val familyNames = family.map(PAttribute<*>::name)
   val colqNames = colq.map(PAttribute<*>::name)

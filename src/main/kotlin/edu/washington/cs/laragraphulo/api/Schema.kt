@@ -21,7 +21,7 @@ fun <E> Collection<E>.disjoint(other: Collection<E>): Boolean {
 /**
  * Return a NameTuple with the same keys but the values set to the default values.
  */
-fun NameTuple.copyDefault(ns: NameSchema): NameTuple {
+fun NameTuple.copyDefault(ns: Schema): NameTuple {
   require(this.keys == (ns.keys + ns.vals).toSet())
   return this.mapValues { (attr, value) ->
     ns.getValue(attr)?.default ?: value
@@ -125,7 +125,7 @@ open class ValAttribute<T>(
 
 // ======================= SCHEMA
 
-data class NameSchema(
+data class Schema(
   val keys: List<Attribute<*>>,
   val vals: List<ValAttribute<*>>
 ) {
@@ -154,7 +154,7 @@ typealias NameTuple = Map<Name,*>
 
 open class ExtFun(
     /** The (to be appended) new key attributes and value attributes that the extFun produces */
-    val extSchema: NameSchema,
+    val extSchema: Schema,
     val extFun: (NameTuple) -> List<NameTuple>
 ) {
   override fun toString(): String {
@@ -169,7 +169,7 @@ class MapFun(
     /** The value attributes that the mapFun produces */
     val mapValues: List<ValAttribute<*>>,
     val mapFun: (NameTuple) -> NameTuple
-) : ExtFun(extSchema = NameSchema(listOf(), mapValues),
+) : ExtFun(extSchema = Schema(listOf(), mapValues),
                extFun = { tuple -> listOf(mapFun(tuple)) }) {
   override fun toString(): String {
     return "MapFun(mapValues=$mapValues, mapFun=$mapFun)"
@@ -264,7 +264,7 @@ data class TimesFun<T1,T2,T3>(
 sealed class NameTupleOp(
 
 ) {
-  abstract val resultSchema: NameSchema
+  abstract val resultSchema: Schema
   abstract fun run(): Iterator<NameTuple>
   protected abstract fun _withTransformedParents(f: (NameTupleOp) -> NameTupleOp): NameTupleOp
   /** Transform this NameTupleOp stack. The [NameTupleOp] passed to [f] is after its parents are transformed. */
@@ -284,14 +284,14 @@ sealed class NameTupleOp(
       /** This can also be a [MapFun] */
       val extFun: ExtFun
   ): NameTupleOp() {
-    override val resultSchema = NameSchema(
+    override val resultSchema = Schema(
         keys = parent.resultSchema.keys + extFun.extSchema.keys,
         vals = extFun.extSchema.vals
     )
     override fun _withTransformedParents(f: (NameTupleOp) -> NameTupleOp) = f(parent).let { if (it == parent) this else copy(it) }
 
     /*    companion object {
-//      fun runExtFunctionOnDefaultValues(ps: NameSchema, f: ExtFun): List<ValAttribute<*>> {
+//      fun runExtFunctionOnDefaultValues(ps: Schema, f: ExtFun): List<ValAttribute<*>> {
 //        val tuple = (ps.keys.map { it.name to it.type.examples.first() } +
 //            ps.vals.map { it.name to it.default }).toMap()
 //        val result = f.extFun(tuple)
@@ -352,15 +352,15 @@ sealed class NameTupleOp(
 
   data class Load(
       val table: Table,
-      override val resultSchema: NameSchema
+      override val resultSchema: Schema
   ): NameTupleOp() {
-//    constructor(table: String, schema: NameSchema, iter: Iterator<NameTuple>): this(table, schema, Collections.emptyIterator())
+//    constructor(table: String, schema: Schema, iter: Iterator<NameTuple>): this(table, schema, Collections.emptyIterator())
     override fun run(): Iterator<NameTuple> = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
     override fun _withTransformedParents(f: (NameTupleOp) -> NameTupleOp) = this
   }
 
   data class Empty(
-      override val resultSchema: NameSchema
+      override val resultSchema: Schema
   ) : NameTupleOp() {
     override fun run(): Iterator<NameTuple> = Collections.emptyIterator()
     override fun _withTransformedParents(f: (NameTupleOp) -> NameTupleOp) = this
@@ -375,7 +375,7 @@ sealed class NameTupleOp(
       val p2: NameTupleOp,
       plusFuns0: Map<Name, PlusFun<*>>
   ): NameTupleOp() {
-    override final val resultSchema = NameSchema(
+    override final val resultSchema = Schema(
         keys = intersectKeys(p1.resultSchema.keys,p2.resultSchema.keys),
         vals = unionValues(p1.resultSchema.vals,p2.resultSchema.vals)
     )
@@ -549,7 +549,7 @@ sealed class NameTupleOp(
         val keysKept: Collection<Name>,
         plusFuns0: Map<Name, PlusFun<*>>
     ) : MergeUnion0(p,
-        p2 = Empty(NameSchema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
+        p2 = Empty(Schema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
         plusFuns0 = plusFuns0) {
       override fun _withTransformedParents(f: (NameTupleOp) -> NameTupleOp) = f(p1).let { if (it == p1) this else MergeAgg(p1, keysKept, plusFuns) }
       override fun toString(): String {
@@ -568,7 +568,7 @@ sealed class NameTupleOp(
       val p: NameTupleOp,
       val renameMap: Map<Name,Name>
   ) : NameTupleOp() {
-    override val resultSchema = p.resultSchema.let { NameSchema(
+    override val resultSchema = p.resultSchema.let { Schema(
         it.keys.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr },
         it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
     ) }
@@ -598,7 +598,7 @@ sealed class NameTupleOp(
       val p: NameTupleOp,
       val newSort: List<Name>
   ) : NameTupleOp() {
-  override val resultSchema = NameSchema(
+  override val resultSchema = Schema(
       newSort.apply { require(this.toSet() == p.resultSchema.keys.map { it.name }.toSet()) {"not all names re-sorted: $newSort on ${p.resultSchema}"} }
           .map { name -> p.resultSchema.keys.find{it.name == name}!! },
       p.resultSchema.vals
@@ -634,7 +634,7 @@ sealed class NameTupleOp(
       val p2: NameTupleOp,
       val timesFuns: Map<Name,TimesFun<*,*,*>>
   ): NameTupleOp() {
-    override val resultSchema = NameSchema(
+    override val resultSchema = Schema(
         keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
         vals = intersectValues(p1.resultSchema.vals,p2.resultSchema.vals, timesFuns)
     )
@@ -819,7 +819,7 @@ sealed class NameTupleOp(
 
 
   data class ScanFromData(
-      override val resultSchema: NameSchema,
+      override val resultSchema: Schema,
       val iter: Iterable<NameTuple>
   ) : NameTupleOp() {
     override fun run(): Iterator<NameTuple> = iter.iterator()

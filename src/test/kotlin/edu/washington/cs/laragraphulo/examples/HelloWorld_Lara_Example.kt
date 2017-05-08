@@ -36,7 +36,7 @@ class HelloWorld_Lara_Example {
     val attrV = ValAttribute("v", STRING, "")
 
     // ============= SCHEMA
-    val initialSchema = NameSchema(
+    val initialSchema = Schema(
         keys = listOf(attrK),
         vals = listOf(attrV)
     )

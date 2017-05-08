@@ -32,6 +32,8 @@ class TupleEncodeTest {
     @JvmStatic @Suppress("UNUSED")
     fun extraDataCases() = listOf(pschema2 to tuples4, pschema2r to tuples4, pschema3 to tuples4)
 
+    private fun signum(i: Int) = if (i < 0) -1 else if (i == 0) 0 else 1
+
     private val rand = Random()
     fun genRandomSchema(ins0: List<PAttribute<*>>): PhysicalSchema {
       val useTs = ins0.any { it.type != PType.STRING } && rand.nextBoolean()
@@ -39,9 +41,11 @@ class TupleEncodeTest {
       val (ts,ins) = if (useTs) ins0.first { it.type != PType.STRING }.let { tstype -> tstype to ins0.filter { it != tstype } } else null to ins0
       val num = ins.size
       val par = DoubleArray(4) { -Math.log(rand.nextDouble()) }.let { arr -> arr.sum().let { sum ->
-        val arrInt = arr.map { (it / sum * ins.size).toInt() }.toMutableList()
-        while (arrInt.sum() != ins.size)
-          arrInt[arrInt.indexOf(arrInt.max())] += ins.size - arrInt.sum()
+        val arrInt = arr.map { (it / sum * ins.size + .5).toInt() }.toMutableList()
+        while (arrInt.sum() != ins.size) {
+          val maxVal = arrInt.max()
+          arrInt[arrInt.withIndex().filter { it.value == maxVal }.let { it[rand.nextInt(it.size)].index }] += signum(ins.size - arrInt.sum())
+        }
         arrInt.toList()
       } }
       assert(par.sum() == num) {"partition $par out of ${ins.count()} items (ts is $ts)"}
@@ -52,7 +56,7 @@ class TupleEncodeTest {
           colq = ins.subList(pre[2], pre[3]),
           vis = null,
           ts = ts,
-          vals = ins.subList(pre[3],pre[4])
+          vals = ins.subList(pre[3],pre[4]).map { it.asPValAttribute() }
       ).apply { logger.debug{"schema: $this"} }
     }
   }

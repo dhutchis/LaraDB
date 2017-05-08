@@ -6,7 +6,6 @@ import edu.washington.cs.laragraphulo.api.NameTupleOp.*
 import edu.washington.cs.laragraphulo.api.LType.*
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
-import org.junit.Assert
 import org.junit.Test
 import org.slf4j.Logger
 import java.util.*
@@ -39,13 +38,13 @@ class WordCount_Lara_Example {
     val attrCount = ValAttribute("count", UINT, 0)
 
     // ============= SCHEMA
-    val initialSchema = NameSchema(
+    val initialSchema = Schema(
         keys = listOf(attrD),
         vals = listOf(attrT)
     )
 
     // ============= UDF
-    val extFun = ExtFun(NameSchema(listOf(attrW), listOf(attrCount))) { tuple ->
+    val extFun = ExtFun(Schema(listOf(attrW), listOf(attrCount))) { tuple ->
       val wordMap: Map<String, Int> = (tuple["text"] as String).split(" ").groupBy { it }.mapValues { (_,list) -> list.count() }
       wordMap.map { (word,count) -> mapOf("word" to word, "count" to count) }
     }
