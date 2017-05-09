@@ -1,45 +1,41 @@
 package edu.washington.cs.laragraphulo.api
 
 import edu.washington.cs.laragraphulo.api.TupleOp.*
-import edu.washington.cs.laragraphulo.api.TupleOp.MergeUnion0.*
 import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
 import edu.washington.cs.laragraphulo.opt.ABS
 import edu.washington.cs.laragraphulo.opt.EMPTY_B
 import edu.washington.cs.laragraphulo.opt.SKVI
+import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import java.nio.ByteBuffer
 
 
-fun TupleOp.getBaseTables(): Set<Table> = when(this) {
-  is Load -> setOf(this.table)
-  is Ext -> this.parent.getBaseTables()
-  is Empty -> setOf()
-  is MergeUnion0 -> this.p1.getBaseTables() + this.p2.getBaseTables()
-  is Rename -> this.p.getBaseTables()
-  is Sort -> this.p.getBaseTables()
-  is MergeJoin -> this.p1.getBaseTables() + this.p2.getBaseTables()
-  is ScanFromData -> setOf()
-}
+//fun TupleOp.getBaseTables(): Set<Table> = when(this) {
+//  is Load -> setOf(this.table)
+//  is Ext -> this.parent.getBaseTables()
+//  is Empty -> setOf()
+//  is MergeUnion0 -> this.p1.getBaseTables() + this.p2.getBaseTables()
+//  is Rename -> this.p.getBaseTables()
+//  is Sort -> this.p.getBaseTables()
+//  is MergeJoin -> this.p1.getBaseTables() + this.p2.getBaseTables()
+//  is LoadData -> setOf()
+//}
 
-fun TupleOp.lower(tableMap: Map<Table, SKVI>): TupleOp = when(this) {
-  is Ext -> Ext(this.parent.lower(tableMap), this.extFun)
-  is Empty -> this
-  is MergeUnion -> MergeUnion(this.p1.lower(tableMap), this.p2.lower(tableMap), this.plusFuns)
-  is MergeAgg -> MergeAgg(this.p1.lower(tableMap), keysKept, plusFuns)
-  is Rename -> Rename(this.p.lower(tableMap), renameMap)
-  is Sort -> Sort(p.lower(tableMap), newSort)
-  is MergeJoin -> MergeJoin(this.p1.lower(tableMap), this.p2.lower(tableMap), timesFuns)
-  is ScanFromData -> this
-  is Load -> {
-    require(this.table in tableMap) {"Attempt to lower a TupleOp stack but no SKVI given for $table"}
-    // wrap around SKVI to convert Key/Value entries to a map. Need a Schema
-    TODO()
+fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterator<NameTuple>>): TupleOp = this.transform {
+  when (it) {
+    is Load -> {
+      require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
+      // wrap around SKVI to convert Key/Value entries to a map. Need a Schema
+      //KvToTupleAdapter(ps, SkviToIteratorAdapter(tableMap[this.table]!!))
+      LoadOnce(it.resultSchema, tableMap[it.table]!!)
+    }
+    else -> it
   }
 }
 
-fun TupleOp.getBaseTables0(): Set<Table> = this.fold(setOf<Table>(), { a, b -> a + b}) { when(it) {
+fun TupleOp.getBaseTables(): Set<Table> = this.fold(setOf<Table>(), { a, b -> a + b }) { when(it) {
   is Load -> setOf(it.table)
   else -> setOf()
 } }
@@ -321,7 +317,7 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,
   } // end companion object
 }
 
-/** Pass this to [ScanFromData] to create a TupleOp. */
+/** Pass this to [LoadData] to create a TupleOp. */
 class KvToTupleAdapter(val ps: PhysicalSchema, val iter: Iterator<Pair<Key,Value>>): Iterator<NameTuple> {
 //  private val skviIter = SkviToIteratorAdapter(skvi)
 

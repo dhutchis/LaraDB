@@ -47,7 +47,7 @@ class HelloWorld_Lara_Example {
     }
 
     // ============= QUERY
-    val query = ScanFromData(initialSchema, exampleData)
+    val query = LoadData(initialSchema, exampleData)
         .ext(mapFun)
 
     // ============= RUN! (and print the result)

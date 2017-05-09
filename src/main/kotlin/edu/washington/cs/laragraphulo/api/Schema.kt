@@ -2,8 +2,12 @@ package edu.washington.cs.laragraphulo.api
 
 import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
+import edu.washington.cs.laragraphulo.warn
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import org.apache.accumulo.core.client.lexicoder.impl.AbstractLexicoder
+import org.slf4j.Logger
 import java.util.*
 import kotlin.NoSuchElementException
 import kotlin.collections.ArrayList
@@ -308,11 +312,10 @@ sealed class TupleOp(
 ) {
   abstract val resultSchema: Schema
   abstract fun run(): Iterator<NameTuple>
-  protected abstract fun _withTransformedParents(f: (TupleOp) -> TupleOp): TupleOp
   /** Transform this TupleOp stack. The [TupleOp] passed to [f] is after its parents are transformed. */
-  fun transform(f: (TupleOp) -> TupleOp): TupleOp = f(_withTransformedParents(f))
+  abstract fun transform(f: (TupleOp) -> TupleOp): TupleOp
   /** Visit each op and run a function on it without altering it */
-  inline fun visit(crossinline f: (TupleOp) -> Unit) = transform { f(it); it }
+  fun visit(f: (TupleOp) -> Unit) = transform { f(it); it }
   /** Do a structural fold over this TupleOp stack. [combine] should be **commutative**. */
   inline fun <T> fold(init: T, crossinline combine: (T, T) -> T, crossinline f: (TupleOp) -> T): T {
     var t: T = init
@@ -330,7 +333,7 @@ sealed class TupleOp(
         keys = parent.resultSchema.keys + extFun.extSchema.keys,
         vals = extFun.extSchema.vals
     )
-    override fun _withTransformedParents(f: (TupleOp) -> TupleOp) = f(parent).let { if (it == parent) this else copy(it) }
+    override fun transform(f: (TupleOp) -> TupleOp) = f(parent.transform(f)).let { if (it == parent) this else copy(it) }
 
     /*    companion object {
 //      fun runExtFunctionOnDefaultValues(ps: Schema, f: ExtFun): List<ValAttribute<*>> {
@@ -398,14 +401,14 @@ sealed class TupleOp(
   ): TupleOp() {
 //    constructor(table: String, schema: Schema, iter: Iterator<NameTuple>): this(table, schema, Collections.emptyIterator())
     override fun run(): Iterator<NameTuple> = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
-    override fun _withTransformedParents(f: (TupleOp) -> TupleOp) = this
+    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
   }
 
   data class Empty(
       override val resultSchema: Schema
   ) : TupleOp() {
     override fun run(): Iterator<NameTuple> = Collections.emptyIterator()
-    override fun _withTransformedParents(f: (TupleOp) -> TupleOp) = this
+    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
   }
 
 
@@ -444,7 +447,7 @@ sealed class TupleOp(
       if (this === other) return true
       if (other?.javaClass != javaClass) return false
 
-      other as MergeUnion
+      other as MergeUnion0
 
       if (p1 != other.p1) return false
       if (p2 != other.p2) return false
@@ -579,9 +582,9 @@ sealed class TupleOp(
         p2: TupleOp,
         plusFuns0: Map<Name, PlusFun<*>>
     ) : MergeUnion0(p1,p2,plusFuns0) {
-      override fun _withTransformedParents(f: (TupleOp) -> TupleOp): MergeUnion {
-        val np1 = f(p1)
-        val np2 = f(p2)
+      override fun transform(f: (TupleOp) -> TupleOp): MergeUnion {
+        val np1 = f(p1.transform(f))
+        val np2 = f(p2.transform(f))
         return if (np1 == p1 && np2 == p2) this else MergeUnion(np1, np2, plusFuns)
       }
     }
@@ -593,7 +596,7 @@ sealed class TupleOp(
     ) : MergeUnion0(p,
         p2 = Empty(Schema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
         plusFuns0 = plusFuns0) {
-      override fun _withTransformedParents(f: (TupleOp) -> TupleOp) = f(p1).let { if (it == p1) this else MergeAgg(p1, keysKept, plusFuns) }
+      override fun transform(f: (TupleOp) -> TupleOp) = f(p1.transform(f)).let { if (it == p1) this else MergeAgg(it, keysKept, plusFuns) }
       override fun toString(): String {
         return "MergeAgg(p=$p1, keysKept=$keysKept, plusFuns=$plusFuns)"
       }
@@ -614,7 +617,7 @@ sealed class TupleOp(
         it.keys.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr },
         it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
     ) }
-    override fun _withTransformedParents(f: (TupleOp) -> TupleOp) = f(p).let { if (it == p) this else copy(it) }
+    override fun transform(f: (TupleOp) -> TupleOp) = f(p.transform(f)).let { if (it == p) this else copy(it) }
 
     override fun run(): Iterator<NameTuple> {
       val iter = p.run()
@@ -645,7 +648,7 @@ sealed class TupleOp(
           .map { name -> p.resultSchema.keys.find{it.name == name}!! },
       p.resultSchema.vals
   )
-  override fun _withTransformedParents(f: (TupleOp) -> TupleOp) = f(p).let { if (it == p) this else copy(it) }
+  override fun transform(f: (TupleOp) -> TupleOp) = f(p.transform(f)).let { if (it == p) this else copy(it) }
 
   override fun run(): Iterator<NameTuple> {
       val l: MutableList<NameTuple> = ArrayList()
@@ -680,9 +683,9 @@ sealed class TupleOp(
         keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
         vals = intersectValues(p1.resultSchema.vals,p2.resultSchema.vals, timesFuns)
     )
-    override fun _withTransformedParents(f: (TupleOp) -> TupleOp): MergeJoin {
-      val np1 = f(p1)
-      val np2 = f(p2)
+    override fun transform(f: (TupleOp) -> TupleOp): MergeJoin {
+      val np1 = f(p1.transform(f))
+      val np2 = f(p2.transform(f))
       return if (np1 == p1 && np2 == p2) this else copy(np1, np2)
     }
 
@@ -716,7 +719,7 @@ sealed class TupleOp(
               require(attr.default == times.leftAnnihilator)
               {"for attribute ${attr.name}, left default value ${attr.default} != times fun left annihilator ${times.leftAnnihilator}"}
               require(battr.default == times.rightAnnihilator)
-              {"for attribute ${attr.name}, right default value ${battr.default} != times fun right annihilator ${times.rightAnnihilator}"}
+              {"for attribute ${attr.name}, right default value ${battr.default} != times fun right annihilator ${times.rightAnnihilator}. LeftAttr $a, RightAttr $b, timesFun $times"}
 //              ValAttribute(attr.name, times.resultType, times.resultZero)
               multiplyTypeGet(attr.name, times)
             }
@@ -860,15 +863,37 @@ sealed class TupleOp(
   }
 
 
-  data class ScanFromData(
+  data class LoadData(
       override val resultSchema: Schema,
       val iter: Iterable<NameTuple>
   ) : TupleOp() {
     override fun run(): Iterator<NameTuple> = iter.iterator()
-    override fun _withTransformedParents(f: (TupleOp) -> TupleOp) = this
+    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
+    override fun toString(): String {
+      return "LoadData(resultSchema=$resultSchema)"
+    }
   }
 
+  data class LoadOnce(
+      override val resultSchema: Schema,
+      val iter: Iterator<NameTuple>
+  ) : TupleOp() {
+    private var ran = false
+    override fun run(): Iterator<NameTuple> {
+      if (ran) logger.warn{"$this ran more than once"}
+      ran = true
+      return iter
+    }
+    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
+    override fun toString(): String {
+      return "LoadOnce(resultSchema=$resultSchema, ran=$ran)"
+    }
 
+    companion object : Loggable {
+      override val logger: Logger = logger<LoadOnce>()
+    }
+
+  }
 
 }
 

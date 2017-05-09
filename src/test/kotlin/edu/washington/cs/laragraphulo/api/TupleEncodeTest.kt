@@ -20,7 +20,9 @@ class TupleEncodeTest {
 
     private fun signum(i: Int) = if (i < 0) -1 else if (i == 0) 0 else 1
 
-    private val rand = Random()
+    private val rand = Random().apply { this.nextLong().let { logger.debug{"random seed: $it"}; this.setSeed(it) } }
+    /** Allocates the given attributes randomly around the various parts of a PhysicalSchema.
+     * Does not use column visibility and does not put STRING data into the timestamp. */
     fun genRandomSchema(ins0: List<PAttribute<*>>): PhysicalSchema {
       val useTs = ins0.any { it.type != PType.STRING } && rand.nextBoolean()
 //      val useVis = rand.nextBoolean()
@@ -53,7 +55,7 @@ class TupleEncodeTest {
     val (attrs,tuples) = pair
     val ps = genRandomSchema(attrs)
     val iter = KvToTupleAdapter(ps, TupleToKvAdapter(ps, tuples.iterator()))
-//    val iter = TupleOp.ScanFromData(ps, tuples.iterator())
+//    val iter = TupleOp.LoadData(ps, tuples)
     assertTrue(Iterators.elementsEqual(tuples.iterator(), iter))
   }
 }

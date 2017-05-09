@@ -51,7 +51,7 @@ class WordCount_Lara_Example {
     val plus = PlusFun(0, Int::plus)
 
     // ============= QUERY
-    val query = ScanFromData(initialSchema, exampleData)
+    val query = LoadData(initialSchema, exampleData)
         .ext(extFun)
         .sort(listOf("word", "docid"))
         .agg(listOf("word"), mapOf("count" to plus))
