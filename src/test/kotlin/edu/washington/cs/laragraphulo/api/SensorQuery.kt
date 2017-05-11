@@ -31,11 +31,11 @@ object SensorQuery {
   const val BIN_SIZE = 120000
 
   // idea: remove default value from schema in value attributes; compute in .ext TupleOp class
-  val filterFun = MapFun(mapValues = listOf(attrVn)) { tuple ->
+  val filterFun = MapFun("TimeFilter", mapValues = listOf(attrVn)) { tuple ->
     if (tuple["t"] as Long in MIN_TIME..MAX_TIME) tuple else nullTuple
   }
 
-  val binFun = ExtFun(extSchema = Schema(listOf(attrTp), listOf(attrVn))) { tuple ->
+  val binFun = ExtFun("Bin", extSchema = Schema(listOf(attrTp), listOf(attrVn))) { tuple ->
     val t = tuple["t"] as Long
     val tm = t % BIN_SIZE
     val tb = t - tm + (if (tm >= BIN_SIZE /2) BIN_SIZE else 0) // new t
@@ -43,29 +43,29 @@ object SensorQuery {
     listOf(res)
   }
 
-  val createCntFun = MapFun(listOf(attrVn, attrCnt)) { tuple ->
+  val createCntFun = MapFun("CreateCnt", listOf(attrVn, attrCnt)) { tuple ->
     val v = tuple["v"]
     mapOf("v" to v, "cnt" to if (v != null) 1 else 0)
   }
-  val divideVnCntFun = MapFun(listOf(attrVn)) { tuple ->
+  val divideVnCntFun = MapFun("DivideVnCnt", listOf(attrVn)) { tuple ->
     val v = tuple["v"]
     val res = if (v != null) v as Double / tuple["cnt"] as Int else null
     mapOf("v" to res)
 //  tuple - "cnt" + ("v" to res)
   }
 
-  val subtractVn = TimesFun.withNullAnnihilators<Double,Double,Double>(LType.NDOUBLE, Double::minus)
-  val multiplyVn = TimesFun.withNullAnnihilators<Double,Double,Double>(LType.NDOUBLE, Double::times)
-  val divideMinusOneFun = TimesFun<Double?,Int,Double?>(null, 0, LType.NDOUBLE) { a, b ->
+  val subtractVn = TimesFun.withNullAnnihilators<Double,Double,Double>("Subtract",LType.NDOUBLE, Double::minus)
+  val multiplyVn = TimesFun.withNullAnnihilators<Double,Double,Double>("Multiply",LType.NDOUBLE, Double::times)
+  val divideMinusOneFun = TimesFun<Double?,Int,Double?>("DivideMinusOne", null, 0, LType.NDOUBLE) { a, b ->
     if (a != null && b != 0) a / (b - 1) else null
   }
 
-  val notNullFun = MapFun(listOf(attrV0)) { tuple ->
+  val notNullFun = MapFun("NotNull", listOf(attrV0)) { tuple ->
     if (tuple["v"] != null) oneIntTuple else zeroIntTuple
   }
-  val anyFun = PlusFun(0) { a, b -> if (a != 0 || b != 0) 1 else 0 }
-  val plusIntFun = PlusFun(0, Int::plus)
-  val plusDoubleNullFun = PlusFun.withNullIdentity<Double>(Double::plus)
+  val anyFun = PlusFun("Any", 0) { a, b -> if (a != 0 || b != 0) 1 else 0 }
+  val plusIntFun = PlusFun("Plus", 0, Int::plus)
+  val plusDoubleNullFun = PlusFun.withNullIdentity<Double>("Plus",Double::plus)
 
 
   // =============== QUERY

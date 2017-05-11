@@ -297,13 +297,13 @@ class AccumuloConfigImpl : AccumuloConfig {
     // Safe to set the final field authenticationToken.
 
     // Use Java reflection, not Kotlin reflection
-    val authField = AccumuloConfigImpl::class.java.declaredFields.find { it.name == "_authenticationToken" }!!
+    val authField = AccumuloConfigImpl::class.java.declaredFields.find { it.name == this::_authenticationToken.name }!!
         //AccumuloConfigImpl::_authenticationToken.javaField!!
     authField.isAccessible = true
     authField.set(this, auth)
 
     // Same approach for connectorLazy
-    val clField = AccumuloConfigImpl::class.java.declaredFields.find { it.name == "connectorLazy" }!!
+    val clField = AccumuloConfigImpl::class.java.declaredFields.find { it.name == this::connectorLazy.name }!!
         //AccumuloConfigImpl::connectorLazy.javaField!!
     clField.isAccessible = true
     clField.set(this, lazy {

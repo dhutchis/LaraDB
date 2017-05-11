@@ -44,11 +44,11 @@ class WordCount_Lara_Example {
     )
 
     // ============= UDF
-    val extFun = ExtFun(Schema(listOf(attrW), listOf(attrCount))) { tuple ->
+    val extFun = ExtFun("Tokenize", Schema(listOf(attrW), listOf(attrCount))) { tuple ->
       val wordMap: Map<String, Int> = (tuple["text"] as String).split(" ").groupBy { it }.mapValues { (_,list) -> list.count() }
       wordMap.map { (word,count) -> mapOf("word" to word, "count" to count) }
     }
-    val plus = PlusFun(0, Int::plus)
+    val plus = PlusFun("Plus", 0, Int::plus)
 
     // ============= QUERY
     val query = LoadData(initialSchema, exampleData)

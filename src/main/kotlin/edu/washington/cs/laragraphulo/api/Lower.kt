@@ -109,18 +109,19 @@ class PhysicalSchema(
     (if (ts != null) listOf(ts) else listOf()),
     vals = pvals
     ) {
-  val rowNames = row.map(PAttribute<*>::name)
-  val familyNames = family.map(PAttribute<*>::name)
-  val colqNames = colq.map(PAttribute<*>::name)
+  val rowNames = row.map(Attribute<*>::name)
+  val familyNames = family.map(Attribute<*>::name)
+  val colqNames = colq.map(Attribute<*>::name)
   val visName = vis?.name
   val tsName = ts?.name
-  val valNames = pvals.map(PAttribute<*>::name)
-  val keyNames = rowNames + familyNames + colqNames + (if (visName != null) listOf(visName) else listOf()) +
-      (if (tsName != null) listOf(tsName) else listOf())
-  val allNames = keyNames + valNames
+  val keyNames: List<Name> = keys.map(Attribute<*>::name)
+  val valNames = vals.map(Attribute<*>::name)
+  val allNames: List<Name> = keyNames + vals.map(Attribute<*>::name)
+  init {
+  }
   val pkeys = row + family + colq + (if (vis != null) listOf(vis) else listOf()) +
       (if (ts != null) listOf(ts) else listOf())
-  val all = keys + pvals
+  val pall = pkeys + pvals
   init {
     require(allNames.size == allNames.toSet().size) {"one of the attributes' names is duplicated; $this"}
   }

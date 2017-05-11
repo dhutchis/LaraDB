@@ -5,16 +5,56 @@ import com.google.common.primitives.Longs
 import edu.washington.cs.laragraphulo.LexicoderPlus
 import edu.washington.cs.laragraphulo.opt.ABS
 import edu.washington.cs.laragraphulo.opt.EMPTY
-import edu.washington.cs.laragraphulo.sensor.dateParserNoTime
 import org.apache.accumulo.core.client.lexicoder.*
+import java.io.*
 
-typealias NOPE = UnsupportedOperationException
+// A mess used because delegates can't be marked transient
+
+/** Same as [kotlin.comparisons.NaturalOrderComparator], but also Serializable. */
+private object NaturalOrderComparator : Comparator<Comparable<Any>>, Serializable {
+  override fun compare(a: Comparable<Any>, b: Comparable<Any>): Int = a.compareTo(b)
+  @Suppress("VIRTUAL_MEMBER_HIDDEN")
+  fun reversed(): Comparator<Comparable<Any>> = ReverseOrderComparator
+  override fun equals(other: Any?): Boolean = this === other || javaClass == other?.javaClass
+  override fun hashCode(): Int = javaClass.hashCode()
+}
+private object ReverseOrderComparator: Comparator<Comparable<Any>>, Serializable {
+  override fun compare(a: Comparable<Any>, b: Comparable<Any>): Int = b.compareTo(a)
+  @Suppress("VIRTUAL_MEMBER_HIDDEN")
+  fun reversed(): Comparator<Comparable<Any>> = NaturalOrderComparator
+  override fun equals(other: Any?): Boolean = this === other || javaClass == other?.javaClass
+  override fun hashCode(): Int = javaClass.hashCode()
+}
+fun <T:Comparable<T>> serialNaturalOrder() = @Suppress("UNCHECKED_CAST") (NaturalOrderComparator as Comparator<T>)
+fun <T:Comparable<T>> serialReverseOrder() = @Suppress("UNCHECKED_CAST") (NaturalOrderComparator as Comparator<T>)
+
+// compiler bug prevents static enforcement that comparator should be Serializable
+private class SerialNullsFirstComparator<T>(
+    val comparator: Comparator<in T>
+) : Comparator<T?>, Serializable {
+  init {
+    require(comparator is Serializable) {"comparator required to be serializable: $comparator"}
+  }
+  override fun compare(a: T?, b: T?): Int {
+    if (a === b) return 0
+    if (a == null) return -1
+    if (b == null) return 1
+    return comparator.compare(a, b)
+  }
+  @Suppress("VIRTUAL_MEMBER_HIDDEN")
+  fun reversed(): Comparator<Comparable<Any>> = ReverseOrderComparator
+  override fun equals(other: Any?): Boolean = this === other || javaClass == other?.javaClass
+  override fun hashCode(): Int = javaClass.hashCode()
+}
+fun <T: Any> serialNullsFirst(comparator: Comparator<in T>): Comparator<T?> = SerialNullsFirstComparator(comparator)
+fun <T: Comparable<T>> serialNullsFirst(): Comparator<T?> = SerialNullsFirstComparator(serialNaturalOrder<T>())
+
 
 
 
 /** Logical Type. Used for specifying UDFs.
  * A default physical type that implements this logical type is [defaultPhysical]. */
-sealed class LType<T> : Comparator<T> {
+sealed class LType<T> : Comparator<T>, Serializable {
   /** Example values of this type. */
   abstract val examples: Set<T>
   /** What values of T are valid for this type?
@@ -27,14 +67,14 @@ sealed class LType<T> : Comparator<T> {
   fun compareUnchecked(o1: Any?, o2: Any?): Int = compare(o1 as T, o2 as T)
 
   /** ex: Measurement value, nullable */
-  object NDOUBLE : LType<Double?>(), Comparator<Double?> by nullsFirst<Double>() {
+  object NDOUBLE : LType<Double?>(), Comparator<Double?> by serialNullsFirst<Double>() {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE.nullable
     override fun toString() = "L-NDOUBLE"
   }
 
   /** Unsigned long, like a timestamp. */
-  object ULONG : LType<Long>(), Comparator<Long> by naturalOrder<Long>() {
+  object ULONG : LType<Long>(), Comparator<Long> by serialNaturalOrder<Long>() {
     override val examples: Set<Long> = setOf(0, 100, Long.MAX_VALUE)
     override fun valid(t: Long): Boolean = t >= 0
     override val defaultPhysical = PType.LONG // todo: add a ULONG physical type. Same with UINT below.
@@ -42,21 +82,21 @@ sealed class LType<T> : Comparator<T> {
   }
 
   /** ex: Measurement class */
-  object STRING : LType<String>(), Comparator<String> by naturalOrder<String>() {
+  object STRING : LType<String>(), Comparator<String> by serialNaturalOrder<String>() {
     override val examples: Set<String> = setOf("", "temperature", "humidity")
     override val defaultPhysical = PType.STRING
     override fun toString() = "L-STRING"
   }
 
   /** ex: Measurement value, always present */
-  object DOUBLE : LType<Double>(), Comparator<Double> by naturalOrder<Double>() {
+  object DOUBLE : LType<Double>(), Comparator<Double> by serialNaturalOrder<Double>() {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE
     override fun toString() = "L-DOUBLE"
   }
 
   /** ex: Count */
-  object UINT : LType<Int>(), Comparator<Int> by naturalOrder<Int>() {
+  object UINT : LType<Int>(), Comparator<Int> by serialNaturalOrder<Int>() {
     override val examples: Set<Int> = setOf(0, 1, 2, 20, Int.MAX_VALUE)
     override fun valid(t: Int): Boolean = t >= 0
     override val defaultPhysical = PType.INT
@@ -115,7 +155,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
 
   private class NPType<T : Any>(
       val p: PType<T>
-  ) : PType<T?>(), Comparator<T?> by nullsFirst(p) {
+  ) : PType<T?>(), Comparator<T?> by serialNullsFirst(p) {
     override fun decode(b: ByteArray, off: Int, len: Int) = p.decode(b, off, len)
     override val examples = p.examples
     override fun encode(v: T?): ByteArray {
@@ -153,7 +193,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   }
 
 
-  object UNKNOWN : PType<ABS>(), Comparator<ABS> by naturalOrder<ABS>() {
+  object UNKNOWN : PType<ABS>(), Comparator<ABS> by serialNaturalOrder<ABS>() {
     override val examples = setOf(EMPTY)
     override fun encode(v: ABS): ByteArray = v.toArray()
     override fun decode(b: ByteArray, off: Int, len: Int) = ABS(b,off,len)
@@ -170,7 +210,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   /** Fixed width int encoding.
    * This might not preserve the order of unsigned integers.
    * */
-  object INT : PType<Int>(), Comparator<Int> by naturalOrder<Int>() {
+  object INT : PType<Int>(), Comparator<Int> by serialNaturalOrder<Int>() {
     override val examples = setOf(0, -1, 1, Int.MIN_VALUE, Int.MAX_VALUE)
     override fun encode(v: Int): ByteArray = Ints.toByteArray(v)
     override fun decode(b: ByteArray, off: Int, len: Int): Int {
@@ -187,7 +227,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Int?> = NPType(this)
   }
   /** See [IntegerLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
-  object INT_VARIABLE : PType<Int>(), Comparator<Int> by naturalOrder() {
+  object INT_VARIABLE : PType<Int>(), Comparator<Int> by serialNaturalOrder() {
     override val examples = setOf(0, -1, 1, Int.MIN_VALUE, Int.MAX_VALUE)
     val lex = IntegerLexicoder()
     override fun encode(v: Int): ByteArray = lex.encode(v)
@@ -201,7 +241,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val defaultPhysical = this
     override val nullable: PType<Int?> = NPType(this)
   }
-  object LONG : PType<Long>(), Comparator<Long> by naturalOrder() {
+  object LONG : PType<Long>(), Comparator<Long> by serialNaturalOrder() {
     override val examples = setOf(0, -1, 1, Long.MIN_VALUE, Long.MAX_VALUE)
     override fun decode(b: ByteArray, off: Int, len: Int): Long = Longs.fromBytes(b[off],b[off+1],b[off+2],b[off+3],b[off+4],b[off+5],b[off+6],b[off+7])
     override fun encode(v: Long): ByteArray = Longs.toByteArray(v)
@@ -215,7 +255,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Long?> = NPType(this)
   }
   /** See [LongLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
-  object LONG_VARIABLE : PType<Long>(), Comparator<Long> by naturalOrder() {
+  object LONG_VARIABLE : PType<Long>(), Comparator<Long> by serialNaturalOrder() {
     override val examples = setOf(0, -1, 1, Long.MIN_VALUE, Long.MAX_VALUE)
     val lex = LongLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): Long = lex.decode(b, off, len)
@@ -229,7 +269,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val defaultPhysical = this
     override val nullable: PType<Long?> = NPType(this)
   }
-  object BOOLEAN : PType<Boolean>(), Comparator<Boolean> by naturalOrder() {
+  object BOOLEAN : PType<Boolean>(), Comparator<Boolean> by serialNaturalOrder() {
     override val examples = setOf(true, false)
     const val ZERO: Byte = 0
     override fun decode(b: ByteArray, off: Int, len: Int): Boolean = b[off] != ZERO
@@ -246,7 +286,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Boolean?> = NPType(this)
   }
   /** Encode in terms of long bits. Probably does not preserve order. */
-  object DOUBLE : PType<Double>(), Comparator<Double> by naturalOrder() {
+  object DOUBLE : PType<Double>(), Comparator<Double> by serialNaturalOrder() {
     override val examples = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override fun decode(b: ByteArray, off: Int, len: Int): Double = java.lang.Double.longBitsToDouble(LONG.decode(b, off, len))
     override fun encode(v: Double): ByteArray = LONG.encode(java.lang.Double.doubleToLongBits(v))
@@ -260,7 +300,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Double?> = NPType(this)
   }
   /** See [DoubleLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
-  object DOUBLE_VARIABLE : PType<Double>(), Comparator<Double> by naturalOrder() {
+  object DOUBLE_VARIABLE : PType<Double>(), Comparator<Double> by serialNaturalOrder() {
     override val examples = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     val lex = DoubleLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): Double = lex.decode(b, off, len)
@@ -275,7 +315,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Double?> = NPType(this)
   }
   /** UTF8 string encoding */
-  object STRING : PType<String>(), Comparator<String> by naturalOrder() {
+  object STRING : PType<String>(), Comparator<String> by serialNaturalOrder() {
     override val examples = setOf("", "a", "A", "abcdefg")
     val lex = StringLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): String = lex.decode(b, off, len)
@@ -295,7 +335,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
 //    override fun encode(v: DateTime?): ByteArray = lex.encode(v)
 //  }
   /** 4 byte constant width. Probably does not preserve order */
-  object FLOAT : PType<Float>(), Comparator<Float> by naturalOrder() {
+  object FLOAT : PType<Float>(), Comparator<Float> by serialNaturalOrder() {
     override val examples = setOf(0.0f, 3.1f, 1.0f, -2.0f, -2.5f, Float.MAX_VALUE, -Float.MAX_VALUE, Float.MIN_VALUE, -Float.MIN_VALUE)
     override fun decode(b: ByteArray, off: Int, len: Int): Float = java.lang.Float.intBitsToFloat(INT.decode(b, off, len))
     override fun encode(v: Float): ByteArray = INT.encode(java.lang.Float.floatToIntBits(v))
@@ -309,7 +349,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val nullable: PType<Float?> = NPType(this)
   }
   /** See [FloatLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
-  object FLOAT_VARIABLE : PType<Float>(), Comparator<Float> by naturalOrder() {
+  object FLOAT_VARIABLE : PType<Float>(), Comparator<Float> by serialNaturalOrder() {
     override val examples = setOf(0.0f, 3.1f, 1.0f, -2.0f, -2.5f, Float.MAX_VALUE, -Float.MAX_VALUE, Float.MIN_VALUE, -Float.MIN_VALUE)
     val lex = FloatLexicoder()
     override fun decode(b: ByteArray, off: Int, len: Int): Float = lex.decode(b, off, len)

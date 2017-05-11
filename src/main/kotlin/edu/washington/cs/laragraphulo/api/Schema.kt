@@ -11,6 +11,8 @@ import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.slf4j.Logger
+import java.io.IOException
+import java.io.ObjectInputStream
 import java.io.Serializable
 import java.util.*
 import kotlin.NoSuchElementException
@@ -63,7 +65,7 @@ class NullLexicoder<T>(
 }
 
 
-interface Attribute<T> : Comparable<Attribute<T>> {
+interface Attribute<T> : Comparable<Attribute<T>>, Serializable {
   val name: Name
   val type: LType<T>
   fun withNewName(name: Name) = Attribute(name, type)
@@ -77,7 +79,7 @@ interface Attribute<T> : Comparable<Attribute<T>> {
   open class AttributeImpl<T>(
       override val name: Name,
       override val type: LType<T>
-  ) : Attribute<T> {
+  ) : Attribute<T>, Serializable {
 
     override fun toString(): String {
       return "Attribute(name='$name', type=$type)"
@@ -151,7 +153,7 @@ interface ValAttribute<T> : Attribute<T> {
 open class Schema(
   val keys: List<Attribute<*>>,
   val vals: List<ValAttribute<*>>
-) : Comparator<NameTuple> {
+) : Comparator<NameTuple>, Serializable {
   init {
     val kns = keys.map(Attribute<*>::name)
     val vns = vals.map(ValAttribute<*>::name)
@@ -187,9 +189,7 @@ open class Schema(
   open operator fun component1() = keys
   open operator fun component2() = vals
 
-  override fun toString(): String {
-    return "Schema(keys=$keys, vals=$vals)"
-  }
+  override fun toString(): String = "Schema(keys=$keys, vals=$vals)"
 
   override fun compare(t1: NameTuple, t2: NameTuple): Int = compareByKey(keys, t1, t2)
 
@@ -208,55 +208,86 @@ open class Schema(
 
 data class KeyComparator(
     val keys: List<Attribute<*>>
-) : Comparator<NameTuple> {
+) : Comparator<NameTuple>, Serializable {
   override fun compare(t1: NameTuple, t2: NameTuple): Int = Schema.compareByKey(keys, t1, t2)
 }
 
 // ======================= TUPLE
 
-typealias NameTuple = Map<Name,*>
+
 
 
 
 // ======================= UDFs
 
 open class ExtFun(
-    /** The (to be appended) new key attributes and value attributes that the extFun produces */
+    val name: String,
     val extSchema: Schema,
-    val extFun: (NameTuple) -> List<NameTuple>
-) {
-  override fun toString(): String {
-    return "ExtFun(extSchema=$extSchema, extFun=$extFun)"
+    val extFun: (NameTuple) -> List<NameTuple> // not included in equals(); use name instead
+) : Serializable {
+  override fun toString(): String = "ExtFun($name, extSchema=$extSchema)"
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+    other as ExtFun
+    if (name != other.name) return false
+    if (extSchema != other.extSchema) return false
+    return true
   }
+  override fun hashCode(): Int {
+    var result = name.hashCode()
+    result = 31 * result + extSchema.hashCode()
+    return result
+  }
+
+
 }
 
 /**
  * Must return default values when passed default values, for any key.
  */
 class MapFun(
-    /** The value attributes that the mapFun produces */
+    name: String,
     val mapValues: List<ValAttribute<*>>,
     val mapFun: (NameTuple) -> NameTuple
-) : ExtFun(extSchema = Schema(listOf(), mapValues),
-               extFun = { tuple -> listOf(mapFun(tuple)) }) {
-  override fun toString(): String {
-    return "MapFun(mapValues=$mapValues, mapFun=$mapFun)"
-  }
+) : ExtFun(name, extSchema = Schema(listOf(), mapValues), extFun = { tuple -> listOf(mapFun(tuple)) }) {
+  override fun toString(): String = "MapFun($name, mapValues=$mapValues)"
 }
 
 
 
 data class PlusFun<T>(
+    val name: String,
     val identity: T,
     val plus: (T, T) -> T
-) {
+) : Serializable {
   fun verifyIdentity(a: T = identity) {
-    check(plus(a,identity) == a && plus(identity,a) == a) {"Value $a violates the identity requirement of plus for identity $identity"}
+    check(plus(a, identity) == a && plus(identity,a) == a) {"Value $a violates the identity requirement of plus for identity $identity"}
   }
+
+  override fun toString(): String = "PlusFun($name, identity=$identity)"
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as PlusFun<*>
+
+    if (name != other.name) return false
+    if (identity != other.identity) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = name.hashCode()
+    result = 31 * result + (identity?.hashCode() ?: 0)
+    return result
+  }
+
 
   companion object {
     /** Wraps a function to have an identity. */
-    inline fun <T> withIdentity(id: T, crossinline plusFun: (T,T) -> T) = PlusFun(id) { a, b ->
+    inline fun <T> withIdentity(name: String, id: T, crossinline plusFun: (T,T) -> T) = PlusFun(name, id) { a, b ->
       when {
         a == id -> b
         b == id -> a
@@ -265,8 +296,8 @@ data class PlusFun<T>(
     }
 
     /** Wraps a function to have identity null (that is zero-sum-free). */
-    inline fun <T : Any> withNullIdentity(crossinline plusFun: (T, T) -> T): PlusFun<T?> {
-      return PlusFun<T?>(null) { a, b ->
+    inline fun <T : Any> withNullIdentity(name: String, crossinline plusFun: (T, T) -> T): PlusFun<T?> {
+      return PlusFun<T?>(name, null) { a, b ->
         when {
           a == null -> b
           b == null -> a
@@ -275,8 +306,10 @@ data class PlusFun<T>(
       }
     }
 
+    const val PLUS_ERROR_FUN = "PlusErrorFun"
+
     /** Use this when you know that summation will never occur. Throws an error when summing two non-identities. */
-    fun <T> plusErrorFun(id: T) = PlusFun(id) { a, b ->
+    fun <T> plusErrorFun(id: T) = PlusFun(PLUS_ERROR_FUN, id) { a, b ->
       when {
         a == id -> b
         b == id -> a
@@ -289,35 +322,69 @@ data class PlusFun<T>(
 
 
 data class TimesFun<T1,T2,T3>(
+    val name: String,
     val leftAnnihilator: T1,
-    val rightAnnihilator: T2,
-    val resultType: LType<T3>, // (PType<T1>, PType<T2>) -> PType<T3>
+    val rightAnnihilator: T2, // (PType<T1>, PType<T2>) -> PType<T3>
+    val resultType: LType<T3>,
     val times: (T1, T2) -> T3
-) {
-  val resultZero: T3 = times(leftAnnihilator, rightAnnihilator)
+) : Serializable {
+  @Transient val resultZero: T3 = times(leftAnnihilator, rightAnnihilator)
+
   fun verifyAnnihilator(a: T1 = leftAnnihilator, b: T2 = rightAnnihilator) {
-    check(times(a,rightAnnihilator) == resultZero && times(leftAnnihilator,b) == resultZero)
+    check(times(a, rightAnnihilator) == resultZero && times(leftAnnihilator,b) == resultZero)
     { "Value $a and $b violate the annihilator requirement of times for annihilators $leftAnnihilator and $rightAnnihilator" }
+  }
+
+  @Throws(ClassNotFoundException::class, IOException::class)
+  private fun readObject(ois: ObjectInputStream) {
+    ois.defaultReadObject()
+    // reconstruct resultZero on deserialization
+    val f = TimesFun::class.java.declaredFields.find { it.name == this::resultZero.name }!!
+    f.isAccessible = true
+    f.set(this, times(leftAnnihilator, rightAnnihilator))
+  }
+
+  override fun toString(): String = "TimesFun(name='$name', leftAnnihilator=$leftAnnihilator, rightAnnihilator=$rightAnnihilator, resultType=$resultType)"
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other?.javaClass != javaClass) return false
+
+    other as TimesFun<*, *, *>
+
+    if (name != other.name) return false
+    if (leftAnnihilator != other.leftAnnihilator) return false
+    if (rightAnnihilator != other.rightAnnihilator) return false
+    if (resultType != other.resultType) return false
+
+    return true
+  }
+
+  override fun hashCode(): Int {
+    var result = name.hashCode()
+    result = 31 * result + (leftAnnihilator?.hashCode() ?: 0)
+    result = 31 * result + (rightAnnihilator?.hashCode() ?: 0)
+    result = 31 * result + resultType.hashCode()
+    return result
   }
 
   companion object {
     /** Wraps a function to have these annihilators. */
-    inline fun <T1, T2, T3> withAnnihilators(
+    inline fun <T1, T2, T3> withAnnihilators(name: String,
         leftAnnihilator: T1, rightAnnihilator: T2,
         resultType: LType<T3>,
         crossinline timesFun: (T1, T2) -> T3
     ): TimesFun<T1, T2, T3> {
       val resultZero = timesFun(leftAnnihilator, rightAnnihilator)
-      return TimesFun(leftAnnihilator, rightAnnihilator, resultType) { a, b ->
+      return TimesFun(name, leftAnnihilator, rightAnnihilator, resultType) { a, b ->
         if (a == leftAnnihilator || b == rightAnnihilator) resultZero else timesFun(a, b)
       }
     }
 
     /** Wraps a function to have null annihilators (with zero product property). */
-    inline fun <T1, T2, T3> withNullAnnihilators(
+    inline fun <T1, T2, T3> withNullAnnihilators(name: String,
         resultType: LType<T3?>,
         crossinline timesFun: (T1, T2) -> T3
-    ): TimesFun<T1?, T2?, T3?> = TimesFun<T1?, T2?, T3?>(null, null, resultType) { a, b ->
+    ): TimesFun<T1?, T2?, T3?> = TimesFun<T1?, T2?, T3?>(name, null, null, resultType) { a, b ->
       if (a == null || b == null) null else timesFun(a, b)
     }
   }
@@ -397,30 +464,6 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
   }
 }
 
-///** Used to stage an iterator. The funciton will be invoked when it is first called. */
-//class StagedIterator<T>(private val f: () -> PeekingIterator<T>) : PeekingIterator<T> {
-//  private var init = false
-//  private lateinit var iter: PeekingIterator<T>
-//  override fun remove() {
-//    if (!init) { iter = f(); init = true }
-//    iter.remove()
-//  }
-//
-//  override fun peek(): T {
-//    if (!init) { iter = f(); init = true }
-//    return iter.peek()
-//  }
-//
-//  override fun next(): T {
-//    if (!init) { iter = f(); init = true }
-//    return iter.next()
-//  }
-//
-//  override fun hasNext(): Boolean {
-//    if (!init) { iter = f(); init = true }
-//    return iter.hasNext()
-//  }
-//}
 
 /** Used to stage values during construction.
  * The [f] will be invoked when this property is first read, unless this property is set first. */
@@ -483,7 +526,7 @@ data class TupleSeekKey(
 
 
 
-sealed class TupleOp {
+sealed class TupleOp : Serializable {
   abstract val resultSchema: Schema
   abstract fun run(): TupleIterator
   /** Transform this TupleOp stack. The [TupleOp] passed to [f] is after its parents are transformed. */
@@ -764,7 +807,7 @@ sealed class TupleOp {
         return plusFuns.mapValues { (name,f) ->
           @Suppress("UNCHECKED_CAST")
           when {
-            name in t1 && name in t2 -> (f.plus as (Any?,Any?) -> Any?)(t1[name], t2[name])
+            name in t1 && name in t2 -> (f.plus as (Any?, Any?) -> Any?)(t1[name], t2[name])
             name in t1 -> t1[name]
             name in t2 -> t2[name]
             else -> f.identity
@@ -1027,7 +1070,7 @@ sealed class TupleOp {
         return timesFuns.mapValues { (name,f) ->
           @Suppress("UNCHECKED_CAST")
           when {
-            name in t1 && name in t2 -> (f.times as (Any?,Any?) -> Any?)(t1[name], t2[name]) // we should always have this case
+            name in t1 && name in t2 -> (f.times as (Any?, Any?) -> Any?)(t1[name], t2[name]) // we should always have this case
             name in t1 -> t1[name]
             name in t2 -> t2[name]
             else -> f.resultZero

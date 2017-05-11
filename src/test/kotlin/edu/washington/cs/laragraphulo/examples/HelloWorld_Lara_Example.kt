@@ -42,7 +42,7 @@ class HelloWorld_Lara_Example {
     )
 
     // ============= UDF
-    val mapFun = MapFun(listOf(attrV)) { tuple ->
+    val mapFun = MapFun("RainyToSunny", listOf(attrV)) { tuple ->
       mapOf("v" to (tuple["v"] as String).replace(RAINY, SUNNY))
     }
 

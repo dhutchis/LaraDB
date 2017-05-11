@@ -3,6 +3,10 @@ package edu.washington.cs.laragraphulo.api
 import com.google.common.collect.Iterators
 import org.apache.accumulo.core.data.ArrayByteSequence
 
+typealias NameTuple = Map<Name,*>
+typealias NOPE = UnsupportedOperationException
+
+
 /** An attribute name. */
 typealias Name = String
 /** An alias for the ArrayByteSequence, which is a wrapper around a ByteArray, possibly at a data offset and restricted length. */

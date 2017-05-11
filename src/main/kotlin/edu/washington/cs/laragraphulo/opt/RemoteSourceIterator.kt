@@ -255,22 +255,22 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
   companion object : Loggable {
     override val logger: org.slf4j.Logger = logger<RemoteSourceIterator>()
 
-    val ZOOKEEPERHOST = "zookeeperHost"
-    val TIMEOUT = "timeout"
-    val INSTANCENAME = "instanceName"
-    val TABLENAME = "tableName"
-    val USERNAME = "username"
+    const val ZOOKEEPERHOST = "zookeeperHost"
+    const val TIMEOUT = "timeout"
+    const val INSTANCENAME = "instanceName"
+    const val TABLENAME = "tableName"
+    const val USERNAME = "username"
 
-    val PASSWORD = "password" // alternative to AUTHENTICATION_TOKEN that passes password directly
-    val AUTHENTICATION_TOKEN = "authenticationToken"
+    const val PASSWORD = "password" // alternative to AUTHENTICATION_TOKEN that passes password directly
+    const val AUTHENTICATION_TOKEN = "authenticationToken"
     // base64 encoding of token
-    val AUTHENTICATION_TOKEN_CLASS = "authenticationTokenClass"
+    const val AUTHENTICATION_TOKEN_CLASS = "authenticationTokenClass"
     // class of token
-    val AUTHORIZATIONS = "authorizations"
-    val ROWRANGES = "rowRanges"
-    val COLFILTER = "colFilter"
-    val DOCLIENTSIDEITERATORS = "doClientSideIterators"
-    val ITER_PREFIX = "diter."
+    const val AUTHORIZATIONS = "authorizations"
+    const val ROWRANGES = "rowRanges"
+    const val COLFILTER = "colFilter"
+    const val DOCLIENTSIDEITERATORS = "doClientSideIterators"
+    const val ITER_PREFIX = "diter."
 
     fun iteratorSetting(
         priority: Int, zookeeperHost: String, timeout: Int, instanceName: String, tableName: String, username: String,
@@ -440,7 +440,7 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
     fun getFirstRangeStarting(iter: PeekingIterator<Range>, seekRange: Range): Iterator<Range> {
       if (!seekRange.isInfiniteStartKey)
         while (iter.hasNext() && !iter.peek().isInfiniteStopKey
-            && (iter.peek().endKey.equals(seekRange.startKey) && !seekRange.isEndKeyInclusive || iter.peek().endKey.compareTo(seekRange.startKey) < 0)) {
+            && (iter.peek().endKey == seekRange.startKey && !seekRange.isEndKeyInclusive || iter.peek().endKey < seekRange.startKey)) {
           iter.next()
         }
       return iter
