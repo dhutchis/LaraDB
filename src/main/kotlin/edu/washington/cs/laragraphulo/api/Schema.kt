@@ -7,13 +7,16 @@ import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.warn
 import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import org.apache.accumulo.core.client.lexicoder.impl.AbstractLexicoder
+import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.slf4j.Logger
+import java.io.Serializable
 import java.util.*
 import kotlin.NoSuchElementException
 import kotlin.collections.ArrayList
 
-typealias Table = String
-typealias Name = String
+
 
 
 // ======================= HELPER FUNCTIONS
@@ -148,7 +151,7 @@ interface ValAttribute<T> : Attribute<T> {
 open class Schema(
   val keys: List<Attribute<*>>,
   val vals: List<ValAttribute<*>>
-) {
+) : Comparator<NameTuple> {
   init {
     val kns = keys.map(Attribute<*>::name)
     val vns = vals.map(ValAttribute<*>::name)
@@ -188,6 +191,25 @@ open class Schema(
     return "Schema(keys=$keys, vals=$vals)"
   }
 
+  override fun compare(t1: NameTuple, t2: NameTuple): Int = compareByKey(keys, t1, t2)
+
+  companion object {
+    fun compareByKey(keys: List<Attribute<*>>, t1: NameTuple, t2: NameTuple): Int {
+      keys.forEach {
+        val n = it.name
+        assert(n in t1 && n in t2)
+        val c = it.type.compareUnchecked(t1[n], t2[n])
+        if (c != 0) return c
+      }
+      return 0
+    }
+  }
+}
+
+data class KeyComparator(
+    val keys: List<Attribute<*>>
+) : Comparator<NameTuple> {
+  override fun compare(t1: NameTuple, t2: NameTuple): Int = Schema.compareByKey(keys, t1, t2)
 }
 
 // ======================= TUPLE
@@ -306,12 +328,106 @@ data class TimesFun<T1,T2,T3>(
 
 // ======================= OPERATORS
 
+data class KeyValue(val key: Key, val value: Value) : Serializable {
+  constructor(kv: Pair<Key, Value>): this(kv.first, kv.second)
+  constructor(kv: Map.Entry<Key, Value>): this(kv.key, kv.value)
+}
 
-sealed class TupleOp(
+interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
+  @Deprecated("unsupported", ReplaceWith("assert(false) {\"remove is not supported\"}"), DeprecationLevel.ERROR)
+  override fun remove() = throw UnsupportedOperationException("remove is not supported")
 
+  fun seek(seek: K)
+  fun deepCopy(env: IteratorEnvironment): AccumuloLikeIterator<K,T>
+
+//  /** @return null if it is not safe to serialize state */
+//  fun serializeState(): ByteArray?
+//  // an init() function?
+
+  /** Return the next value. This is the same value that [peek] returns prior to calling next. */
+  override fun next(): T
+  /** Peek at the next value; do not advance the iteration */
+  override fun peek(): T
+}
+
+interface KeyValueIterator : AccumuloLikeIterator<SeekKey,KeyValue> {
+  override fun deepCopy(env: IteratorEnvironment): KeyValueIterator
+}
+
+interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
+  override fun deepCopy(env: IteratorEnvironment): TupleIterator
+  companion object {
+    val EMPTY = object : TupleIterator {
+      override fun hasNext() = false
+      /** Seek this iterator to a particular TupleSeekKey. The next calls to next(), peek(), and hasNext() will reflect the newly seeked state. */
+      override fun seek(seek: TupleSeekKey) {}
+      override fun next() = throw UnsupportedOperationException("empty TupleIterator")
+      override fun peek() = throw UnsupportedOperationException("empty TupleIterator")
+      override fun deepCopy(env: IteratorEnvironment) = this
+    }
+  }
+
+  class DataTupleIterator(val comp: Comparator<NameTuple>, collection: Iterable<NameTuple>) : TupleIterator {
+    val list: List<NameTuple> = collection.sortedWith(comp)
+    var iter = list.iterator().peeking()
+
+    override fun seek(seek: TupleSeekKey) {
+      iter = seek.range.restrict(comp, list.iterator().peeking())
+    }
+    override fun hasNext(): Boolean = iter.hasNext()
+    override fun next(): NameTuple = iter.next()
+    override fun peek(): NameTuple = iter.peek()
+    // no deep copying necessary because collection is materialized
+    override fun deepCopy(env: IteratorEnvironment) = DataTupleIterator(comp, list)
+  }
+  /** Only allows a single iteration. No deep copying. */
+  class DataTupleIteratorOnce(val comp: Comparator<NameTuple>, var iter: PeekingIterator<NameTuple>) : TupleIterator {
+    var seeked = false
+    override fun seek(seek: TupleSeekKey) {
+      if (seeked) logger.warn{"seeking more than once on $this"}
+      iter = seek.range.restrict(comp, iter)
+      seeked = true
+    }
+    override fun hasNext(): Boolean = iter.hasNext()
+    override fun next(): NameTuple = iter.next()
+    override fun peek(): NameTuple = iter.peek()
+    override fun deepCopy(env: IteratorEnvironment) = throw UnsupportedOperationException("cannot deepCopy this class; only allows a single iteration through")
+    companion object : Loggable {
+      override val logger: Logger = logger<DataTupleIteratorOnce>()
+    }
+  }
+}
+
+data class SeekKey(
+    val range: org.apache.accumulo.core.data.Range,
+    val families: Collection<ABS>,
+    val inclusive: Boolean
 ) {
+  fun toTupleSeekKey(ps: PhysicalSchema): TupleSeekKey =
+      TupleSeekKey(
+//          MyRange.fromGuava(range) { k -> TupleByKeyValue(ps, k, null) },
+          MyRange.fromAccumulo(range).transform { k -> TupleByKeyValue(ps, k, null) },
+          this.families, this.inclusive
+      )
+}
+
+data class TupleSeekKey(
+    val range: MyRange<NameTuple>,
+    val families: Collection<ABS>,
+    val inclusive: Boolean
+) {
+  fun toSeekKey(ps: PhysicalSchema): SeekKey =
+      SeekKey(
+          MyRange.toAccumulo(range.transform { tuple -> ps.encodeToKeyValue(tuple).key }),
+          families, inclusive
+      )
+}
+
+
+
+sealed class TupleOp {
   abstract val resultSchema: Schema
-  abstract fun run(): Iterator<NameTuple>
+  abstract fun run(): TupleIterator
   /** Transform this TupleOp stack. The [TupleOp] passed to [f] is after its parents are transformed. */
   abstract fun transform(f: (TupleOp) -> TupleOp): TupleOp
   /** Visit each op and run a function on it without altering it */
@@ -322,6 +438,7 @@ sealed class TupleOp(
     visit { t = combine(t, f(it)) }
     return t
   }
+
 
   fun ext(extFun: ExtFun): TupleOp = Ext(this, extFun)
   data class Ext(
@@ -350,25 +467,25 @@ sealed class TupleOp(
 //    } */
     val parentKeyNames = parent.resultSchema.keys.map { it.name }
 
-    override fun run(): Iterator<NameTuple> {
-      return ExtIterator()
-    }
+    override fun run(): TupleIterator = ExtIterator(parent.run(), extFun, parentKeyNames)
 
-    inner class ExtIterator : Iterator<NameTuple> {
-      val iter = parent.run()
+    class ExtIterator(
+        val iter: TupleIterator,
+        val extFun: ExtFun,
+        val parentKeyNames: List<Name>
+    ) : TupleIterator {
       var top = findTop()
 
-
-      fun findTop(): Iterator<NameTuple> {
+      fun findTop(): PeekingIterator<NameTuple> {
         if (!iter.hasNext())
-          return Collections.emptyIterator()
+          return Collections.emptyIterator<NameTuple>().peeking()
         var topIter: Iterator<NameTuple>
         var topParent: NameTuple
         do {
           topParent = iter.next()
           topIter = extFun.extFun(topParent).iterator()
         } while (iter.hasNext() && !topIter.hasNext())
-        return PrependKeysIteraor(parentKeyNames, topParent, topIter)
+        return PrependKeysIteraor(parentKeyNames, topParent, topIter).peeking()
       }
 
       override fun hasNext(): Boolean = top.hasNext()
@@ -377,7 +494,12 @@ sealed class TupleOp(
         if (!top.hasNext()) top = findTop()
         return r
       }
-
+      override fun peek(): NameTuple = top.peek()
+      override fun seek(seek: TupleSeekKey) {
+        iter.seek(seek)
+        top = findTop()
+      }
+      override fun deepCopy(env: IteratorEnvironment): TupleIterator = ExtIterator(iter.deepCopy(env), extFun, parentKeyNames)
     }
 
     class PrependKeysIteraor(
@@ -393,6 +515,8 @@ sealed class TupleOp(
         return parentKeys + n
       }
     }
+
+
   }
 
   data class Load(
@@ -400,14 +524,14 @@ sealed class TupleOp(
       override val resultSchema: Schema
   ): TupleOp() {
 //    constructor(table: String, schema: Schema, iter: Iterator<NameTuple>): this(table, schema, Collections.emptyIterator())
-    override fun run(): Iterator<NameTuple> = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
+    override fun run() = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
     override fun transform(f: (TupleOp) -> TupleOp) = f(this)
   }
 
   data class Empty(
       override val resultSchema: Schema
   ) : TupleOp() {
-    override fun run(): Iterator<NameTuple> = Collections.emptyIterator()
+    override fun run() = TupleIterator.EMPTY
     override fun transform(f: (TupleOp) -> TupleOp) = f(this)
   }
 
@@ -497,25 +621,38 @@ sealed class TupleOp(
       }
     }
 
-    override fun run(): Iterator<NameTuple> {
-      return MergeUnionIterator(resultSchema.keys, Iterators.peekingIterator(p1.run()),
-          Iterators.peekingIterator(p2.run()), plusFuns)
+    override fun run(): TupleIterator {
+      return MergeUnionIterator(resultSchema.keys, p1.run(),
+          p2.run(), plusFuns)
     }
 
     class MergeUnionIterator(
         val keys: List<Attribute<*>>,
-        val i1: PeekingIterator<NameTuple>,
-        val i2: PeekingIterator<NameTuple>,
+        val i1: TupleIterator,
+        val i2: TupleIterator,
         val plusFuns: Map<Name, PlusFun<*>>
-    ) : Iterator<NameTuple> {
+    ) : TupleIterator {
       val comparator = KeyComparator(keys)
       val keysAndValues = keys.map { it.name } + plusFuns.keys
       val keyNames = keys.map { it.name }
       var old: NameTuple = keys.map { it.name to it.type.examples.first() }.toMap()
+      var top: NameTuple? = findTop()
 
-      override fun hasNext(): Boolean {
-        return i1.hasNext() || i2.hasNext()
+      override fun deepCopy(env: IteratorEnvironment) = MergeUnionIterator(keys, i1.deepCopy(env), i2.deepCopy(env), plusFuns)
+
+      override fun seek(seek: TupleSeekKey) {
+        i1.seek(seek)
+        i2.seek(seek)
+        top = findTop()
       }
+
+      override fun hasNext() = top != null
+      override fun next(): NameTuple {
+        val t = top ?: throw NoSuchElementException()
+        top = findTop()
+        return t
+      }
+      override fun peek(): NameTuple = top ?: throw NoSuchElementException()
 
       fun getCompare(): Int = when {
         i1.hasNext() && i2.hasNext() -> comparator.compare(i1.peek(), i2.peek())
@@ -524,10 +661,12 @@ sealed class TupleOp(
         else -> throw NoSuchElementException()
       }.let { Integer.signum(it) }
 
-      override fun next(): NameTuple {
+      fun findTop(): NameTuple? {
+        if (!(i1.hasNext() || i2.hasNext())) return null
+
         var c = getCompare()
         val old = if (c == 1) i2.peek() else i1.peek()
-        var cur = old
+        var cur: NameTuple
 
         // first iteration: set result to the values from i1 or i2
         var result = when (c) {
@@ -536,7 +675,7 @@ sealed class TupleOp(
           else -> addValues(i1.next(), i2.next())
         }
 
-        if (hasNext()) {
+        if (i1.hasNext() || i2.hasNext()) {
           c = getCompare()
           cur = if (c == 1) i2.peek() else i1.peek()
 
@@ -548,7 +687,7 @@ sealed class TupleOp(
                   1 -> putDefault(i2.next())
                   else -> addValues(i1.next(), i2.next())
                 })
-            if (!hasNext()) break
+            if (!(i1.hasNext() || i2.hasNext())) break
             c = getCompare()
             cur = if (c == 1) i2.peek() else i1.peek()
           }
@@ -619,22 +758,34 @@ sealed class TupleOp(
     ) }
     override fun transform(f: (TupleOp) -> TupleOp) = f(p.transform(f)).let { if (it == p) this else copy(it) }
 
-    override fun run(): Iterator<NameTuple> {
-      val iter = p.run()
-      return object : AbstractIterator<NameTuple>() {
-        override fun computeNext() {
-          if (!iter.hasNext()) {
-            done()
-          } else {
-            val n = iter.next().mapKeys { (k,_) ->
-              if (k in renameMap) renameMap[k]!! else k
-            }
-            setNext(n)
-          }
-        }
+    override fun run() = RenameIterator(p.run(), renameMap)
+
+    class RenameIterator(val parentIter: TupleIterator, val renameMap: Map<Name, Name>) : TupleIterator {
+      var top: NameTuple? = findTop()
+
+      fun findTop(): NameTuple? {
+        return if (parentIter.hasNext()) parentIter.peek().mapKeys { (k,_) ->
+          if (k in renameMap) renameMap[k]!! else k
+        } else null
       }
 
+      override fun hasNext(): Boolean = top != null
+
+      override fun seek(seek: TupleSeekKey) {
+        parentIter.seek(seek)
+        top = findTop()
+      }
+
+      override fun next(): NameTuple {
+        val t = top ?: throw NoSuchElementException()
+        parentIter.next()
+        top = findTop()
+        return t
+      }
+      override fun peek(): NameTuple = top ?: throw NoSuchElementException()
+      override fun deepCopy(env: IteratorEnvironment) = RenameIterator(parentIter.deepCopy(env), renameMap)
     }
+
   }
 
   fun sort(newSort: List<Name>): TupleOp = Sort(this, newSort)
@@ -650,28 +801,15 @@ sealed class TupleOp(
   )
   override fun transform(f: (TupleOp) -> TupleOp) = f(p.transform(f)).let { if (it == p) this else copy(it) }
 
-  override fun run(): Iterator<NameTuple> {
+  override fun run(): TupleIterator {
       val l: MutableList<NameTuple> = ArrayList()
       p.run().forEach { l += it }
-      l.sortWith(KeyComparator(resultSchema.keys))
-      return l.iterator()
+      return TupleIterator.DataTupleIterator(resultSchema, l)
     }
   }
 
 
-  class KeyComparator(
-      val keys: List<Attribute<*>>
-  ) : Comparator<NameTuple> {
-    override fun compare(p1: NameTuple, p2: NameTuple): Int {
-      var c: Int = 0
-      for (ka in keys) {
-        @Suppress("UNCHECKED_CAST")
-        c = (ka.type as Comparator<Any?>).compare(p1[ka.name], p2[ka.name])
-        if (c != 0) return c
-      }
-      return c
-    }
-  }
+
 
   fun join(p2: TupleOp, timesFuns: Map<Name,TimesFun<*,*,*>>): TupleOp = MergeJoin(this, p2, timesFuns)
   data class MergeJoin(
@@ -734,24 +872,26 @@ sealed class TupleOp(
 
     }
 
-    override fun run(): Iterator<NameTuple> {
+    override fun run(): TupleIterator {
       return MergeJoinIterator(p1.resultSchema.keys.intersect(p2.resultSchema.keys).toList(),
           p1.resultSchema.keys.map { it.name }, p2.resultSchema.keys.map { it.name },
-          Iterators.peekingIterator(p1.run()),
-          Iterators.peekingIterator(p2.run()), timesFuns)
+          p1.run(), p2.run(), timesFuns)
     }
 
     data class MergeJoinIterator(
         val keys: List<Attribute<*>>, // common keys
         val p1keys: List<Name>,
         val p2keys: List<Name>,
-        val i1: PeekingIterator<NameTuple>,
-        val i2: PeekingIterator<NameTuple>,
+        val i1: TupleIterator,
+        val i2: TupleIterator,
         val timesFuns: Map<Name, TimesFun<*,*,*>>
-    ) : Iterator<NameTuple> {
+    ) : TupleIterator {
 
       val comparator = KeyComparator(keys)
       var topIter: PeekingIterator<NameTuple> = findTop()
+      var seekKey = TupleSeekKey(MyRange.all(), listOf(), false)
+
+      override fun deepCopy(env: IteratorEnvironment) = MergeJoinIterator(keys, p1keys, p2keys, i1.deepCopy(env), i2.deepCopy(env), timesFuns)
 
       class OneRowIterator<T>(val rowComparator: Comparator<T>,
                               private val iter: PeekingIterator<T>) : PeekingIterator<T> by iter {
@@ -764,7 +904,7 @@ sealed class TupleOp(
         override fun peek(): T = if (hasNext()) iter.peek() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
       }
       fun readRow(
-          /** See [TupleComparatorByKeyPrefix] */
+          /** See TupleComparatorByKeyPrefix */
           rowComparator: Comparator<NameTuple>,
           iter: PeekingIterator<NameTuple>
       ): List<NameTuple> {
@@ -778,28 +918,47 @@ sealed class TupleOp(
       }
 
       fun findTop(): PeekingIterator<NameTuple> {
-        loop@while (i1.hasNext() && i2.hasNext()) {
-          val c = comparator.compare(i1.peek(), i2.peek())
-          when (Integer.signum(c)) {
-            -1 -> i1.next()
-            1 -> i2.next()
-            else -> break@loop
+        var iter: Iterator<NameTuple>
+        do {
+          loop@ while (i1.hasNext() && i2.hasNext()) {
+            val c = comparator.compare(i1.peek(), i2.peek())
+            val b = when (Integer.signum(c)) {
+              -1 -> skipUntil(i1, i2.peek())
+              1 -> skipUntil(i2, i1.peek()) //i2.next()
+              else -> break@loop
+            }
+            if (!b) return TupleIterator.EMPTY // no more matches
           }
+          if (!i1.hasNext() || !i2.hasNext()) return TupleIterator.EMPTY
+          // We are either aligned or out of data on at least one iterator
+          val one1 = OneRowIterator(comparator, i1)
+          val one2 = readRow(comparator, i2)
+          iter = CartesianIterator(one1, one2, this::times) // must have at least one entry, but maybe it is the default entry
+        } while (!iter.hasNext())
+        return iter.peeking()
+      }
+
+      private fun skipUntil(iter: TupleIterator, toSkipTo: NameTuple): Boolean {
+        var cnt = 0
+        while (cnt < 10 && iter.hasNext() && comparator.compare(iter.peek(), toSkipTo) < 0) {
+          iter.next()
+          cnt++
         }
-        if (!i1.hasNext() || !i2.hasNext()) return Iterators.peekingIterator(Collections.emptyIterator())
-        // We are either aligned or out of data on at least one iterator
-        val one1 = OneRowIterator(comparator, i1)
-        val one2 = readRow(comparator, i2)
-        return Iterators.peekingIterator(CartesianIterator(one1, one2, this::times)) // must have at least one entry, but maybe it is the default entry
+        if (iter.hasNext() && comparator.compare(iter.peek(), toSkipTo) < 0) {
+          val skipRange: MyRange<NameTuple> = seekKey.range.intersection(comparator, MyRange.atLeast(toSkipTo)) ?: return false
+          iter.seek(seekKey.copy(range = skipRange))
+        }
+        return iter.hasNext()
       }
 
-
-
-
-      override fun hasNext(): Boolean {
-        return topIter.hasNext()
+      override fun seek(seek: TupleSeekKey) {
+        i1.seek(seek)
+        i2.seek(seek)
+        topIter = findTop()
       }
 
+      override fun hasNext(): Boolean = topIter.hasNext()
+      override fun peek(): NameTuple = topIter.peek()
       override fun next(): NameTuple {
         val r: NameTuple = topIter.next()
         if (!topIter.hasNext())
@@ -867,7 +1026,7 @@ sealed class TupleOp(
       override val resultSchema: Schema,
       val iter: Iterable<NameTuple>
   ) : TupleOp() {
-    override fun run(): Iterator<NameTuple> = iter.iterator()
+    override fun run(): TupleIterator = TupleIterator.DataTupleIterator(resultSchema, iter)
     override fun transform(f: (TupleOp) -> TupleOp) = f(this)
     override fun toString(): String {
       return "LoadData(resultSchema=$resultSchema)"
@@ -876,13 +1035,13 @@ sealed class TupleOp(
 
   data class LoadOnce(
       override val resultSchema: Schema,
-      val iter: Iterator<NameTuple>
+      private val iter: Iterator<NameTuple>
   ) : TupleOp() {
     private var ran = false
-    override fun run(): Iterator<NameTuple> {
+    override fun run(): TupleIterator {
       if (ran) logger.warn{"$this ran more than once"}
       ran = true
-      return iter
+      return TupleIterator.DataTupleIteratorOnce(resultSchema, iter.peeking())
     }
     override fun transform(f: (TupleOp) -> TupleOp) = f(this)
     override fun toString(): String {

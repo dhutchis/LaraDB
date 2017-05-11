@@ -1,8 +1,12 @@
 package edu.washington.cs.laragraphulo.util
 
 import com.google.common.collect.PeekingIterator
+import edu.washington.cs.laragraphulo.api.KeyValue
+import edu.washington.cs.laragraphulo.api.KeyValueIterator
+import edu.washington.cs.laragraphulo.api.SeekKey
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import java.io.IOException
 import java.util.*
@@ -13,28 +17,27 @@ import java.util.*
  */
 class SkviToIteratorAdapter(
     private val inner: SortedKeyValueIterator<Key, Value>
-) : PeekingIterator<Pair<Key, Value>> {
+) : KeyValueIterator {
 
-  private var res: Pair<Key,Value>? = null
+  private var res: KeyValue? = null
 
-  override fun peek(): Pair<Key, Value> {
-    if (res == null) {
+  override fun peek(): KeyValue {
+    val r0 = res
+    return if (r0 == null) {
       if (!inner.hasTop())
         throw NoSuchElementException()
-      res = Pair(inner.topKey, inner.topValue)
-    }
-    return res!!
+      val r = KeyValue(inner.topKey, inner.topValue)
+      res = r
+      r
+    } else r0
   }
 
-  override fun remove() {
-    throw UnsupportedOperationException()
-  }
+  @Deprecated("unsupported", ReplaceWith("assert(false) {\"remove is not supported\"}"), DeprecationLevel.ERROR)
+  override fun remove() = throw UnsupportedOperationException("remove is not supported")
 
-  override fun hasNext(): Boolean {
-    return inner.hasTop()
-  }
+  override fun hasNext(): Boolean = inner.hasTop()
 
-  override fun next(): Pair<Key, Value> {
+  override fun next(): KeyValue {
     val result = peek()
     res = null
     try {
@@ -44,4 +47,8 @@ class SkviToIteratorAdapter(
       throw NoSuchElementException("IOException from the inner skvi: $ex")
     }
   }
+
+  override fun seek(seek: SeekKey) = inner.seek(seek.range, seek.families, seek.inclusive)
+
+  override fun deepCopy(env: IteratorEnvironment) = SkviToIteratorAdapter(inner.deepCopy(env))
 }

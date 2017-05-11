@@ -7,7 +7,6 @@ import org.junit.jupiter.params.provider.MethodSource
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
-import edu.washington.cs.laragraphulo.opt.ABS
 import org.slf4j.Logger
 import java.util.*
 

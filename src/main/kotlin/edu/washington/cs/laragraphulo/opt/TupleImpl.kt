@@ -327,7 +327,7 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,Tuple> {
 
 data class SeekKey(
     val range: com.google.common.collect.Range<Key>,
-    val families: Collection<ArrayByteSequence>,
+    val families: Collection<ABS>,
     val inclusive: Boolean
 ) {
   fun toTupleSeekKey(apKeySchema: APKeySchema, widthSchema: WidthSchema): TupleSeekKey =
@@ -339,7 +339,7 @@ data class SeekKey(
 
 data class TupleSeekKey(
     val range: com.google.common.collect.Range<TupleKey>,
-    val families: Collection<ArrayByteSequence>,
+    val families: Collection<ABS>,
     val inclusive: Boolean
 ) {
   fun toSeekKey(apKeySchema: APKeySchema): SeekKey =

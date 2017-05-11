@@ -1,4 +1,4 @@
-package edu.washington.cs.laragraphulo.api
+ package edu.washington.cs.laragraphulo.api
 
 import com.google.common.collect.Iterators
 import org.junit.Assert.*
@@ -26,6 +26,9 @@ class TupleEncodeTest {
     fun genRandomSchema(ins0: List<PAttribute<*>>): PhysicalSchema {
       val useTs = ins0.any { it.type != PType.STRING } && rand.nextBoolean()
 //      val useVis = rand.nextBoolean()
+      // May add an extra "value" value attribute
+//      val addValue = if (rand.nextBoolean()) listOf(PValAttribute("value",PType.DOUBLE,0.0)) else listOf()
+
       val (ts,ins) = if (useTs) ins0.first { it.type != PType.STRING }.let { tstype -> tstype to ins0.filter { it != tstype } } else null to ins0
       val num = ins.size
       val par = DoubleArray(4) { -Math.log(rand.nextDouble()) }.let { arr -> arr.sum().let { sum ->

@@ -149,11 +149,11 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
     fun hasThree(i: Int) = i + 2 < rs.size
 
     var i = 0
-    if (rs[i].equals(":")) { // (-Inf,
+    if (rs[i] == ":") { // (-Inf,
       if (!hasTwo(i)) {
         return SETINFRNG // (-Inf,+Inf)
       } else {
-        if (rs[i+1].equals(":") || hasThree(i) && rs[i+2].equals(":"))
+        if (rs[i+1] == ":" || hasThree(i) && rs[i+2] == ":")
           throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
         rngset.add(Range(null, false, rs[i+1], true)) // (-Inf,2]
         i += 2
@@ -167,12 +167,12 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
         else
           rngset.add(Range.exact(rs[i]))
         return rngset
-      } else if (rs[i+1].equals(":")) {
+      } else if (rs[i+1] == ":") {
         if (!hasThree(i)) { // [1,+Inf)
           rngset.add(Range(rs[i], true, null, false))
           return rngset
         } else { // [1,3]
-          if (rs[i+2].equals(":"))
+          if (rs[i+2] == ":")
             throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
           rngset.add(Range(rs[i], true, rs[i+2], true))
           i += 3
@@ -206,11 +206,11 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
     val rngset = ImmutableRangeSet.builder<ByteSequence>()
     var i = 0
 
-    if (rs[i].equals(":")) { // (-Inf,
+    if (rs[i] == ":") { // (-Inf,
       if (!hasTwo(i)) {
         return ImmutableRangeSet.of(com.google.common.collect.Range.all<ByteSequence>()) // (-Inf,+Inf)
       } else {
-        if (rs[i+1].equals(":") || hasThree(i) && rs[i+2].equals(":"))
+        if (rs[i+1] == ":" || hasThree(i) && rs[i+2] == ":")
           throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
         rngset.add(com.google.common.collect.Range.atMost(ArrayByteSequence(rs[i+1]))) // (-Inf,2]
         i += 2
@@ -225,12 +225,12 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
         else
           rngset.add(com.google.common.collect.Range.singleton(ArrayByteSequence(rs[i])))
         return rngset.build()
-      } else if (rs[i+1].equals(":")) {
+      } else if (rs[i+1] == ":") {
         if (!hasThree(i)) { // [1,+Inf)
           rngset.add(com.google.common.collect.Range.atLeast(ArrayByteSequence(rs[i])))
           return rngset.build()
         } else { // [1,3]
-          if (rs[i+2].equals(":"))
+          if (rs[i+2] == ":")
             throw IllegalArgumentException("Bad D4M rowStr: " + rowStr)
           rngset.add(com.google.common.collect.Range.closed(ArrayByteSequence(rs[i]), ArrayByteSequence(rs[i+2])))
           i += 3
@@ -247,7 +247,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
     return rngset.build()
   }
 
-  inline fun <I : Comparable<I>, R : Comparable<R>>transform(r: com.google.common.collect.Range<I>, f: (I) -> R): com.google.common.collect.Range<R> {
+  inline fun <I : Comparable<I>, R : Comparable<R>> transform(r: com.google.common.collect.Range<I>, f: (I) -> R): com.google.common.collect.Range<R> {
     return when {
       !r.hasLowerBound() && !r.hasUpperBound() -> com.google.common.collect.Range.all<R>()
       !r.hasLowerBound() -> when (r.upperBoundType()!!) {

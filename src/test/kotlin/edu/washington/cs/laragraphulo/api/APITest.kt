@@ -30,7 +30,7 @@ class APITest  { // : AccumuloTestBase()
     )
     val urlA = Thread.currentThread().contextClassLoader.getResource(filepathA)
     tcvListFileAction.invoke(urlA)
-    data1.sortWith(TupleOp.KeyComparator(SensorQuery.initialSchema.keys))
+    data1.sortWith(KeyComparator(SensorQuery.initialSchema.keys))
     val tableMap = mapOf("sensorA" to data1.iterator(), "sensorB" to data1.iterator())
 
     val C = SensorQuery.C.instantiateLoad(tableMap)

@@ -3,7 +3,6 @@ package edu.washington.cs.laragraphulo.api
 import edu.washington.cs.laragraphulo.api.TupleOp.*
 import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
-import edu.washington.cs.laragraphulo.opt.ABS
 import edu.washington.cs.laragraphulo.opt.EMPTY_B
 import edu.washington.cs.laragraphulo.opt.SKVI
 import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
@@ -132,7 +131,7 @@ class PhysicalSchema(
   override fun getValue(n: Name): PValAttribute<*>? = pvals.find { it.name == n }
 
 
-  fun encodeToKeyValue(t: NameTuple): Pair<Key,Value> {
+  fun encodeToKeyValue(t: NameTuple): KeyValue {
     require(keyNames.all { it in t }) {"tuple is missing keys for schema $this; tuple is $t"}
     val r = TupleByKeyValue.encodeJoin(row, t)
     val cf = TupleByKeyValue.encodeJoin(family, t)
@@ -143,7 +142,7 @@ class PhysicalSchema(
 
     val k = Key(r, cf, cq, cv, time, false, false) // no copy
     val v = Value(vs, false) // no copy
-    return k to v
+    return KeyValue(k, v)
   }
 
   override fun equals(other: Any?): Boolean {
@@ -181,7 +180,7 @@ class PhysicalSchema(
 
 }
 
-class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,Any?> {
+class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value?): Map<String,Any?> {
   val map: Map<Name, Lazy<Any?>>
   init {
     val r: Map<Name, Lazy<Any?>> = ps.rowNames.zip(decodeSplit(ps.row, k.rowData as ABS)).toMap()
@@ -189,7 +188,7 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,
     val q = ps.colqNames.zip(decodeSplit(ps.colq, k.columnQualifierData as ABS)).toMap()
     val vis: Map<Name, Lazy<Any?>> = if (ps.vis == null) mapOf() else mapOf(ps.visName!! to decode(ps.vis, k.columnVisibilityData as ABS))
     val ts: Map<Name, Lazy<Any?>> = if (ps.ts == null) mapOf() else mapOf(ps.tsName!! to decodeTime(ps.ts, k.timestamp))
-    val vals = ps.valNames.zip(decodeSplit(ps.pvals, v.get())).toMap()
+    val vals = if (v == null) mapOf() else ps.valNames.zip(decodeSplit(ps.pvals, v.get())).toMap()
     map = r+fam+q+vis+ts+vals
   }
   val mapForced = lazy { map.map { (n,v) -> n to v.value }.toMap() }
@@ -318,7 +317,7 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value): Map<String,
 }
 
 /** Pass this to [LoadData] to create a TupleOp. */
-class KvToTupleAdapter(val ps: PhysicalSchema, val iter: Iterator<Pair<Key,Value>>): Iterator<NameTuple> {
+class KvToTupleAdapter(val ps: PhysicalSchema, val iter: Iterator<KeyValue>): Iterator<NameTuple> {
 //  private val skviIter = SkviToIteratorAdapter(skvi)
 
   override fun hasNext(): Boolean = iter.hasNext()
@@ -329,12 +328,12 @@ class KvToTupleAdapter(val ps: PhysicalSchema, val iter: Iterator<Pair<Key,Value
   }
 }
 
-class TupleToKvAdapter(val ps: PhysicalSchema, private val tupleIter: Iterator<NameTuple>): Iterator<Pair<Key,Value>> {
+class TupleToKvAdapter(val ps: PhysicalSchema, private val tupleIter: Iterator<NameTuple>): Iterator<KeyValue> {
   override fun hasNext(): Boolean = tupleIter.hasNext()
-  override fun next(): Pair<Key, Value> {
+  override fun next(): KeyValue {
     val tuple = tupleIter.next()
-    if (tuple is TupleByKeyValue)
-      return tuple.k to tuple.v
+    if (tuple is TupleByKeyValue && tuple.v != null)
+      return KeyValue(tuple.k,tuple.v)
     return ps.encodeToKeyValue(tuple)
   }
 }

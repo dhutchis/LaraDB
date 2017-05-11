@@ -23,6 +23,8 @@ sealed class LType<T> : Comparator<T> {
   /** Default physical type implementing this logical type */
   abstract val defaultPhysical: PType<T>
   override abstract fun toString(): String
+  @Suppress("UNCHECKED_CAST")
+  fun compareUnchecked(o1: Any?, o2: Any?): Int = compare(o1 as T, o2 as T)
 
   /** ex: Measurement value, nullable */
   object NDOUBLE : LType<Double?>(), Comparator<Double?> by nullsFirst<Double>() {
