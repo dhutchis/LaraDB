@@ -15,8 +15,8 @@ import java.io.Serializable
 import java.util.*
 import kotlin.NoSuchElementException
 import kotlin.collections.ArrayList
-
-
+import kotlin.properties.ReadWriteProperty
+import kotlin.reflect.KProperty
 
 
 // ======================= HELPER FUNCTIONS
@@ -334,7 +334,6 @@ data class KeyValue(val key: Key, val value: Value) : Serializable {
 }
 
 interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
-  @Deprecated("unsupported", ReplaceWith("assert(false) {\"remove is not supported\"}"), DeprecationLevel.ERROR)
   override fun remove() = throw UnsupportedOperationException("remove is not supported")
 
   fun seek(seek: K)
@@ -370,10 +369,10 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
   class DataTupleIterator(val comp: Comparator<NameTuple>, collection: Iterable<NameTuple>) : TupleIterator {
     val list: List<NameTuple> = collection.sortedWith(comp)
     var iter = list.iterator().peeking()
-
     override fun seek(seek: TupleSeekKey) {
       iter = seek.range.restrict(comp, list.iterator().peeking())
     }
+
     override fun hasNext(): Boolean = iter.hasNext()
     override fun next(): NameTuple = iter.next()
     override fun peek(): NameTuple = iter.peek()
@@ -395,6 +394,65 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
     companion object : Loggable {
       override val logger: Logger = logger<DataTupleIteratorOnce>()
     }
+  }
+}
+
+///** Used to stage an iterator. The funciton will be invoked when it is first called. */
+//class StagedIterator<T>(private val f: () -> PeekingIterator<T>) : PeekingIterator<T> {
+//  private var init = false
+//  private lateinit var iter: PeekingIterator<T>
+//  override fun remove() {
+//    if (!init) { iter = f(); init = true }
+//    iter.remove()
+//  }
+//
+//  override fun peek(): T {
+//    if (!init) { iter = f(); init = true }
+//    return iter.peek()
+//  }
+//
+//  override fun next(): T {
+//    if (!init) { iter = f(); init = true }
+//    return iter.next()
+//  }
+//
+//  override fun hasNext(): Boolean {
+//    if (!init) { iter = f(); init = true }
+//    return iter.hasNext()
+//  }
+//}
+
+/** Used to stage values during construction.
+ * The [f] will be invoked when this property is first read, unless this property is set first. */
+class Staged<T>(f0: () -> T) : ReadWriteProperty<Any?, T> {
+  private var f: (() -> T)? = f0
+  private var _value: Any? = UNINITIALIZED_VALUE
+
+  override fun getValue(thisRef: Any?, property: KProperty<*>): T {
+    if (f != null) { _value = f!!(); f = null }
+    @Suppress("UNCHECKED_CAST")
+    return _value as T
+  }
+
+  override fun setValue(thisRef: Any?, property: KProperty<*>, value: T) {
+    f = null
+    _value = value
+  }
+
+  fun isInitialized(): Boolean = f != null
+  fun reinitialize(f0: () -> T) {
+    f = f0
+    _value = UNINITIALIZED_VALUE
+  }
+
+  // toString does not force
+  override fun toString(): String = _value.toString()
+  // unsure about equals and hashCode
+
+//  private fun writeReplace(): Any = InitializedLazyImpl(value)
+
+  private object UNINITIALIZED_VALUE {
+    override fun toString(): String = "Staged UNINITIALIZED_VALUE"
   }
 }
 
@@ -474,7 +532,7 @@ sealed class TupleOp {
         val extFun: ExtFun,
         val parentKeyNames: List<Name>
     ) : TupleIterator {
-      var top = findTop()
+      private var top: PeekingIterator<NameTuple> by Staged { findTop() }
 
       fun findTop(): PeekingIterator<NameTuple> {
         if (!iter.hasNext())
@@ -485,7 +543,7 @@ sealed class TupleOp {
           topParent = iter.next()
           topIter = extFun.extFun(topParent).iterator()
         } while (iter.hasNext() && !topIter.hasNext())
-        return PrependKeysIteraor(parentKeyNames, topParent, topIter).peeking()
+        return PrependKeysIterator(parentKeyNames, topParent, topIter).peeking()
       }
 
       override fun hasNext(): Boolean = top.hasNext()
@@ -502,7 +560,7 @@ sealed class TupleOp {
       override fun deepCopy(env: IteratorEnvironment): TupleIterator = ExtIterator(iter.deepCopy(env), extFun, parentKeyNames)
     }
 
-    class PrependKeysIteraor(
+    private class PrependKeysIterator(
         keysToPrepend: List<String>,
         parent: NameTuple,
         val iter: Iterator<NameTuple>
@@ -633,10 +691,10 @@ sealed class TupleOp {
         val plusFuns: Map<Name, PlusFun<*>>
     ) : TupleIterator {
       val comparator = KeyComparator(keys)
-      val keysAndValues = keys.map { it.name } + plusFuns.keys
+//      val keysAndValues = keys.map { it.name } + plusFuns.keys
       val keyNames = keys.map { it.name }
-      var old: NameTuple = keys.map { it.name to it.type.examples.first() }.toMap()
-      var top: NameTuple? = findTop()
+//      var old: NameTuple = keys.map { it.name to it.type.examples.first() }.toMap()
+      private var top: NameTuple? by Staged { findTop() }
 
       override fun deepCopy(env: IteratorEnvironment) = MergeUnionIterator(keys, i1.deepCopy(env), i2.deepCopy(env), plusFuns)
 
@@ -761,7 +819,7 @@ sealed class TupleOp {
     override fun run() = RenameIterator(p.run(), renameMap)
 
     class RenameIterator(val parentIter: TupleIterator, val renameMap: Map<Name, Name>) : TupleIterator {
-      var top: NameTuple? = findTop()
+      var top: NameTuple? by Staged { findTop() }
 
       fun findTop(): NameTuple? {
         return if (parentIter.hasNext()) parentIter.peek().mapKeys { (k,_) ->
@@ -828,7 +886,6 @@ sealed class TupleOp {
     }
 
     companion object {
-
       // similar to unionValues() in MergeUnion
       private fun unionKeys(a: List<Attribute<*>>, b: List<Attribute<*>>): List<Attribute<*>> {
         val commonIdxs = ArrayList<Int>(Math.min(a.size,b.size))
@@ -888,7 +945,7 @@ sealed class TupleOp {
     ) : TupleIterator {
 
       val comparator = KeyComparator(keys)
-      var topIter: PeekingIterator<NameTuple> = findTop()
+      var topIter: PeekingIterator<NameTuple> by Staged { findTop() }
       var seekKey = TupleSeekKey(MyRange.all(), listOf(), false)
 
       override fun deepCopy(env: IteratorEnvironment) = MergeJoinIterator(keys, p1keys, p2keys, i1.deepCopy(env), i2.deepCopy(env), timesFuns)
