@@ -65,12 +65,18 @@ sealed class LType<T> : Comparator<T>, Serializable {
   override abstract fun toString(): String
   @Suppress("UNCHECKED_CAST")
   fun compareUnchecked(o1: Any?, o2: Any?): Int = compare(o1 as T, o2 as T)
+  /** A least value, for comparison purposes */
+  abstract val MIN_VALUE: T
+  /** A greatest value, for comparison purposes */
+  abstract val MAX_VALUE: T
 
   /** ex: Measurement value, nullable */
   object NDOUBLE : LType<Double?>(), Comparator<Double?> by serialNullsFirst<Double>() {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE.nullable
     override fun toString() = "L-NDOUBLE"
+    override val MIN_VALUE: Double = -Double.NEGATIVE_INFINITY
+    override val MAX_VALUE: Double = Double.POSITIVE_INFINITY
   }
 
   /** Unsigned long, like a timestamp. */
@@ -79,6 +85,8 @@ sealed class LType<T> : Comparator<T>, Serializable {
     override fun valid(t: Long): Boolean = t >= 0
     override val defaultPhysical = PType.LONG // todo: add a ULONG physical type. Same with UINT below.
     override fun toString() = "L-ULONG"
+    override val MIN_VALUE = 0L
+    override val MAX_VALUE = Long.MAX_VALUE
   }
 
   /** ex: Measurement class */
@@ -86,6 +94,8 @@ sealed class LType<T> : Comparator<T>, Serializable {
     override val examples: Set<String> = setOf("", "temperature", "humidity")
     override val defaultPhysical = PType.STRING
     override fun toString() = "L-STRING"
+    override val MIN_VALUE = PType.STRING.MIN_VALUE
+    override val MAX_VALUE = PType.STRING.MAX_VALUE
   }
 
   /** ex: Measurement value, always present */
@@ -93,6 +103,8 @@ sealed class LType<T> : Comparator<T>, Serializable {
     override val examples: Set<Double> = setOf(0.0, 3.1, 1.0, -2.0, -2.5, Double.MAX_VALUE, -Double.MAX_VALUE, Double.MIN_VALUE, -Double.MIN_VALUE)
     override val defaultPhysical = PType.DOUBLE
     override fun toString() = "L-DOUBLE"
+    override val MIN_VALUE: Double = -Double.NEGATIVE_INFINITY
+    override val MAX_VALUE: Double = Double.POSITIVE_INFINITY
   }
 
   /** ex: Count */
@@ -101,6 +113,8 @@ sealed class LType<T> : Comparator<T>, Serializable {
     override fun valid(t: Int): Boolean = t >= 0
     override val defaultPhysical = PType.INT
     override fun toString() = "L-UINT"
+    override val MIN_VALUE = 0
+    override val MAX_VALUE = Integer.MAX_VALUE
   }
 
 
@@ -173,6 +187,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val naturalDefault = null
     override fun toString() = "N"+p.toString()
     override val nullable: PType<T?> = this
+    override val MIN_VALUE = p.MIN_VALUE
+    override val MAX_VALUE = p.MAX_VALUE
 
     override fun equals(other: Any?): Boolean {
       if (this === other) return true
@@ -205,6 +221,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): ABS = throw NOPE("no conversion from Long to ${toString()}")
     override val defaultPhysical = this
     override val nullable: PType<ABS?> = NPType(this)
+    override val MIN_VALUE = ABS(byteArrayOf())
+    override val MAX_VALUE = ABS(byteArrayOf(Byte.MAX_VALUE,Byte.MAX_VALUE,Byte.MAX_VALUE,Byte.MAX_VALUE,Byte.MAX_VALUE))
   }
 
   /** Fixed width int encoding.
@@ -225,6 +243,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Int = l.toInt()
     override val defaultPhysical = this
     override val nullable: PType<Int?> = NPType(this)
+    override val MIN_VALUE = Integer.MIN_VALUE
+    override val MAX_VALUE = Integer.MAX_VALUE
   }
   /** See [IntegerLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
   object INT_VARIABLE : PType<Int>(), Comparator<Int> by serialNaturalOrder() {
@@ -240,6 +260,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Int = l.toInt()
     override val defaultPhysical = this
     override val nullable: PType<Int?> = NPType(this)
+    override val MIN_VALUE = Integer.MIN_VALUE
+    override val MAX_VALUE = Integer.MAX_VALUE
   }
   object LONG : PType<Long>(), Comparator<Long> by serialNaturalOrder() {
     override val examples = setOf(0, -1, 1, Long.MIN_VALUE, Long.MAX_VALUE)
@@ -253,6 +275,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Long = l
     override val defaultPhysical = this
     override val nullable: PType<Long?> = NPType(this)
+    override val MIN_VALUE = Long.MIN_VALUE
+    override val MAX_VALUE = Long.MAX_VALUE
   }
   /** See [LongLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
   object LONG_VARIABLE : PType<Long>(), Comparator<Long> by serialNaturalOrder() {
@@ -268,6 +292,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Long = l
     override val defaultPhysical = this
     override val nullable: PType<Long?> = NPType(this)
+    override val MIN_VALUE = Long.MIN_VALUE
+    override val MAX_VALUE = Long.MAX_VALUE
   }
   object BOOLEAN : PType<Boolean>(), Comparator<Boolean> by serialNaturalOrder() {
     override val examples = setOf(true, false)
@@ -284,6 +310,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Boolean = l != 0L
     override val defaultPhysical = this
     override val nullable: PType<Boolean?> = NPType(this)
+    override val MIN_VALUE = false
+    override val MAX_VALUE = true
   }
   /** Encode in terms of long bits. Probably does not preserve order. */
   object DOUBLE : PType<Double>(), Comparator<Double> by serialNaturalOrder() {
@@ -298,6 +326,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Double = l.toDouble()
     override val defaultPhysical = this
     override val nullable: PType<Double?> = NPType(this)
+    override val MIN_VALUE = Double.NEGATIVE_INFINITY
+    override val MAX_VALUE = Double.POSITIVE_INFINITY
   }
   /** See [DoubleLexicoder]. The first byte appears to store length information: between 1 and 9 bytes. */
   object DOUBLE_VARIABLE : PType<Double>(), Comparator<Double> by serialNaturalOrder() {
@@ -313,6 +343,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Double = l.toDouble()
     override val defaultPhysical = this
     override val nullable: PType<Double?> = NPType(this)
+    override val MIN_VALUE = Double.NEGATIVE_INFINITY
+    override val MAX_VALUE = Double.POSITIVE_INFINITY
   }
   /** UTF8 string encoding */
   object STRING : PType<String>(), Comparator<String> by serialNaturalOrder() {
@@ -328,6 +360,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): String = l.toString()
     override val defaultPhysical = this
     override val nullable: PType<String?> = NPType(this)
+    override val MIN_VALUE: String = ""
+    override val MAX_VALUE: String = Character.MAX_VALUE.toString().repeat(5) // weird. Hopefully okay
   }
 //  object DATETIME : PType<DateTime>() {
 //    val lex = DateTimeLexicoder()
@@ -347,6 +381,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Float = l.toFloat()
     override val defaultPhysical = this
     override val nullable: PType<Float?> = NPType(this)
+    override val MIN_VALUE = Float.NEGATIVE_INFINITY
+    override val MAX_VALUE = Float.POSITIVE_INFINITY
   }
   /** See [FloatLexicoder]. The first byte appears to store length information: between 1 and 5 bytes. */
   object FLOAT_VARIABLE : PType<Float>(), Comparator<Float> by serialNaturalOrder() {
@@ -362,6 +398,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override fun decodeLong(l: Long): Float = l.toFloat()
     override val defaultPhysical = this
     override val nullable: PType<Float?> = NPType(this)
+    override val MIN_VALUE = Float.NEGATIVE_INFINITY
+    override val MAX_VALUE = Float.POSITIVE_INFINITY
   }
 
 

@@ -1,7 +1,6 @@
 package edu.washington.cs.laragraphulo.api
 
-import com.google.common.collect.Iterators
-import com.google.common.collect.PeekingIterator
+import com.google.common.collect.*
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.warn
@@ -81,9 +80,7 @@ interface Attribute<T> : Comparable<Attribute<T>>, Serializable {
       override val type: LType<T>
   ) : Attribute<T>, Serializable {
 
-    override fun toString(): String {
-      return "Attribute(name='$name', type=$type)"
-    }
+    override fun toString(): String = "Attr($name, $type)"
 
     override fun equals(other: Any?): Boolean {
       if (this === other) return true
@@ -123,9 +120,7 @@ interface ValAttribute<T> : Attribute<T> {
       override val default: T
   ) : Attribute.AttributeImpl<T>(name, type), ValAttribute<T> {
 
-    override fun toString(): String {
-      return "ValAttribute(name='$name', type=$type, default=$default)"
-    }
+    override fun toString(): String = "ValAttr($name, $type, default=$default)"
 
     override fun equals(other: Any?): Boolean {
       if (this === other) return true
@@ -500,9 +495,9 @@ class Staged<T>(f0: () -> T) : ReadWriteProperty<Any?, T> {
 }
 
 data class SeekKey(
-    val range: org.apache.accumulo.core.data.Range,
-    val families: Collection<ABS>,
-    val inclusive: Boolean
+    val range: org.apache.accumulo.core.data.Range = org.apache.accumulo.core.data.Range(),
+    val families: Collection<ABS> = Collections.emptyList(),
+    val inclusive: Boolean = false
 ) {
   fun toTupleSeekKey(ps: PhysicalSchema): TupleSeekKey =
       TupleSeekKey(
@@ -513,9 +508,9 @@ data class SeekKey(
 }
 
 data class TupleSeekKey(
-    val range: MyRange<NameTuple>,
-    val families: Collection<ABS>,
-    val inclusive: Boolean
+    val range: MyRange<NameTuple> = MyRange.all(),
+    val families: Collection<ABS> = Collections.emptyList(),
+    val inclusive: Boolean = false
 ) {
   fun toSeekKey(ps: PhysicalSchema): SeekKey =
       SeekKey(
@@ -551,7 +546,11 @@ sealed class TupleOp : Serializable {
         keys = parent.resultSchema.keys + extFun.extSchema.keys,
         vals = extFun.extSchema.vals
     )
-    override fun transform(f: (TupleOp) -> TupleOp) = f(parent.transform(f)).let { if (it == parent) this else copy(it) }
+    override fun transform(f: (TupleOp) -> TupleOp) = parent.transform(f).let { if (it == parent) this else copy(it) }.run(f)
+    init {
+      require(extFun.extSchema.keys.disjoint(parent.resultSchema.keys))
+      {"ext generates keys that are already present in the parent. Ext: ${extFun.extSchema}. Parent schema: ${parent.resultSchema}."}
+    }
 
     /*    companion object {
 //      fun runExtFunctionOnDefaultValues(ps: Schema, f: ExtFun): List<ValAttribute<*>> {
@@ -597,7 +596,11 @@ sealed class TupleOp : Serializable {
       }
       override fun peek(): NameTuple = top.peek()
       override fun seek(seek: TupleSeekKey) {
-        iter.seek(seek)
+        // eliminate extra generated keys from seek keys
+        val newSeek = if (extFun.extSchema.keys.isNotEmpty())
+          seek.copy(range = seek.range.transform { it.filterKeys { it !in extFun.extSchema.keys.map(Attribute<*>::name) } })
+        else seek
+        iter.seek(newSeek)
         top = findTop()
       }
       override fun deepCopy(env: IteratorEnvironment): TupleIterator = ExtIterator(iter.deepCopy(env), extFun, parentKeyNames)
@@ -664,9 +667,7 @@ sealed class TupleOp : Serializable {
       va.name to pf
     }.toMap()
 
-    override fun toString(): String {
-      return "MergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
-    }
+    override fun toString(): String = "MergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
 
     override fun equals(other: Any?): Boolean {
       if (this === other) return true
@@ -720,14 +721,35 @@ sealed class TupleOp : Serializable {
           } else true
         }
       }
+      private fun seekTransform(pKeysNotInIntersection: List<Attribute<*>>): (TupleSeekKey) -> TupleSeekKey {
+        val dropKeys = pKeysNotInIntersection
+        return { seek:TupleSeekKey ->
+          // add new keys that are present in i1 but not in result
+          // For LOWER: if OPEN, add max keys; if CLOSED, add min keys
+          // For UPPER: if OPEN, add min keys; if CLOSED, add max keys
+          // (OPEN is a more restrictive interval; CLOSED is larger interval)
+          val lowerMin = !seek.range.hasLowerBound() || seek.range.lowerType == BoundType.CLOSED
+          val upperMax = !seek.range.hasUpperBound() || seek.range.upperType == BoundType.CLOSED
+          if (dropKeys.isEmpty()) seek else {
+            val fLower: (NameTuple) -> NameTuple = { it + dropKeys.map { it.name to if (lowerMin) it.type.MIN_VALUE else it.type.MAX_VALUE } }
+            val fUpper: (NameTuple) -> NameTuple = { it + dropKeys.map { it.name to if (!upperMax) it.type.MIN_VALUE else it.type.MAX_VALUE } }
+            seek.copy(range = seek.range.transformLowerUpper(fLower, fUpper))
+          }
+        }
+      }
+
     }
 
     override fun run(): TupleIterator {
-      return MergeUnionIterator(resultSchema.keys, p1.run(),
+      val st1 = p1.resultSchema.keys.filter { it !in resultSchema.keys }.run(MergeUnion0.Companion::seekTransform)
+      val st2 = p2.resultSchema.keys.filter { it !in resultSchema.keys }.run(MergeUnion0.Companion::seekTransform)
+      return MergeUnionIterator(st1, st2, resultSchema.keys, p1.run(),
           p2.run(), plusFuns)
     }
 
     class MergeUnionIterator(
+        val seekTransform1: (TupleSeekKey) -> TupleSeekKey,
+        val seekTransform2: (TupleSeekKey) -> TupleSeekKey,
         val keys: List<Attribute<*>>,
         val i1: TupleIterator,
         val i2: TupleIterator,
@@ -739,11 +761,12 @@ sealed class TupleOp : Serializable {
 //      var old: NameTuple = keys.map { it.name to it.type.examples.first() }.toMap()
       private var top: NameTuple? by Staged { findTop() }
 
-      override fun deepCopy(env: IteratorEnvironment) = MergeUnionIterator(keys, i1.deepCopy(env), i2.deepCopy(env), plusFuns)
+      override fun deepCopy(env: IteratorEnvironment) = MergeUnionIterator(seekTransform1, seekTransform2, keys, i1.deepCopy(env), i2.deepCopy(env), plusFuns)
+
 
       override fun seek(seek: TupleSeekKey) {
-        i1.seek(seek)
-        i2.seek(seek)
+        i1.seek(seekTransform1(seek))
+        i2.seek(seekTransform2(seek))
         top = findTop()
       }
 
@@ -822,10 +845,10 @@ sealed class TupleOp : Serializable {
         p2: TupleOp,
         plusFuns0: Map<Name, PlusFun<*>>
     ) : MergeUnion0(p1,p2,plusFuns0) {
-      override fun transform(f: (TupleOp) -> TupleOp): MergeUnion {
-        val np1 = f(p1.transform(f))
-        val np2 = f(p2.transform(f))
-        return if (np1 == p1 && np2 == p2) this else MergeUnion(np1, np2, plusFuns)
+      override fun transform(f: (TupleOp) -> TupleOp): TupleOp {
+        val np1 = p1.transform(f)
+        val np2 = p2.transform(f)
+        return f(if (np1 == p1 && np2 == p2) this else MergeUnion(np1, np2, plusFuns))
       }
     }
 
@@ -836,10 +859,8 @@ sealed class TupleOp : Serializable {
     ) : MergeUnion0(p,
         p2 = Empty(Schema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
         plusFuns0 = plusFuns0) {
-      override fun transform(f: (TupleOp) -> TupleOp) = f(p1.transform(f)).let { if (it == p1) this else MergeAgg(it, keysKept, plusFuns) }
-      override fun toString(): String {
-        return "MergeAgg(p=$p1, keysKept=$keysKept, plusFuns=$plusFuns)"
-      }
+      override fun transform(f: (TupleOp) -> TupleOp) = p1.transform(f).let { if (it == p1) this else MergeAgg(it, keysKept, plusFuns) }.run(f)
+      override fun toString(): String = "MergeAgg(p=$p1, keysKept=$keysKept, plusFuns=$plusFuns)"
     }
   }
   fun union(p2: TupleOp, plusFuns0: Map<Name, PlusFun<*>>) = when (p2) {
@@ -857,12 +878,15 @@ sealed class TupleOp : Serializable {
         it.keys.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr },
         it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
     ) }
-    override fun transform(f: (TupleOp) -> TupleOp) = f(p.transform(f)).let { if (it == p) this else copy(it) }
+
+    override fun transform(f: (TupleOp) -> TupleOp) = p.transform(f).let { if (it == p) this else copy(it) }.run(f)
 
     override fun run() = RenameIterator(p.run(), renameMap)
 
     class RenameIterator(val parentIter: TupleIterator, val renameMap: Map<Name, Name>) : TupleIterator {
       var top: NameTuple? by Staged { findTop() }
+
+      val inverseMap: Map<String, String> = renameMap.map { (k,v) -> v to k }.toMap()
 
       fun findTop(): NameTuple? {
         return if (parentIter.hasNext()) parentIter.peek().mapKeys { (k,_) ->
@@ -873,6 +897,7 @@ sealed class TupleOp : Serializable {
       override fun hasNext(): Boolean = top != null
 
       override fun seek(seek: TupleSeekKey) {
+        seek.range.transform { it.mapKeys { inverseMap[it.key] ?: it.key } }
         parentIter.seek(seek)
         top = findTop()
       }
@@ -922,10 +947,10 @@ sealed class TupleOp : Serializable {
         keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
         vals = intersectValues(p1.resultSchema.vals,p2.resultSchema.vals, timesFuns)
     )
-    override fun transform(f: (TupleOp) -> TupleOp): MergeJoin {
-      val np1 = f(p1.transform(f))
-      val np2 = f(p2.transform(f))
-      return if (np1 == p1 && np2 == p2) this else copy(np1, np2)
+    override fun transform(f: (TupleOp) -> TupleOp): TupleOp {
+      val np1 = p1.transform(f)
+      val np2 = p2.transform(f)
+      return f(if (np1 == p1 && np2 == p2) this else copy(np1, np2))
     }
 
     companion object {
@@ -970,15 +995,28 @@ sealed class TupleOp : Serializable {
           times.resultZero
       )
 
+      private fun seekTransform(pKeysNotInOther: List<Name>): (TupleSeekKey) -> TupleSeekKey {
+        val dropKeys = pKeysNotInOther
+        return { seek:TupleSeekKey ->
+          seek.copy(seek.range.transform { it.filterKeys { k -> k !in dropKeys } })
+        }
+      }
     }
 
     override fun run(): TupleIterator {
-      return MergeJoinIterator(p1.resultSchema.keys.intersect(p2.resultSchema.keys).toList(),
+      val p1kn = p1.resultSchema.keys.map(Attribute<*>::name)
+      val p2kn = p2.resultSchema.keys.map(Attribute<*>::name)
+      val p1KeysNotIn2 = p1kn.filter { it !in p2kn }
+      val p2KeysNotIn1 = p2kn.filter { it !in p1kn }
+      return MergeJoinIterator(seekTransform(p2KeysNotIn1), seekTransform(p1KeysNotIn2),
+          p1.resultSchema.keys.intersect(p2.resultSchema.keys).toList(),
           p1.resultSchema.keys.map { it.name }, p2.resultSchema.keys.map { it.name },
           p1.run(), p2.run(), timesFuns)
     }
 
     data class MergeJoinIterator(
+        val seekTransform1: (TupleSeekKey) -> TupleSeekKey,
+        val seekTransform2: (TupleSeekKey) -> TupleSeekKey,
         val keys: List<Attribute<*>>, // common keys
         val p1keys: List<Name>,
         val p2keys: List<Name>,
@@ -991,7 +1029,7 @@ sealed class TupleOp : Serializable {
       var topIter: PeekingIterator<NameTuple> by Staged { findTop() }
       var seekKey = TupleSeekKey(MyRange.all(), listOf(), false)
 
-      override fun deepCopy(env: IteratorEnvironment) = MergeJoinIterator(keys, p1keys, p2keys, i1.deepCopy(env), i2.deepCopy(env), timesFuns)
+      override fun deepCopy(env: IteratorEnvironment) = MergeJoinIterator(seekTransform1, seekTransform2, keys, p1keys, p2keys, i1.deepCopy(env), i2.deepCopy(env), timesFuns)
 
       class OneRowIterator<T>(val rowComparator: Comparator<T>,
                               private val iter: PeekingIterator<T>) : PeekingIterator<T> by iter {
@@ -1023,8 +1061,8 @@ sealed class TupleOp : Serializable {
           loop@ while (i1.hasNext() && i2.hasNext()) {
             val c = comparator.compare(i1.peek(), i2.peek())
             val b = when (Integer.signum(c)) {
-              -1 -> skipUntil(i1, i2.peek())
-              1 -> skipUntil(i2, i1.peek()) //i2.next()
+              -1 -> skipUntil(i1, i2.peek(), seekTransform1)
+              1 -> skipUntil(i2, i1.peek(), seekTransform2)
               else -> break@loop
             }
             if (!b) return TupleIterator.EMPTY // no more matches
@@ -1038,7 +1076,7 @@ sealed class TupleOp : Serializable {
         return iter.peeking()
       }
 
-      private fun skipUntil(iter: TupleIterator, toSkipTo: NameTuple): Boolean {
+      private fun skipUntil(iter: TupleIterator, toSkipTo: NameTuple, seekTransform: (TupleSeekKey) -> TupleSeekKey): Boolean {
         var cnt = 0
         while (cnt < 10 && iter.hasNext() && comparator.compare(iter.peek(), toSkipTo) < 0) {
           iter.next()
@@ -1046,14 +1084,15 @@ sealed class TupleOp : Serializable {
         }
         if (iter.hasNext() && comparator.compare(iter.peek(), toSkipTo) < 0) {
           val skipRange: MyRange<NameTuple> = seekKey.range.intersection(comparator, MyRange.atLeast(toSkipTo)) ?: return false
-          iter.seek(seekKey.copy(range = skipRange))
+          iter.seek(seekTransform(seekKey.copy(range = skipRange)))
         }
         return iter.hasNext()
       }
 
       override fun seek(seek: TupleSeekKey) {
-        i1.seek(seek)
-        i2.seek(seek)
+        seekKey = seek
+        i1.seek(seekTransform1(seek))
+        i2.seek(seekTransform2(seek))
         topIter = findTop()
       }
 
@@ -1097,9 +1136,7 @@ sealed class TupleOp : Serializable {
         3. reset all iterators to the right and fill in curTuples
          */
 
-        override fun hasNext(): Boolean {
-          return firstIter.hasNext() && secondIter.hasNext()
-        }
+        override fun hasNext(): Boolean = firstIter.hasNext() && secondIter.hasNext()
 
         override fun next(): NameTuple {
           val ret = multiplyOp(firstIter.peek(), secondIter.next())

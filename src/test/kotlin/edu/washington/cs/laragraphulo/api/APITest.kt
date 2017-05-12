@@ -1,8 +1,9 @@
 package edu.washington.cs.laragraphulo.api
 
+import com.google.common.collect.Iterators
 import edu.washington.cs.laragraphulo.sensor.SensorFileAction
-import edu.washington.cs.laragraphulo.api.TupleOp.*
 import org.junit.Test
+import org.junit.jupiter.api.Assertions.*
 import java.util.*
 
 /** Data for the first sensor */
@@ -11,9 +12,6 @@ const val filepathA = "data/sensor/bee-uw-v2dec-2017-02-06-tiny.txt"
 
 
 class APITest  { // : AccumuloTestBase()
-
-
-
 
 
   @Test
@@ -31,12 +29,27 @@ class APITest  { // : AccumuloTestBase()
     val urlA = Thread.currentThread().contextClassLoader.getResource(filepathA)
     tcvListFileAction.invoke(urlA)
     data1.sortWith(KeyComparator(SensorQuery.initialSchema.keys))
-    val tableMap = mapOf("sensorA" to data1.iterator(), "sensorB" to data1.iterator())
+    val tableMap = mapOf("sensorA" to data1, "sensorB" to data1)
 
     val C = SensorQuery.C.instantiateLoad(tableMap)
+    println(C)
 
-    println()
-    C.run().forEach { println(it) }
+    val tupleIterator = C.run()
+    val list: MutableList<NameTuple> = LinkedList()
+    tupleIterator.forEach { list += it }
+    assertTrue(list.isNotEmpty())
+
+    tupleIterator.seek(TupleSeekKey())
+    assertTrue(Iterators.elementsEqual(tupleIterator, list.iterator()))
+
+    val last = list.last()
+    tupleIterator.seek(TupleSeekKey(MyRange.greaterThan(last)))
+    assertTrue(!tupleIterator.hasNext())
+
+    tupleIterator.seek(TupleSeekKey(MyRange.atLeast(last)))
+    assertTrue(tupleIterator.hasNext())
+    assertTrue(tupleIterator.next() == last)
+    assertTrue(!tupleIterator.hasNext())
   }
 
 

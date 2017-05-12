@@ -22,13 +22,24 @@ import java.nio.ByteBuffer
 //  is LoadData -> setOf()
 //}
 
-fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterator<NameTuple>>): TupleOp = this.transform {
+fun TupleOp.instantiateLoadOnce(tableMap: Map<Table, Iterator<NameTuple>>): TupleOp = this.transform {
   when (it) {
     is Load -> {
       require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
       // wrap around SKVI to convert Key/Value entries to a map. Need a Schema
       //KvToTupleAdapter(ps, SkviToIteratorAdapter(tableMap[this.table]!!))
       LoadOnce(it.resultSchema, tableMap[it.table]!!)
+    }
+    else -> it
+  }
+}
+fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterable<NameTuple>>): TupleOp = this.transform {
+  when (it) {
+    is Load -> {
+      require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
+      // wrap around SKVI to convert Key/Value entries to a map. Need a Schema
+      //KvToTupleAdapter(ps, SkviToIteratorAdapter(tableMap[this.table]!!))
+      LoadData(it.resultSchema, tableMap[it.table]!!)
     }
     else -> it
   }
