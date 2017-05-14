@@ -4,11 +4,13 @@ import edu.washington.cs.laragraphulo.api.TupleOp.*
 import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
 import edu.washington.cs.laragraphulo.opt.EMPTY_B
-import edu.washington.cs.laragraphulo.opt.SKVI
-import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
 import java.nio.ByteBuffer
+import java.text.DateFormat
+import java.text.SimpleDateFormat
+import java.util.*
+import java.util.concurrent.atomic.AtomicLong
 
 
 //fun TupleOp.getBaseTables(): Set<Table> = when(this) {
@@ -22,12 +24,12 @@ import java.nio.ByteBuffer
 //  is LoadData -> setOf()
 //}
 
+
+// todo: extend transform to pass along a value from parents - add list of parent's values to method signature
 fun TupleOp.instantiateLoadOnce(tableMap: Map<Table, Iterator<NameTuple>>): TupleOp = this.transform {
   when (it) {
     is Load -> {
       require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
-      // wrap around SKVI to convert Key/Value entries to a map. Need a Schema
-      //KvToTupleAdapter(ps, SkviToIteratorAdapter(tableMap[this.table]!!))
       LoadOnce(it.resultSchema, tableMap[it.table]!!)
     }
     else -> it
@@ -37,8 +39,6 @@ fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterable<NameTuple>>): TupleOp 
   when (it) {
     is Load -> {
       require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
-      // wrap around SKVI to convert Key/Value entries to a map. Need a Schema
-      //KvToTupleAdapter(ps, SkviToIteratorAdapter(tableMap[this.table]!!))
       LoadData(it.resultSchema, tableMap[it.table]!!)
     }
     else -> it
@@ -49,6 +49,61 @@ fun TupleOp.getBaseTables(): Set<Table> = this.fold(setOf<Table>(), { a, b -> a 
   is Load -> setOf(it.table)
   else -> setOf()
 } }
+
+fun TupleOp.getWrittenTables(): Set<Table> = this.fold(setOf<Table>(), { a, b -> a + b }) { when(it) {
+  is Store -> setOf(it.table)
+  else -> setOf()
+} }
+
+private var lastTime = 0L
+private fun getTime(): Long {
+  var t = System.currentTimeMillis()
+  if (t == lastTime) t++ // no duplicates please (need more control for multi-threaded; fine for single-thread)
+  lastTime = t
+  return t
+}
+private val dateFormat: DateFormat = SimpleDateFormat("'temp_'yyyyMMdd_HHmmssSSS")
+fun genName(): String = dateFormat.format(Date(getTime()))
+
+// todo - gen date string, Store, DeepCopy
+
+/** Create a list of TupleOps in topological order, from the top-most Loads down.
+ * Each one contains TupleOps until a Sort (pipeline-breaker).
+ * At that point, a Store to a temporary table is added and the next TupleOps read from a Load to that table.
+ * If a multi-parent TupleOp stems from the same Load, add a DeepCopy on the p2. */
+fun TupleOp.splitPipeline(): List<TupleOp> {
+  // maybe keep more information like what tables we need to create, but we could get that information from the Store operators too
+  // every pipeline ends in a Store
+  val pipelines: MutableList<Store> = LinkedList()
+
+  val remaining = this.transform { when(it) {
+    is MergeJoin -> {
+      val p1t = it.p1.getBaseTables() // todo - pass along the base tables during the transform; this is less efficient
+      val p2t = it.p2.getBaseTables()
+      if (p1t.disjoint(p2t)) it else it.copy(p2 = DeepCopy(it.p2))
+    }
+    is MergeUnion0.MergeUnion -> if (it.p1.getBaseTables().disjoint(it.p2.getBaseTables())) it else it.copy(p2 = DeepCopy(it.p2))
+    is Sort -> {
+      val tempTable = genName()
+      val pipeline = Store(it, tempTable)
+      pipelines += pipeline
+      Load(tempTable, it.resultSchema)
+    }
+    is Store -> {
+      // treat like Sort - end the pipeline and start a new one
+      pipelines += it
+      Load(it.table, it.resultSchema)
+    }
+    else -> it
+  } }
+
+  if (remaining !is Load) {
+    // switch this to a logger for whatever class this is
+    println("WARN: Dead code elimination: $remaining")
+  }
+
+  return pipelines
+}
 
 // Key, Value -> NameTuple
 // PType of each attribute

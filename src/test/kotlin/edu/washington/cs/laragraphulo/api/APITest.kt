@@ -31,10 +31,10 @@ class APITest  { // : AccumuloTestBase()
     data1.sortWith(KeyComparator(SensorQuery.initialSchema.keys))
     val tableMap = mapOf("sensorA" to data1, "sensorB" to data1)
 
-    val C = SensorQuery.C.instantiateLoad(tableMap)
-    println(C)
+    val C1 = SensorQuery.C.instantiateLoad(tableMap)
+    println(C1)
 
-    val tupleIterator = C.run()
+    val tupleIterator = C1.run()
     val list: MutableList<NameTuple> = LinkedList()
     tupleIterator.forEach { list += it }
     assertTrue(list.isNotEmpty())
@@ -50,6 +50,9 @@ class APITest  { // : AccumuloTestBase()
     assertTrue(tupleIterator.hasNext())
     assertTrue(tupleIterator.next() == last)
     assertTrue(!tupleIterator.hasNext())
+
+    val Cpipelines: List<TupleOp> = SensorQuery.C.splitPipeline()
+    println(Cpipelines.joinToString("\n","[\n","\n]"))
   }
 
 
