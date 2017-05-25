@@ -420,6 +420,7 @@ interface KeyValueIterator : AccumuloLikeIterator<SeekKey,KeyValue> {
 
 interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
   override fun init(options: Map<String, String>, env: IteratorEnvironment): TupleIterator = this
+  /** Requirement: `X.deepCopy(_) == X` */
   override fun deepCopy(env: IteratorEnvironment): TupleIterator
   companion object {
     val EMPTY = object : TupleIterator {

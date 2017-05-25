@@ -5,6 +5,8 @@ import com.google.common.collect.Iterators
 import com.google.common.collect.PeekingIterator
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.logger
+import edu.washington.cs.laragraphulo.util.GraphuloUtil
+import edu.washington.cs.laragraphulo.util.GraphuloUtil.UnimplementedIteratorEnvironment
 import edu.washington.cs.laragraphulo.warn
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.slf4j.Logger
@@ -19,7 +21,11 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
     require(args.all {it !== this}) {"A TupleOp cannot have itself as a parent: $this"}
   }
   abstract val resultSchema: Schema
-  abstract fun run(): TupleIterator
+  fun run(): TupleIterator = run(UnimplementedIteratorEnvironment)
+  fun run(env: IteratorEnvironment): TupleIterator = run(mutableMapOf(), env)
+  fun run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator =
+    instMap[this]?.deepCopy(env) ?: _run(instMap, env).also { instMap += this to it }
+  protected abstract fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator
   /** Create a copy of this op with new parent TupleOps. */
   protected abstract fun reconstruct(args: Array<TupleOp>): TupleOp
   /** All subclasses should override equals() and hashCode() */
@@ -208,7 +214,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 //    } */
     val parentKeyNames = parent.resultSchema.keys.map { it.name }
 
-    override fun run(): TupleIterator = ExtIterator(parent.run(), extFun, parentKeyNames)
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator =
+        ExtIterator(parent.run(instMap, env), extFun, parentKeyNames)
 
     class ExtIterator(
         val iter: TupleIterator,
@@ -269,7 +276,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       override val resultSchema: Schema
   ): TupleOp() {
     //    constructor(table: String, schema: Schema, iter: Iterator<NameTuple>): this(table, schema, Collections.emptyIterator())
-    override fun run() = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment) = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
     override fun reconstruct(args: Array<TupleOp>) = this
     override fun toString() = "Load(table='$table')"
 
@@ -278,7 +285,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
   data class Empty(
       override val resultSchema: Schema
   ) : TupleOp() {
-    override fun run() = TupleIterator.EMPTY
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment) = TupleIterator.EMPTY
     override fun reconstruct(args: Array<TupleOp>) = this
   }
 
@@ -410,11 +417,11 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 
     }
 
-    override fun run(): TupleIterator {
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator {
       val st1 = p1.resultSchema.keys.filter { it !in resultSchema.keys }.run(MergeUnion0.Companion::seekTransform)
       val st2 = p2.resultSchema.keys.filter { it !in resultSchema.keys }.run(MergeUnion0.Companion::seekTransform)
-      return MergeUnionIterator(st1, st2, resultSchema.keys, p1.run(),
-          p2.run(), plusFuns)
+      return MergeUnionIterator(st1, st2, resultSchema.keys,
+          p1.run(instMap, env), p2.run(instMap, env), plusFuns)
     }
 
     class MergeUnionIterator(
@@ -525,7 +532,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
     override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else Rename(args[0], renameMap)
     fun reconstruct(p: TupleOp) = if (p === this.p) this else Rename(p, renameMap)
 
-    override fun run() = RenameIterator(p.run(), renameMap)
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment) =
+        RenameIterator(p.run(instMap, env), renameMap)
 
     class RenameIterator(val parentIter: TupleIterator, val renameMap: Map<Name, Name>) : TupleIterator {
       var top: NameTuple? by Staged { findTop() }
@@ -572,9 +580,9 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
     override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else copy(args[0])
     fun reconstruct(p: TupleOp) = if (p === this.p) this else copy(p)
 
-    override fun run(): TupleIterator {
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator {
       val l: MutableList<NameTuple> = ArrayList()
-      p.run().forEach { l += it }
+      p.run(instMap, env).forEach { l += it }
       return TupleIterator.DataTupleIterator(resultSchema, l)
     }
   }
@@ -587,7 +595,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
     override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else copy(args[0])
     fun reconstruct(p: TupleOp) = if (p === this.p) this else copy(p)
     // RWI only works at the end of a pipeline
-    override fun run() = throw UnsupportedOperationException()
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment) = throw UnsupportedOperationException()
   }
 
 
@@ -656,7 +664,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       }
     }
 
-    override fun run(): TupleIterator {
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator {
       val p1kn = p1.resultSchema.keys.map(Attribute<*>::name)
       val p2kn = p2.resultSchema.keys.map(Attribute<*>::name)
       val p1KeysNotIn2 = p1kn.filter { it !in p2kn }
@@ -664,7 +672,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       return MergeJoinIterator(seekTransform(p2KeysNotIn1), seekTransform(p1KeysNotIn2),
           p1.resultSchema.keys.intersect(p2.resultSchema.keys).toList(),
           p1.resultSchema.keys.map { it.name }, p2.resultSchema.keys.map { it.name },
-          p1.run(), p2.run(), timesFuns)
+          p1.run(instMap, env), p2.run(instMap, env), timesFuns)
     }
 
     data class MergeJoinIterator(
@@ -816,7 +824,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       override val resultSchema: Schema,
       val iter: Iterable<NameTuple>
   ) : TupleOp() {
-    override fun run(): TupleIterator = TupleIterator.DataTupleIterator(resultSchema, iter)
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment) =
+        TupleIterator.DataTupleIterator(resultSchema, iter)
     override fun reconstruct(args: Array<TupleOp>) = this
     override fun toString(): String = "LoadData(resultSchema=$resultSchema)"
   }
@@ -827,7 +836,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
   ) : TupleOp() {
     override fun reconstruct(args: Array<TupleOp>) = this
     private var ran = false
-    override fun run(): TupleIterator {
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator {
       if (ran) logger.warn{"$this ran more than once"}
       ran = true
       return TupleIterator.DataTupleIteratorOnce(resultSchema, iter.peeking())

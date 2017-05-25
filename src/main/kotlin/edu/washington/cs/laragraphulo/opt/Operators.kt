@@ -3,6 +3,7 @@ package edu.washington.cs.laragraphulo.opt
 import com.google.common.collect.ImmutableListMultimap
 import com.google.common.collect.Range
 import edu.washington.cs.laragraphulo.*
+import edu.washington.cs.laragraphulo.util.GraphuloUtil.UnimplementedIteratorEnvironment
 import org.apache.accumulo.core.client.sample.SamplerConfiguration
 import org.apache.accumulo.core.conf.AccumuloConfiguration
 import org.apache.accumulo.core.data.ArrayByteSequence
@@ -530,43 +531,7 @@ class OpRWI(
     // todo - replace with a version that passes the accumuloConfig in directly. Then we can mock this in integration tests.
     val opts = accumuloConfig.basicRemoteOpts("", tableName, null, null)
     val skvi = RemoteWriteIterator()
-    skvi.init(input(reqs), opts, object : IteratorEnvironment {
-      override fun getAuthorizations(): Authorizations {
-        throw UnsupportedOperationException("not implemented")
-      }
-
-      override fun cloneWithSamplingEnabled(): IteratorEnvironment {
-        throw UnsupportedOperationException("not implemented")
-      }
-
-      override fun reserveMapFileReader(mapFileName: String?): SortedKeyValueIterator<Key, Value> {
-        throw UnsupportedOperationException("not implemented")
-      }
-
-      override fun getIteratorScope(): IteratorUtil.IteratorScope {
-        return IteratorUtil.IteratorScope.scan
-      }
-
-      override fun getConfig(): AccumuloConfiguration {
-        throw UnsupportedOperationException("not implemented")
-      }
-
-      override fun isSamplingEnabled(): Boolean {
-        throw UnsupportedOperationException("not implemented")
-      }
-
-      override fun isFullMajorCompaction(): Boolean {
-        throw UnsupportedOperationException("not implemented")
-      }
-
-      override fun getSamplerConfiguration(): SamplerConfiguration {
-        throw UnsupportedOperationException("not implemented")
-      }
-
-      override fun registerSideChannel(iter: SortedKeyValueIterator<Key, Value>?) {
-        throw UnsupportedOperationException("not implemented")
-      }
-    })
+    skvi.init(input(reqs), opts, UnimplementedIteratorEnvironment)
     return skvi
   }
 

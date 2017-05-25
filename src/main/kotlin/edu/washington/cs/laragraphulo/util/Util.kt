@@ -9,12 +9,15 @@ import edu.washington.cs.laragraphulo.opt.D4mRangeFilter
 import edu.washington.cs.laragraphulo.opt.DynamicIteratorSetting
 import org.apache.accumulo.core.client.*
 import org.apache.accumulo.core.client.admin.TableOperations
+import org.apache.accumulo.core.client.sample.SamplerConfiguration
+import org.apache.accumulo.core.conf.AccumuloConfiguration
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.IteratorUtil
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.accumulo.core.iterators.system.ColumnQualifierFilter
 import org.apache.accumulo.core.iterators.user.ColumnSliceFilter
+import org.apache.accumulo.core.security.Authorizations
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.io.WritableComparator
 import org.slf4j.Logger
@@ -47,6 +50,44 @@ object GraphuloUtil : Loggable {
   private val EMPTY_TEXT = Text()
   val OPT_SUFFIX = ".opt."
 
+
+  val UnimplementedIteratorEnvironment = object : IteratorEnvironment {
+    override fun getAuthorizations(): Authorizations {
+      throw UnsupportedOperationException("not implemented")
+    }
+
+    override fun cloneWithSamplingEnabled(): IteratorEnvironment {
+      throw UnsupportedOperationException("not implemented")
+    }
+
+    override fun reserveMapFileReader(mapFileName: String?): SortedKeyValueIterator<Key, Value> {
+      throw UnsupportedOperationException("not implemented")
+    }
+
+    override fun getIteratorScope(): IteratorUtil.IteratorScope {
+      return IteratorUtil.IteratorScope.scan
+    }
+
+    override fun getConfig(): AccumuloConfiguration {
+      throw UnsupportedOperationException("not implemented")
+    }
+
+    override fun isSamplingEnabled(): Boolean {
+      throw UnsupportedOperationException("not implemented")
+    }
+
+    override fun isFullMajorCompaction(): Boolean {
+      throw UnsupportedOperationException("not implemented")
+    }
+
+    override fun getSamplerConfiguration(): SamplerConfiguration {
+      throw UnsupportedOperationException("not implemented")
+    }
+
+    override fun registerSideChannel(iter: SortedKeyValueIterator<Key, Value>?) {
+      throw UnsupportedOperationException("not implemented")
+    }
+  }
 
   /* Motivation for using -1 argument in String.split() call:
 System.out.println(",".split(",",-1 ).length + Arrays.toString(",".split(",",-1 )));
