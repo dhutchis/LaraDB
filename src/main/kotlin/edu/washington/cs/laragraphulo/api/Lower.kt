@@ -105,45 +105,14 @@ fun TupleOp.splitPipeline(): List<TupleOp> {
         }
       }
       else -> when (curPos) {
-        0 -> TransformResult.Continue(fromChild)
+        0 ->  if (retArr.isEmpty()) TransformResult.Stop(op, fromChild)
+              else TransformResult.Continue(fromChild)
         retArr.size -> TransformResult.Stop(op, retArr[retArr.size-1])
         else -> TransformResult.Continue(retArr[curPos-1])
       }
     }
   }
 
-//
-//  fun TupleOp.recurse(seen: Set<TupleOp>): Pair<TupleOp,Set<TupleOp>> {
-//    when(this) {
-//      is Load -> this to seen + this
-//      is Ext -> this.reconstruct(this.parent.recurse(seen),) to seen + this
-//    }
-//  }
-//
-//  // needs ability to pass information from children up to parents in addition to passing info down from parents to children
-//  val remaining0 = this.transformFold({Array<Set<TupleOp>>(it){setOf()}}) { ps ->
-//    val (op, curPosition, maxPosition, retArray) = ps
-//    when(op) {
-//    is MergeJoin -> {
-//      val p1t = op.p1.getBaseTables() // todo - pass along the base tables during the transformFold; this is less efficient
-//      val p2t = op.p2.getBaseTables()
-//      if (p1t.disjoint(p2t)) op else op.copy(p2 = DeepCopy(op.p2))
-//    }
-//    is MergeUnion0.MergeUnion -> if (op.p1.getBaseTables().disjoint(op.p2.getBaseTables())) op else op.copy(p2 = DeepCopy(op.p2))
-//    is Sort -> {
-//      val tempTable = genName()
-//      val pipeline = Store(op, tempTable)
-//      pipelines += pipeline
-//      Load(tempTable, op.resultSchema)
-//    }
-//    is Store -> {
-//      // treat like Sort - end the pipeline and start a new one
-//      pipelines += op
-//      Load(op.table, op.resultSchema)
-//    }
-//    else -> op
-//  } }
-//
   if (remaining.replacement !is Load) {
     // switch this to a logger for whatever class this is
     println("WARN: Dead code elimination: $remaining")
