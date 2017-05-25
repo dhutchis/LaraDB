@@ -32,7 +32,7 @@ class APITest  { // : AccumuloTestBase()
     val tableMap = mapOf("sensorA" to data1, "sensorB" to data1)
 
     val C1 = SensorQuery.C.instantiateLoad(tableMap)
-    println(C1)
+//    println(C1)
 
     val tupleIterator = C1.run()
     val list: MutableList<NameTuple> = LinkedList()
@@ -51,6 +51,7 @@ class APITest  { // : AccumuloTestBase()
     assertTrue(tupleIterator.next() == last)
     assertTrue(!tupleIterator.hasNext())
 
+    println(SensorQuery.C)
     val Cpipelines: List<TupleOp> = SensorQuery.C.splitPipeline()
     println(Cpipelines.joinToString("\n","[\n","\n]"))
   }

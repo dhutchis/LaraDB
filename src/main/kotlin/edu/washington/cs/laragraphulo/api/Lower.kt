@@ -10,7 +10,6 @@ import java.nio.ByteBuffer
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.atomic.AtomicLong
 
 
 //fun TupleOp.getBaseTables(): Set<Table> = when(this) {
@@ -25,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
 //}
 
 
-// todo: extend transform to pass along a value from parents - add list of parent's values to method signature
+// todo: extend transformFold to pass along a value from parents - add list of parent's values to method signature
 fun TupleOp.instantiateLoadOnce(tableMap: Map<Table, Iterator<NameTuple>>): TupleOp = this.transform {
   when (it) {
     is Load -> {
@@ -45,15 +44,20 @@ fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterable<NameTuple>>): TupleOp 
   }
 }
 
-fun TupleOp.getBaseTables(): Set<Table> = this.fold(setOf<Table>(), { a, b -> a + b }) { when(it) {
-  is Load -> setOf(it.table)
-  else -> setOf()
-} }
-
-fun TupleOp.getWrittenTables(): Set<Table> = this.fold(setOf<Table>(), { a, b -> a + b }) { when(it) {
-  is Store -> setOf(it.table)
-  else -> setOf()
-} }
+fun TupleOp.getBaseTables(): Set<Table> = this.fold(setOf<Table>()) { op, parentValues ->
+  val opTables = when(op) {
+    is Load -> setOf(op.table)
+    else -> setOf()
+  }
+  parentValues.fold(opTables) {a,b -> a+b}
+}
+fun TupleOp.getWrittenTables(): Set<Table> = this.fold(setOf<Table>()) { op, parentValues ->
+  val opTables = when(op) {
+    is Store -> setOf(op.table)
+    else -> setOf()
+  }
+  parentValues.fold(opTables) {a,b -> a+b}
+}
 
 private var lastTime = 0L
 private fun getTime(): Long {
@@ -76,28 +80,63 @@ fun TupleOp.splitPipeline(): List<TupleOp> {
   // every pipeline ends in a Store
   val pipelines: MutableList<Store> = LinkedList()
 
-  val remaining = this.transform { when(it) {
-    is MergeJoin -> {
-      val p1t = it.p1.getBaseTables() // todo - pass along the base tables during the transform; this is less efficient
-      val p2t = it.p2.getBaseTables()
-      if (p1t.disjoint(p2t)) it else it.copy(p2 = DeepCopy(it.p2))
+  val remaining = this.transformFold(mapOf<Sort,Load>()) { (fromChild, op, curPos, retArr) ->
+    when (op) {
+      is Sort -> when (curPos) {
+        0 -> { // pre-Sort
+          if (op in fromChild)
+            TransformResult.Stop(fromChild[op]!!, fromChild)
+          else TransformResult.Continue(fromChild)
+        }
+        else -> { // post-Sort
+          val tempTable = genName()
+          val pipeline = Store(op, tempTable)
+          pipelines += pipeline
+          val load = Load(tempTable, op.resultSchema)
+          TransformResult.Stop(load, retArr[0] + (op to load))
+        }
+      }
+      else -> when (curPos) {
+        0 -> TransformResult.Continue(fromChild)
+        retArr.size -> TransformResult.Stop(op, retArr[retArr.size-1])
+        else -> TransformResult.Continue(retArr[curPos-1])
+      }
     }
-    is MergeUnion0.MergeUnion -> if (it.p1.getBaseTables().disjoint(it.p2.getBaseTables())) it else it.copy(p2 = DeepCopy(it.p2))
-    is Sort -> {
-      val tempTable = genName()
-      val pipeline = Store(it, tempTable)
-      pipelines += pipeline
-      Load(tempTable, it.resultSchema)
-    }
-    is Store -> {
-      // treat like Sort - end the pipeline and start a new one
-      pipelines += it
-      Load(it.table, it.resultSchema)
-    }
-    else -> it
-  } }
+  }
 
-  if (remaining !is Load) {
+//
+//  fun TupleOp.recurse(seen: Set<TupleOp>): Pair<TupleOp,Set<TupleOp>> {
+//    when(this) {
+//      is Load -> this to seen + this
+//      is Ext -> this.reconstruct(this.parent.recurse(seen),) to seen + this
+//    }
+//  }
+//
+//  // needs ability to pass information from children up to parents in addition to passing info down from parents to children
+//  val remaining0 = this.transformFold({Array<Set<TupleOp>>(it){setOf()}}) { ps ->
+//    val (op, curPosition, maxPosition, retArray) = ps
+//    when(op) {
+//    is MergeJoin -> {
+//      val p1t = op.p1.getBaseTables() // todo - pass along the base tables during the transformFold; this is less efficient
+//      val p2t = op.p2.getBaseTables()
+//      if (p1t.disjoint(p2t)) op else op.copy(p2 = DeepCopy(op.p2))
+//    }
+//    is MergeUnion0.MergeUnion -> if (op.p1.getBaseTables().disjoint(op.p2.getBaseTables())) op else op.copy(p2 = DeepCopy(op.p2))
+//    is Sort -> {
+//      val tempTable = genName()
+//      val pipeline = Store(op, tempTable)
+//      pipelines += pipeline
+//      Load(tempTable, op.resultSchema)
+//    }
+//    is Store -> {
+//      // treat like Sort - end the pipeline and start a new one
+//      pipelines += op
+//      Load(op.table, op.resultSchema)
+//    }
+//    else -> op
+//  } }
+//
+  if (remaining.replacement !is Load) {
     // switch this to a logger for whatever class this is
     println("WARN: Dead code elimination: $remaining")
   }

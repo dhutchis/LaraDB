@@ -69,8 +69,8 @@ object SensorQuery {
 
 
   // =============== QUERY
-  val A = TupleOp.Load("sensorA", initialSchema)
-      .ext(filterFun)
+  val A = TupleOp.Load("sensorA", initialSchema).
+      ext(filterFun)
       .ext(binFun)
       .ext(createCntFun)
       .sort(listOf("t'", "c", "t"))
@@ -98,12 +98,12 @@ object SensorQuery {
       .ext(divideVnCntFun)
 
   // note: this contains a common sub-expression (X0 and M from X0)
-  val U = X0.join(M, mapOf("v" to subtractVn))
-      .sort(listOf("t'","c"))
+  val U = X0.join(M, mapOf("v" to subtractVn)).
+      sort(listOf("t'","c"))
 
   // note: this contains a common sub-expression (U and renamed U)
-  val C = U.join(U.rename(mapOf("c" to "c'")), mapOf("v" to multiplyVn))
-      .sort(listOf("c", "c'", "t'"))
+  val C = U.join(U.rename(mapOf("c" to "c'")), mapOf("v" to multiplyVn)).
+      sort(listOf("c", "c'", "t'"))
       .agg(setOf("c", "c'"), mapOf("v" to plusDoubleNullFun))
       // note: this contains a common sub-expression (current result and N)
       .join(N, mapOf("v" to divideMinusOneFun))

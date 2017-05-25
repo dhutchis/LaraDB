@@ -11,32 +11,183 @@ import org.slf4j.Logger
 import java.io.Serializable
 import java.util.*
 
-sealed class TupleOp : Serializable {
+/**
+ *
+ */
+sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
+  init {
+    require(args.all {it !== this}) {"A TupleOp cannot have itself as a parent: $this"}
+  }
   abstract val resultSchema: Schema
   abstract fun run(): TupleIterator
-  /** Transform this TupleOp stack. The [TupleOp] passed to [f] is after its parents are transformed. */
-  abstract fun transform(f: (TupleOp) -> TupleOp): TupleOp
-  /** Visit each op and run a function on it without altering it */
-  fun visit(f: (TupleOp) -> Unit) = transform { f(it); it }
-  /** Do a structural fold over this TupleOp stack. [combine] should be **commutative**. */
-  inline fun <T> fold(init: T, crossinline combine: (T, T) -> T, crossinline f: (TupleOp) -> T): T {
-    var t: T = init
-    visit { t = combine(t, f(it)) }
-    return t
+  /** Create a copy of this op with new parent TupleOps. */
+  protected abstract fun reconstruct(args: Array<TupleOp>): TupleOp
+  /** All subclasses should override equals() and hashCode() */
+  abstract override fun hashCode(): Int
+  /** All subclasses should override equals() and hashCode() */
+  abstract override fun equals(other: Any?): Boolean
+
+  /** Passed to [transformFold] to its function. */
+  data class TransformParams<T>(
+      val fromChild: T,
+      val op: TupleOp,
+      /** Pass number. On 0, has not yet visited any parents.
+       * On 1, has visited 1st parent. On 2, has visted 2nd parent.
+       * Does not exceed [maxPosition]. */
+      val curPosition: Int,
+      /** Length [maxPosition]. Contents are valid up to position [curPosition]-1. */
+      val retArray: Array<T>
+  ) {
+    /** Number of parents. */
+    val maxPosition: Int = retArray.size
+
+    override fun equals(other: Any?): Boolean {
+      if (this === other) return true
+      if (other?.javaClass != javaClass) return false
+
+      other as TransformParams<*>
+
+      if (op != other.op) return false
+      if (curPosition != other.curPosition) return false
+      if (maxPosition != other.maxPosition) return false
+      if (!Arrays.equals(retArray, other.retArray)) return false
+
+      return true
+    }
+    override fun hashCode(): Int {
+      var result = op.hashCode()
+      result = 31 * result + curPosition
+      result = 31 * result + maxPosition
+      result = 31 * result + Arrays.hashCode(retArray)
+      return result
+    }
+  }
+  /** Used by [transformFold]'s function to indicate what to do next.
+   * Either (1) Continue with the next parent, (2) Reset and replace the current parent with another one, or
+   * (3) finish the current operation and return a result. */
+  sealed class TransformResult<out T> {
+    /** Continue with next parent. If finished all parents, Stop and return the default.
+     * The data [toParent] is passed to the next parent in [TransformParams]. */
+    data class Continue<out T>(
+        val toParent: T
+    ): TransformResult<T>()
+    // this is disabled until the complexity is warranted by a real use case
+//    /** Replace the current op with this new one, and continue recursing with its [nextParentIndex] parent.
+//     * Discards [TransformParams.retArray]. */
+//    data class Reset(
+//        val replacement: TupleOp,
+//        val nextParentIndex: Int = 0
+//    ) : TransformResult<Nothing>()
+    /** Stop immediately and return [ret]. */
+    data class Stop<out T>(
+        val replacement: TupleOp,
+        val ret: T
+    ) : TransformResult<T>()
   }
 
+  companion object : Loggable {
+    override val logger: Logger = logger<TupleOp>()
+    /** Helper function for [transformFold]. */
+    inline fun <reified T> defaultArray(default: T): (Int) -> Array<T> = {Array<T>(it) {default}}
+  }
 
-  fun ext(extFun: ExtFun): TupleOp = Ext(this, extFun)
+  inline fun <reified T> transformFold(
+      default: T, noinline f: (TransformParams<T>) -> TransformResult<T>
+  ) = transformFold(default, defaultArray(default), f)
+
+  /** Transform this TupleOp stack. Performs a visiting traversal. Each TupleOp is visited
+   * before its parents (pre-order), in between its parents (in-order), and after its parents (post-order).
+   * The function [f] is called at each of these times,
+   * with [TransformParams.curPosition] parents being visited before the call.
+   * The [TransformParams.retArray] has valid elements from [TransformParams.curPosition] parents
+   * (that is, 0..[TransformParams.curPosition]-1).
+   * [TransformParams.maxPosition] is the number of parents (this is the size of [TransformParams.retArray]).
+   * As soon as [f] returns a [TransformResult.Stop] or it [TransformResult.Continue]s after visiting its last parent,
+   * then transformFold finishes this operator and returns a result [T] to its child. */
+  fun <T> transformFold(
+      fromChild: T,
+//      default: T,
+      /** A function to create an array of default values of a given size. `null` entries are a decent option.
+       * Use [defaultArray] to help construct this. */
+      defaultRetArray: (Int) -> Array<T>,
+      f: (TransformParams<T>) -> TransformResult<T>): TransformResult.Stop<T> {
+    var op = this
+    var curPos = 0
+    val maxPos = args.size
+    val retArr = defaultRetArray(maxPos)
+    w@ while (curPos <= maxPos) {
+      val tp = TransformParams(fromChild, op, curPos, retArr)
+      val result = f(tp) // don't use ret unless we are returning
+      val toParent = when (result) {
+        is TransformResult.Stop -> return result
+//        is TransformResult.Reset -> {
+//          op = result.replacement
+//          curPos = result.nextParentIndex
+//          maxPos = op.args.size
+//          retArr = defaultRetArray(maxPos)
+//          continue@w
+//        }
+        is TransformResult.Continue -> result.toParent
+      }
+      if (curPos == maxPos) { // Continue but finished all parents
+        logger.warn("Continue but finished all parents")
+        return TransformResult.Stop(op, fromChild)
+      }
+
+      // visit parent # curPos
+      val (replacement,ret) = op.args[curPos].transformFold(toParent, defaultRetArray, f)
+      retArr[curPos] = ret
+      if (replacement !== op.args[curPos]) { // if parent changed, replace parent
+        val args2 = Arrays.copyOf(op.args, op.args.size)
+        args2[curPos] = replacement
+        op = op.reconstruct(args2)
+      }
+      curPos++
+    }
+    throw AssertionError()
+  }
+  
+  fun transform(f: (TupleOp) -> TupleOp): TupleOp {
+    val newArgs = Arrays.copyOf(args, args.size)
+    var diff = false
+    for (i in newArgs.indices) {
+      newArgs[i] = newArgs[i].transform(f)
+      diff = diff || newArgs[i] !== args[i]
+    }
+    return f(if (diff) reconstruct(newArgs) else this)
+  }
+  
+//  /** Visit each op and run a function on it without altering it */
+//  fun visit(f: (TupleOp) -> Unit) = transformFold { f(it); it }
+  /** Do a structural fold over this TupleOp stack. [combine] should be **commutative**. */
+  inline fun <reified T> fold(init: T, crossinline f: (TupleOp, Array<T>) -> T): T {
+    val f1: (TransformParams<T>) -> TransformResult<T> = { (fc, op, curPos, retArray) ->
+      if (retArray.size == curPos) TransformResult.Stop(op, f(op, retArray))
+      else TransformResult.Continue(fc)
+    }
+    return transformFold(init, f1).ret
+  }
+  // todo next - revise Lower.kt transformFold
+
+
+
+
+
+
+
+  fun ext(extFun: ExtFun) = Ext(this, extFun)
   data class Ext(
       val parent: TupleOp,
       /** This can also be a [MapFun] */
       val extFun: ExtFun
-  ): TupleOp() {
+  ): TupleOp(parent) {
     override val resultSchema = Schema(
         keys = parent.resultSchema.keys + extFun.extSchema.keys,
         vals = extFun.extSchema.vals
     )
-    override fun transform(f: (TupleOp) -> TupleOp) = parent.transform(f).let { if (it == parent) this else copy(it) }.run(f)
+    override fun reconstruct(args: Array<TupleOp>) = if (args[0] === parent) this else copy(parent = args[0])
+    fun reconstruct(p: TupleOp) = if (p === parent) this else copy(parent = p)
+
     init {
       require(extFun.extSchema.keys.disjoint(parent.resultSchema.keys))
       {"ext generates keys that are already present in the parent. Ext: ${extFun.extSchema}. Parent schema: ${parent.resultSchema}."}
@@ -119,29 +270,38 @@ sealed class TupleOp : Serializable {
   ): TupleOp() {
     //    constructor(table: String, schema: Schema, iter: Iterator<NameTuple>): this(table, schema, Collections.emptyIterator())
     override fun run() = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
-    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
+    override fun reconstruct(args: Array<TupleOp>) = this
+    override fun toString() = "Load(table='$table')"
+
   }
 
   data class Empty(
       override val resultSchema: Schema
   ) : TupleOp() {
     override fun run() = TupleIterator.EMPTY
-    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
+    override fun reconstruct(args: Array<TupleOp>) = this
   }
 
 
+
+
+  fun union(p2: TupleOp, plusFuns: Map<Name, PlusFun<*>>) = MergeUnion0(this, p2, plusFuns)
+  fun agg(keysKept: Collection<Name>, plusFuns0: Map<Name, PlusFun<*>>) = MergeUnion0.MergeAgg(this, keysKept, plusFuns0)
   /**
    * Restricted to two parents. Future work could extend this to any number of parents.
    */
-  sealed class MergeUnion0(
+  // todo - rename to MergeUnion
+  class MergeUnion0(
       val p1: TupleOp,
       val p2: TupleOp,
       plusFuns0: Map<Name, PlusFun<*>>
-  ): TupleOp() {
+  ): TupleOp(p1, p2) {
     override final val resultSchema = Schema(
         keys = intersectKeys(p1.resultSchema.keys,p2.resultSchema.keys),
         vals = unionValues(p1.resultSchema.vals,p2.resultSchema.vals)
     )
+    override fun reconstruct(args: Array<TupleOp>): MergeUnion0 = if (args[0] === p1 && args[1] === p2) this else args[0].union(args[1], plusFuns)
+    fun reconstruct(p1: TupleOp, p2: TupleOp): MergeUnion0 = if (p1 === this.p1 && p2 === this.p2) this else p1.union(p2, plusFuns)
 
     init {
       require(resultSchema.vals.map(ValAttribute<*>::name).containsAll(plusFuns0.keys)) {"plus functions provided for values that do not exist"}
@@ -157,7 +317,11 @@ sealed class TupleOp : Serializable {
       va.name to pf
     }.toMap()
 
-    override fun toString(): String = "MergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
+    override fun toString(): String {
+      if (p2 is Empty)
+        return "MergeAgg(p=$p1, schema=${p2.resultSchema}, plusFuns=$plusFuns"
+      else return "MergeUnion(p1=$p1, p2=$p2, plusFuns=$plusFuns)"
+    }
 
     override fun equals(other: Any?): Boolean {
       if (this === other) return true
@@ -180,6 +344,22 @@ sealed class TupleOp : Serializable {
     }
 
     companion object {
+      fun MergeUnion(
+          p1: TupleOp,
+          p2: TupleOp,
+          plusFuns0: Map<Name, PlusFun<*>>
+      ) = MergeUnion0(p1,p2,plusFuns0)
+
+      fun MergeAgg(
+          p: TupleOp,
+          keysKept: Iterable<Name>,
+          plusFuns0: Map<Name, PlusFun<*>>
+      ) = MergeUnion0(p,
+          p2 = Empty(Schema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
+          plusFuns0 = plusFuns0)
+
+
+
       /**
        * If A has access path (c,a) and B has access path (c,b),
        * then MergeUnion(A,B) has access path (c).
@@ -330,49 +510,20 @@ sealed class TupleOp : Serializable {
     }
 
 
-    class MergeUnion(
-        p1: TupleOp,
-        p2: TupleOp,
-        plusFuns0: Map<Name, PlusFun<*>>
-    ) : MergeUnion0(p1,p2,plusFuns0) {
-      fun copy(p1: TupleOp = this.p1,
-               p2: TupleOp = this.p2,
-               plusFuns0: Map<Name, PlusFun<*>> = this.plusFuns) = MergeUnion(p1, p2, plusFuns0)
-      override fun transform(f: (TupleOp) -> TupleOp): TupleOp {
-        val np1 = p1.transform(f)
-        val np2 = p2.transform(f)
-        return f(if (np1 == p1 && np2 == p2) this else MergeUnion(np1, np2, plusFuns))
-      }
-    }
 
-    class MergeAgg(
-        p: TupleOp,
-        val keysKept: Collection<Name>,
-        plusFuns0: Map<Name, PlusFun<*>>
-    ) : MergeUnion0(p,
-        p2 = Empty(Schema(p.resultSchema.keys.filter { it.name in keysKept }, listOf())),
-        plusFuns0 = plusFuns0) {
-      override fun transform(f: (TupleOp) -> TupleOp) = p1.transform(f).let { if (it == p1) this else MergeAgg(it, keysKept, plusFuns) }.run(f)
-      override fun toString(): String = "MergeAgg(p=$p1, keysKept=$keysKept, plusFuns=$plusFuns)"
-    }
   }
-  fun union(p2: TupleOp, plusFuns0: Map<Name, PlusFun<*>>) = when (p2) {
-    is Empty -> MergeUnion0.MergeAgg(this, p2.resultSchema.keys.map { it.name }, plusFuns0) // optimization when unioning with empty table
-    else -> MergeUnion0.MergeUnion(this, p2, plusFuns0)
-  }
-  fun agg(keysKept: Collection<Name>, plusFuns0: Map<Name, PlusFun<*>>) = MergeUnion0.MergeAgg(this, keysKept, plusFuns0)
 
-  fun rename(renameMap: Map<Name,Name>): TupleOp = Rename(this, renameMap)
+  fun rename(renameMap: Map<Name,Name>) = Rename(this, renameMap)
   data class Rename(
       val p: TupleOp,
       val renameMap: Map<Name,Name>
-  ) : TupleOp() {
+  ) : TupleOp(p) {
     override val resultSchema = p.resultSchema.let { Schema(
         it.keys.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr },
         it.vals.map { attr -> renameMap[attr.name]?.let { attr.withNewName(it) } ?: attr }
     ) }
-
-    override fun transform(f: (TupleOp) -> TupleOp) = p.transform(f).let { if (it == p) this else copy(it) }.run(f)
+    override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else Rename(args[0], renameMap)
+    fun reconstruct(p: TupleOp) = if (p === this.p) this else Rename(p, renameMap)
 
     override fun run() = RenameIterator(p.run(), renameMap)
 
@@ -407,18 +558,19 @@ sealed class TupleOp : Serializable {
 
   }
 
-  fun sort(newSort: List<Name>): TupleOp = Sort(this, newSort)
+  fun sort(newSort: List<Name>) = Sort(this, newSort)
   //  fun sort(vararg newSort: Name): TupleOp = Sort(this, newSort.toList())
   data class Sort(
       val p: TupleOp,
       val newSort: List<Name>
-  ) : TupleOp() {
+  ) : TupleOp(p) {
     override val resultSchema = Schema(
         newSort.apply { require(this.toSet() == p.resultSchema.keys.map { it.name }.toSet()) {"not all names re-sorted: $newSort on ${p.resultSchema}"} }
             .map { name -> p.resultSchema.keys.find{it.name == name}!! },
         p.resultSchema.vals
     )
-    override fun transform(f: (TupleOp) -> TupleOp) = p.transform(f).let { if (it == p) this else copy(it) }.run(f)
+    override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else copy(args[0])
+    fun reconstruct(p: TupleOp) = if (p === this.p) this else copy(p)
 
     override fun run(): TupleIterator {
       val l: MutableList<NameTuple> = ArrayList()
@@ -430,9 +582,10 @@ sealed class TupleOp : Serializable {
   data class Store(
       val p: TupleOp,
       val table: Table
-  ) : TupleOp() {
+  ) : TupleOp(p) {
     override val resultSchema = p.resultSchema
-    override fun transform(f: (TupleOp) -> TupleOp) = p.transform(f).let { if (it == p) this else copy(it) }.run(f)
+    override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else copy(args[0])
+    fun reconstruct(p: TupleOp) = if (p === this.p) this else copy(p)
     // RWI only works at the end of a pipeline
     override fun run() = throw UnsupportedOperationException()
   }
@@ -440,21 +593,18 @@ sealed class TupleOp : Serializable {
 
 
 
-  fun join(p2: TupleOp, timesFuns: Map<Name,TimesFun<*,*,*>>): TupleOp = MergeJoin(this, p2, timesFuns)
+  fun join(p2: TupleOp, timesFuns: Map<Name,TimesFun<*,*,*>>) = MergeJoin(this, p2, timesFuns)
   data class MergeJoin(
       val p1: TupleOp,
       val p2: TupleOp,
       val timesFuns: Map<Name,TimesFun<*,*,*>>
-  ): TupleOp() {
+  ): TupleOp(p1, p2) {
     override val resultSchema = Schema(
         keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
         vals = intersectValues(p1.resultSchema.vals,p2.resultSchema.vals, timesFuns)
     )
-    override fun transform(f: (TupleOp) -> TupleOp): TupleOp {
-      val np1 = p1.transform(f)
-      val np2 = p2.transform(f)
-      return f(if (np1 == p1 && np2 == p2) this else copy(np1, np2))
-    }
+    override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p1 && args[1] === p2) this else copy(args[0], args[1])
+    fun reconstruct(p1: TupleOp, p2: TupleOp) = if (p1 === this.p1 && p2 === this.p2) this else copy(p1, p2)
 
     companion object {
       // similar to unionValues() in MergeUnion
@@ -667,7 +817,7 @@ sealed class TupleOp : Serializable {
       val iter: Iterable<NameTuple>
   ) : TupleOp() {
     override fun run(): TupleIterator = TupleIterator.DataTupleIterator(resultSchema, iter)
-    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
+    override fun reconstruct(args: Array<TupleOp>) = this
     override fun toString(): String = "LoadData(resultSchema=$resultSchema)"
   }
 
@@ -675,37 +825,35 @@ sealed class TupleOp : Serializable {
       override val resultSchema: Schema,
       private val iter: Iterator<NameTuple>
   ) : TupleOp() {
+    override fun reconstruct(args: Array<TupleOp>) = this
     private var ran = false
     override fun run(): TupleIterator {
       if (ran) logger.warn{"$this ran more than once"}
       ran = true
       return TupleIterator.DataTupleIteratorOnce(resultSchema, iter.peeking())
     }
-    override fun transform(f: (TupleOp) -> TupleOp) = f(this)
-    override fun toString(): String {
-      return "LoadOnce(resultSchema=$resultSchema, ran=$ran)"
-    }
+    override fun toString() = "LoadOnce(resultSchema=$resultSchema, ran=$ran)"
 
     companion object : Loggable {
       override val logger: Logger = logger<LoadOnce>()
     }
   }
 
-  data class DeepCopy(
-      val p: TupleOp
-  ) : TupleOp() {
-    override val resultSchema = p.resultSchema
-    override fun transform(f: (TupleOp) -> TupleOp) = p.transform(f).let { if (it == p) this else copy(it) }.run(f)
-    override fun run(): TupleIterator = DeepCopyIterator(p.run())
-
-    class DeepCopyIterator(val piter: TupleIterator) : TupleIterator {
-      override fun init(options: Map<String,String>, env: IteratorEnvironment) = piter.deepCopy(env)
-      override fun hasNext() = throw NOPE("Call init() first to DeepCopy")
-      override fun seek(seek: TupleSeekKey) = throw NOPE("Call init() first to DeepCopy")
-      override fun next() = throw NOPE("Call init() first to DeepCopy")
-      override fun peek() = throw NOPE("Call init() first to DeepCopy")
-      override fun deepCopy(env: IteratorEnvironment) = throw NOPE("Call init() first to DeepCopy")
-    }
-  }
+//  data class DeepCopy(
+//      val p: TupleOp
+//  ) : TupleOp(p) {
+//    override val resultSchema = p.resultSchema
+//    override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else DeepCopy(args[0])
+//    override fun run(): TupleIterator = DeepCopyIterator(p.run())
+//
+//    class DeepCopyIterator(val piter: TupleIterator) : TupleIterator {
+//      override fun init(options: Map<String,String>, env: IteratorEnvironment) = piter.deepCopy(env)
+//      override fun hasNext() = throw NOPE("Call init() first to DeepCopy")
+//      override fun seek(seek: TupleSeekKey) = throw NOPE("Call init() first to DeepCopy")
+//      override fun next() = throw NOPE("Call init() first to DeepCopy")
+//      override fun peek() = throw NOPE("Call init() first to DeepCopy")
+//      override fun deepCopy(env: IteratorEnvironment) = throw NOPE("Call init() first to DeepCopy")
+//    }
+//  }
 
 }
