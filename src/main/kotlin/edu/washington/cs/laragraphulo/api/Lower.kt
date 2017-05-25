@@ -79,6 +79,9 @@ fun TupleOp.splitPipeline(): List<TupleOp> {
   // maybe keep more information like what tables we need to create, but we could get that information from the Store operators too
   // every pipeline ends in a Store
   val pipelines: MutableList<Store> = LinkedList()
+  /** The last op before the Sort (to be transformed into a Store),
+   * mapped to the Load of that Store. */
+  val prePipelines: MutableMap<Sort, Load> = HashMap()
 
   val remaining = this.transformFold(mapOf<Sort,Load>()) { (fromChild, op, curPos, retArr) ->
     when (op) {
@@ -89,11 +92,16 @@ fun TupleOp.splitPipeline(): List<TupleOp> {
           else TransformResult.Continue(fromChild)
         }
         else -> { // post-Sort
-          val tempTable = genName()
-          val pipeline = Store(op, tempTable)
-          pipelines += pipeline
-          val load = Load(tempTable, op.resultSchema)
-          TransformResult.Stop(load, retArr[0] + (op to load))
+          if (op in prePipelines) { // eliminate repeats of the same pipeline
+            TransformResult.Stop(prePipelines[op]!!, fromChild)
+          } else {
+            val tempTable = genName()
+            val pipeline = Store(op, tempTable)
+            pipelines += pipeline
+            val load = Load(tempTable, op.resultSchema)
+            prePipelines += op to load
+            TransformResult.Stop(load, retArr[0] + (op to load))
+          }
         }
       }
       else -> when (curPos) {

@@ -296,7 +296,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       val p2: TupleOp,
       plusFuns0: Map<Name, PlusFun<*>>
   ): TupleOp(p1, p2) {
-    override final val resultSchema = Schema(
+    override val resultSchema = Schema(
         keys = intersectKeys(p1.resultSchema.keys,p2.resultSchema.keys),
         vals = unionValues(p1.resultSchema.vals,p2.resultSchema.vals)
     )
