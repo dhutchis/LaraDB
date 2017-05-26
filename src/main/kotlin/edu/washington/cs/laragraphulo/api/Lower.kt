@@ -75,7 +75,7 @@ fun genName(): String = dateFormat.format(Date(getTime()))
  * Each one contains TupleOps until a Sort (pipeline-breaker).
  * At that point, a Store to a temporary table is added and the next TupleOps read from a Load to that table.
  * If a multi-parent TupleOp stems from the same Load, add a DeepCopy on the p2. */
-fun TupleOp.splitPipeline(): List<TupleOp> {
+fun TupleOp.splitPipeline(): List<Store> {
   // maybe keep more information like what tables we need to create, but we could get that information from the Store operators too
   // every pipeline ends in a Store
   val pipelines: MutableList<Store> = LinkedList()
@@ -102,6 +102,14 @@ fun TupleOp.splitPipeline(): List<TupleOp> {
             prePipelines += op to load
             TransformResult.Stop(load, retArr[0] + (op to load))
           }
+        }
+      }
+      is Store -> when (curPos) {
+        0 -> TransformResult.Continue(fromChild)
+        else -> {
+          pipelines += op
+          val load = Load(op.table, op.resultSchema)
+          TransformResult.Stop(load, retArr[0])
         }
       }
       else -> when (curPos) {
