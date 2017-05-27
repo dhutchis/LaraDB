@@ -537,38 +537,6 @@ class OpRWI(
 
   companion object : Loggable {
     override val logger = logger<OpRWI>()
-
-    /**
-     * This method shouldn't really be public, but it is useful for setting up some of the iterators.
-
-     * Create the basic iterator settings for the [RemoteWriteIterator].
-     * @param prefix A prefix to apply to keys in the option map, e.g., the "B" in "B.tableName".
-     * @param remoteTable Name of table to write to. Null does not put in the table name.
-     * @param remoteTableTranspose Name of table to write transpose to. Null does not put in the transpose table name.
-     * @param authorizations Authorizations for the server-side iterator. Null means use default: Authorizations.EMPTY
-     * @return The basic set of options for [RemoteWriteIterator].
-     */
-    fun AccumuloConfig.basicRemoteOpts(prefix: String?, remoteTable: String?,
-                        remoteTableTranspose: String?, authorizations: Authorizations?): Map<String, String> {
-      var prefix = prefix
-      if (prefix == null) prefix = ""
-      val opt = HashMap<String, String>()
-      val instance = connector.instance.instanceName
-      val zookeepers = connector.instance.zooKeepers
-      val user = connector.whoami()
-      opt.put(prefix + RemoteSourceIterator.ZOOKEEPERHOST, zookeepers)
-      opt.put(prefix + RemoteSourceIterator.INSTANCENAME, instance)
-      if (remoteTable != null)
-        opt.put(prefix + RemoteSourceIterator.TABLENAME, remoteTable)
-      if (remoteTableTranspose != null)
-        opt.put(prefix + RemoteWriteIterator.TABLENAMETRANSPOSE, remoteTableTranspose)
-      opt.put(prefix + RemoteSourceIterator.USERNAME, user)
-      opt.put(prefix + RemoteSourceIterator.AUTHENTICATION_TOKEN, SerializationUtil.serializeWritableBase64(authenticationToken))
-      opt.put(prefix + RemoteSourceIterator.AUTHENTICATION_TOKEN_CLASS, authenticationToken.javaClass.name)
-      if (authorizations != null && authorizations != Authorizations.EMPTY)
-        opt.put(prefix + RemoteSourceIterator.AUTHORIZATIONS, authorizations.serialize())
-      return opt
-    }
   }
 }
 

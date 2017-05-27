@@ -24,6 +24,16 @@ class ApiSerializableTest {
     @Suppress("UNCHECKED_CAST")
     (deserialized as S)
     assertEquals(obj, deserialized)
+
+    // base64 string
+    val ser = SerializationUtil.serializeBase64(obj)
+    val des = SerializationUtil.deserializeBase64(ser)
+    assertNotSame(obj, des)
+    assertEquals(obj.javaClass, des.javaClass)
+    @Suppress("UNCHECKED_CAST")
+    (des as S)
+    assertEquals(obj, des)
+
     return deserialized
   }
 
@@ -42,7 +52,9 @@ class ApiSerializableTest {
 
   companion object {
     @JvmStatic @Suppress("UNUSED")
-    fun testCases(): List<Serializable> = listOf(SensorQuery.attrT, SensorQuery.binFun, SensorQuery.createCntFun, SensorQuery.anyFun, SensorQuery.divideMinusOneFun, SensorQuery.C)
+    fun testCases(): List<Serializable> = listOf(SensorQuery.attrT, SensorQuery.binFun, SensorQuery.createCntFun,
+        SensorQuery.anyFun, SensorQuery.divideMinusOneFun, SensorQuery.initialSchema,
+        SensorQuery.initialSchema.defaultPSchema(), SensorQuery.C)
     // SensorQuery.binFun.extFun as Serializable
     // ^^^ functions are serializable but cannot be compared for equality
   }

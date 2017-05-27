@@ -1,11 +1,18 @@
 package edu.washington.cs.laragraphulo.api
 
+import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.logger
+import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.api.TupleOp.*
 import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
 import edu.washington.cs.laragraphulo.opt.EMPTY_B
+import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Range
 import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.iterators.IteratorEnvironment
+import org.slf4j.Logger
 import java.nio.ByteBuffer
 import java.text.DateFormat
 import java.text.SimpleDateFormat
@@ -23,9 +30,7 @@ import java.util.*
 //  is LoadData -> setOf()
 //}
 
-
-// todo: extend transformFold to pass along a value from parents - add list of parent's values to method signature
-fun TupleOp.instantiateLoadOnce(tableMap: Map<Table, Iterator<NameTuple>>): TupleOp = this.transform {
+fun TupleOp.instantiateLoadOnce(tableMap: Map<Table, Iterator<Tuple>>): TupleOp = this.transform {
   when (it) {
     is Load -> {
       require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
@@ -34,12 +39,27 @@ fun TupleOp.instantiateLoadOnce(tableMap: Map<Table, Iterator<NameTuple>>): Tupl
     else -> it
   }
 }
-fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterable<NameTuple>>): TupleOp = this.transform {
+fun TupleOp.instantiateLoadTupleIterator(tableMap: Map<Table, TupleIterator>): TupleOp = this.transform {
+  when (it) {
+    is Load -> {
+      require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
+      LoadTupleIterator(it.resultSchema, tableMap[it.table]!!)
+    }
+    else -> it
+  }
+}
+fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterable<Tuple>>): TupleOp = this.transform {
   when (it) {
     is Load -> {
       require(it.table in tableMap) { "Attempt to lower a TupleOp stack but no SKVI given for ${it.table}" }
       LoadData(it.resultSchema, tableMap[it.table]!!)
     }
+    else -> it
+  }
+}
+fun TupleOp.disableFullResorts(): TupleOp = this.transform {
+  when (it) {
+    is Sort -> Sort(it.p, it.newSort, false)
     else -> it
   }
 }
@@ -62,7 +82,7 @@ fun TupleOp.getWrittenTables(): Set<Table> = this.fold(setOf<Table>()) { op, par
 private var lastTime = 0L
 private fun getTime(): Long {
   var t = System.currentTimeMillis()
-  if (t == lastTime) t++ // no duplicates please (need more control for multi-threaded; fine for single-thread)
+  if (t <= lastTime) t=lastTime+1 // no duplicates please (need more control for multi-threaded; fine for single-thread)
   lastTime = t
   return t
 }
@@ -142,9 +162,12 @@ fun TupleOp.splitPipeline(): List<Store> {
 
 interface PAttribute<T> : Attribute<T> {
   override val type: PType<T>
-  override fun component2(): PType<T> = type
+  override operator fun component2(): PType<T> = type
   override fun withNewName(name: Name): PAttribute<T> = PAttribute(name, type)
+
   fun asPValAttribute() = PValAttribute(name, type, type.naturalDefault)
+  @Deprecated("no-op", ReplaceWith(""))
+  override fun defaultPhysical(): PAttribute<T> = this
 
   companion object {
     @JvmName(name = "AttributeImp")
@@ -166,7 +189,11 @@ interface PValAttribute<T> : PAttribute<T>, ValAttribute<T> {
   override val type: PType<T>
   override fun component2(): PType<T> = type
   override fun withNewName(name: Name): PValAttribute<T> = PValAttribute(name, type, default)
+
+  @Deprecated("no-op", ReplaceWith(""))
   override fun asPValAttribute() = this
+  @Deprecated("no-op", ReplaceWith(""))
+  override fun defaultPhysical(): PValAttribute<T> = this
 
   companion object {
     operator fun <T> invoke(name: Name, type: PType<T>, default: T): PValAttribute<T> = PValAttributeImpl(name, type, default)
@@ -187,7 +214,7 @@ interface PValAttribute<T> : PAttribute<T>, ValAttribute<T> {
 // I am restricting this to one key-value pair per tuple.
 // A more relaxed implementation would put the value attributes separately, or even group them based on vertical partitioning.
 // See FullValue and KeyValueToTuple for the more advanced multiple key-values per tuple ideas.
-class PhysicalSchema(
+class PSchema(
     val row: List<PAttribute<*>> = listOf(),
     val family: List<PAttribute<*>> = listOf(),
     val colq: List<PAttribute<*>> = listOf(),
@@ -220,9 +247,11 @@ class PhysicalSchema(
   override fun component2(): List<PValAttribute<*>> = pvals
   override fun get(n: Name): PAttribute<*>? = pkeys.find { it.name == n } ?: pvals.find { it.name == n }
   override fun getValue(n: Name): PValAttribute<*>? = pvals.find { it.name == n }
+  @Deprecated("no-op", ReplaceWith(""))
+  override fun defaultPSchema(): PSchema = this
 
 
-  fun encodeToKeyValue(t: NameTuple): KeyValue {
+  fun encodeToKeyValue(t: Tuple): KeyValue {
     require(keyNames.all { it in t }) {"tuple is missing keys for schema $this; tuple is $t"}
     val r = TupleByKeyValue.encodeJoin(row, t)
     val cf = TupleByKeyValue.encodeJoin(family, t)
@@ -241,7 +270,7 @@ class PhysicalSchema(
     if (other?.javaClass != javaClass) return false
     if (!super.equals(other)) return false
 
-    other as PhysicalSchema
+    other as PSchema
 
     if (row != other.row) return false
     if (family != other.family) return false
@@ -265,13 +294,13 @@ class PhysicalSchema(
   }
 
   override fun toString(): String {
-    return "PhysicalSchema(row=$row, family=$family, colq=$colq, vis=$vis, ts=$ts, pvals=$pvals)"
+    return "PSchema(row=$row, family=$family, colq=$colq, vis=$vis, ts=$ts, pvals=$pvals)"
   }
 
 
 }
 
-class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value?): Map<String,Any?> {
+class TupleByKeyValue(ps: PSchema, val k: Key, val v: Value?): Map<String,Any?> {
   val map: Map<Name, Lazy<Any?>>
   init {
     val r: Map<Name, Lazy<Any?>> = ps.rowNames.zip(decodeSplit(ps.row, k.rowData as ABS)).toMap()
@@ -282,7 +311,7 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value?): Map<String
     val vals = if (v == null) mapOf() else ps.valNames.zip(decodeSplit(ps.pvals, v.get())).toMap()
     map = r+fam+q+vis+ts+vals
   }
-  val mapForced = lazy { map.map { (n,v) -> n to v.value }.toMap() }
+  val mapForced = lazy { map.map { (n,v) -> n to v.value }.toMap() } //println("now getting $n");
 
   override val entries: Set<Map.Entry<String, Any?>> = map.entries.map { object : Map.Entry<String,Any?> {
     override val key: String = it.key
@@ -298,6 +327,8 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value?): Map<String
   override fun containsValue(value: Any?): Boolean = mapForced.value.containsValue(value)
   override fun get(key: String): Any? = map[key]?.value
   override fun isEmpty(): Boolean = map.isEmpty()
+  override fun toString(): String = "TupleByKeyValue(map=$map)"
+
 
   companion object {
     fun decodeTime(attr: PAttribute<*>, ts: Long): Lazy<Any?> = lazy { attr.type.decodeLong(ts) }
@@ -346,18 +377,18 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value?): Map<String
 
 
 
-    fun encodeJoin(attr: PAttribute<*>, tuple: NameTuple): ByteArray = encodeJoin(listOf(attr), tuple)
+    fun encodeJoin(attr: PAttribute<*>, tuple: Tuple): ByteArray = encodeJoin(listOf(attr), tuple)
 
     // this will be used on row, family, colq, pvals, etc. of a NameTuple to get the parts to put together into a Key and Value
     // another, higher-level method will cobble these values together into the actual Key and Value
     // (if handed a previous NameTuple, could check to see if the new one has the same key, and then not need to translate again)
-    fun encodeJoin(attrs: List<PAttribute<*>>, tuple: NameTuple): ByteArray {
+    fun encodeJoin(attrs: List<PAttribute<*>>, tuple: Tuple): ByteArray {
       // handled separately: special case if we are handed a NameTuple which is backed by a KeyValue - just use the KeyValue
       val encodedDataList: List<ByteArray> = attrs.map { it.type.encodeUnchecked(tuple[it.name] ?:
           (if (it is PValAttribute<*>) it.default else it.type.naturalDefault)) } // TODO provide default value if tuple[it.name] is not present
 
       val posWidthAttributePrefix = attrs.takeWhile { it.type.naturalWidth > 0 }
-      /** The starting indexes of each attribute, up until the first -1 width.
+      /** The starting indexes of each attribute, up until the first -1 width (exclusive).
        * E.g.: the widths 2, 2, 3 yield 0, 2, 4, 7. */
       val posWidthIndexes = posWidthAttributePrefix.fold(listOf(0)) { list, attr -> list + (list.last() + attr.type.naturalWidth) }
 
@@ -408,24 +439,70 @@ class TupleByKeyValue(ps: PhysicalSchema, val k: Key, val v: Value?): Map<String
 }
 
 /** Pass this to [LoadData] to create a TupleOp. */
-class KvToTupleAdapter(val ps: PhysicalSchema, val iter: Iterator<KeyValue>): Iterator<NameTuple> {
-//  private val skviIter = SkviToIteratorAdapter(skvi)
+class KvToTupleAdapter(val ps: PSchema, private val iter: KeyValueIterator): TupleIterator {
+  var top: Tuple? = null
 
-  override fun hasNext(): Boolean = iter.hasNext()
-
-  override fun next(): NameTuple {
+  override fun hasNext(): Boolean = top != null || iter.hasNext()
+  override fun next(): Tuple {
     val (k, v) = iter.next()
+    top = null
     return TupleByKeyValue(ps, k, v)
   }
+
+  override fun seek(seek: TupleSeekKey) {
+    iter.seek(seek.toSeekKey(ps))
+    top = null
+  }
+
+  override fun peek(): Tuple = if (top != null) top!! else {
+    val (k, v) = iter.peek()
+    val t = TupleByKeyValue(ps, k, v)
+    top = t; t
+  }
+  override fun deepCopy(env: IteratorEnvironment) = KvToTupleAdapter(ps, iter.deepCopy(env))
 }
 
-class TupleToKvAdapter(val ps: PhysicalSchema, private val tupleIter: Iterator<NameTuple>): Iterator<KeyValue> {
-  override fun hasNext(): Boolean = tupleIter.hasNext()
+class TupleToKvAdapter(val ps: PSchema, private val tupleIter: TupleIterator): KeyValueIterator {
+  var top: KeyValue? = null
+
+  override fun hasNext(): Boolean = top != null || tupleIter.hasNext()
   override fun next(): KeyValue {
-    val tuple = tupleIter.next()
-    if (tuple is TupleByKeyValue && tuple.v != null)
-      return KeyValue(tuple.k,tuple.v)
-    return ps.encodeToKeyValue(tuple)
+    val tuple = tupleIter.next().toKeyValue(ps)
+    top = null
+    return tuple
+  }
+
+  override fun seek(seek: SeekKey) {
+    tupleIter.seek(seek.toTupleSeekKey(ps))
+    top = null
+  }
+
+  override fun peek(): KeyValue = if (top != null) top!! else {
+    val t = tupleIter.peek().toKeyValue(ps)
+    top = t; t
+  }
+  override fun deepCopy(env: IteratorEnvironment) = TupleToKvAdapter(ps, tupleIter.deepCopy(env))
+}
+
+/** Note: no no-args constructor. This adapter is not designed as a standalone Accumulo SKVI. */
+class KvToSkviAdapter(private val inner: KeyValueIterator): SKVI {
+  override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
+    logger.debug{"seek: range: $range"}
+    @Suppress("UNCHECKED_CAST")
+    inner.seek(SeekKey(range, columnFamilies as Collection<ABS>, inclusive))
+  }
+
+  override fun deepCopy(env: IteratorEnvironment) = KvToSkviAdapter(inner.deepCopy(env))
+  override fun init(source: SKVI, options: Map<String, String>, env: IteratorEnvironment) {}
+  override fun hasTop(): Boolean = inner.hasNext()
+
+  override fun next() {
+    inner.next()
+  }
+  override fun getTopKey(): Key = inner.peek().key
+  override fun getTopValue(): Value = inner.peek().value
+
+  companion object : Loggable {
+    override val logger: Logger = logger<KvToSkviAdapter>()
   }
 }
-

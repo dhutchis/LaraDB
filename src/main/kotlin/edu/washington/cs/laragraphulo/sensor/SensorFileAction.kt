@@ -1,12 +1,14 @@
 package edu.washington.cs.laragraphulo.sensor
 
+import edu.washington.cs.laragraphulo.api.PType
 import edu.washington.cs.laragraphulo.parfile.FileAction
 import org.apache.accumulo.core.client.BatchWriter
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.Connector
+import org.apache.accumulo.core.client.lexicoder.DoubleLexicoder
+import org.apache.accumulo.core.client.lexicoder.ULongLexicoder
 import org.apache.accumulo.core.data.Mutation
 import org.apache.hadoop.io.Text
-import java.io.File
 import java.io.PrintStream
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -15,6 +17,38 @@ import java.util.*
 val dateParser = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS").apply { timeZone = TimeZone.getTimeZone("UTC") }
 val dateParserNoMilli = SimpleDateFormat("yyyy-MM-dd HH:mm:ss").apply { timeZone = TimeZone.getTimeZone("UTC") }
 val dateParserNoTime = SimpleDateFormat("yyyy-MM-dd").apply { timeZone = TimeZone.getTimeZone("UTC") }
+
+data class EncodeFunction(
+    val encodeLong: (Long) -> ByteArray,
+    val decodeLong: (ByteArray) -> Long,
+    val encodeDouble: (Double) -> ByteArray,
+    val decodeDouble: (ByteArray) -> Double
+) {
+  companion object {
+    private val ullex = ULongLexicoder()
+    private val dlex = DoubleLexicoder()
+    private val nd = PType.DOUBLE.nullable
+    val STRING = EncodeFunction(
+        {it.toString().toByteArray()},
+        {String(it).toLong()},
+        {it.toString().toByteArray()},
+        {String(it).toDouble()}
+    )
+    val LEX = EncodeFunction(
+        ullex::encode,
+        ullex::decode,
+        dlex::encode,
+        dlex::decode
+    )
+    val PTYPE = EncodeFunction(
+        PType.LONG::encode,
+        PType.LONG::decode,
+        nd::encode,
+        {nd.decode(it)!!}
+    )
+  }
+}
+
 
 /**
  * Ingest csv sensor data from parsed beehive files.
@@ -39,7 +73,7 @@ interface SensorFileAction : FileAction {
 
 
 
-    fun ingestAction(conn: Connector, table: String, encode: Boolean,
+    fun ingestAction(conn: Connector, table: String, encode: EncodeFunction,
                      recreateTable: Boolean = false,
                      partitions: Int = 1, splitFirstTime: Boolean = false,
                      reverse: Boolean = true, // files store times in reverse order
@@ -83,10 +117,9 @@ interface SensorFileAction : FileAction {
           val tFirst = tFirstFun(file)
           val ss: SortedSet<Text> = TreeSet<Text>()
           if (splitFirstTime)
-            ss.add(Text(tFirst.toByteArray(encode)))
+            ss.add(Text(encode.encodeLong(tFirst)))
           (1..partitions-1)
-              .mapTo(ss) { Text((tFirst + (if(reverse) -1 else 1)*it*1000L*60*60*24/partitions)
-                  .toByteArray(encode)) }
+              .mapTo(ss) { Text(encode.encodeLong(tFirst + (if(reverse) -1 else 1)*it*1000L*60*60*24/partitions)) }
           println("Splits on $file: $ss")
           t.addSplits(table, ss)
           // p2 -> add day/2
@@ -103,10 +136,10 @@ interface SensorFileAction : FileAction {
 //        println("see: $t, $c, $v;  $s")
         if (t != s.ms) {
           if (s.m.size() > 0) s.bw.addMutation(s.m)
-          s.m = Mutation(t.toByteArray(encode))
+          s.m = Mutation(encode.encodeLong(t))
           s.ms = t
         }
-        s.m.put(EMPTY, c.toByteArray(), v.toByteArray(encode))
+        s.m.put(EMPTY, c.toByteArray(), encode.encodeDouble(v))
         s
       }
 

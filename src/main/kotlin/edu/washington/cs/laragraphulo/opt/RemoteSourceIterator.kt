@@ -214,7 +214,8 @@ class RemoteSourceIterator : SortedKeyValueIterator<Key, Value>/*, OptionDescrib
   override fun next() {
     if (rowRangeIterator == null || remoteIterator == null)
       throw IllegalStateException("next() called before seek() b/c rowRangeIterator or remoteIterator not set")
-    remoteIterator!!.next() // does nothing if there is no next (i.e. hasTop()==false)
+    if (remoteIterator!!.hasNext()) // erm
+      remoteIterator!!.next()
     while (!remoteIterator!!.hasNext() && rowRangeIterator!!.hasNext()) {
       var range: Range? = rowRangeIterator!!.next()
       range = range!!.clip(seekRange!!, true) // clip to the seek range

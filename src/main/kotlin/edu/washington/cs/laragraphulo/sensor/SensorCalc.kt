@@ -12,6 +12,7 @@ import edu.mit.ll.graphulo.rowmult.MultiplyOp
 import edu.mit.ll.graphulo.skvi.DoubleCombiner
 import edu.mit.ll.graphulo.skvi.DoubleSummingCombiner
 import edu.mit.ll.graphulo.skvi.TwoTableIterator.CLONESOURCE_TABLENAME
+import edu.washington.cs.laragraphulo.api.PType
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.Connector
 import org.apache.accumulo.core.client.IteratorSetting
@@ -812,7 +813,32 @@ class DoubleValueDisplay : DefaultFormatter() {
 }
 
 
+/**
+ * Used for displaying numeric Doubles in the Accumulo shell.
+ * Alternative to [DoubleValueDisplay] for nullable doubles encoded with [PType.DOUBLE.nullable].
+ * Set `table.formatter` to `edu.washington.cs.laragraphulo.sensor.NDoubleValueDisplay` on the appropriate table.
+ * Todo: setup the encoder via a a custom table config property (table.custom.formatterDecoder) that says what decoder to use.
+ */
+class NDoubleValueDisplay : DefaultFormatter() {
+  private var si: Iterator<Map.Entry<Key, Value>>? = null
 
+  override fun initialize(scanner: Iterable<Map.Entry<Key, Value>>, config: FormatterConfig) {
+//    checkState(false)
+    si = scanner.iterator()
+//    this.config = FormatterConfig(config)
+    super.initialize(scanner, config)
+  }
+
+  override fun next(): String {
+    checkState(true)
+
+    val orig = si!!.next()
+    val nv = Value(PType.DOUBLE.nullable.decode(orig.value.get()).toString().toByteArray())
+    val next = AbstractMap.SimpleImmutableEntry(orig.key, nv)
+
+    return formatEntry(next)
+  }
+}
 
 
 

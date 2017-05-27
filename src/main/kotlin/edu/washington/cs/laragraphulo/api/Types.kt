@@ -7,6 +7,7 @@ import edu.washington.cs.laragraphulo.opt.ABS
 import edu.washington.cs.laragraphulo.opt.EMPTY
 import org.apache.accumulo.core.client.lexicoder.*
 import java.io.*
+import java.util.*
 
 // A mess used because delegates can't be marked transient
 
@@ -170,20 +171,27 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   private class NPType<T : Any>(
       val p: PType<T>
   ) : PType<T?>(), Comparator<T?> by serialNullsFirst(p) {
-    override fun decode(b: ByteArray, off: Int, len: Int) = p.decode(b, off, len)
+    companion object {
+      const val NULL_LONG = Long.MIN_VALUE+1
+    }
+    private val nl = NullLexicoder(p)
+    override fun decode(b: ByteArray, off: Int, len: Int) = nl.decode(b, off, len)
     override val examples = p.examples
     override fun encode(v: T?): ByteArray {
-      require(v != null) {"not encoding null"} // use NullLexicoder to encode null, if necessary
-      return p.encode(v!!)
+//      require(v != null) {"not encoding null"} // use NullLexicoder to encode null, if necessary
+      // FORCING TO FIXED WIDTH - encoding nulls is much better if we have variable width' can use a single zero
+//      return if (v == null) Arrays.copyOf(nl.encode(v), naturalWidth)
+//       else nl.encode(v)
+      return nl.encode(v)
     }
     override val defaultPhysical = this
     override fun decodeString(s: String) = p.decodeString(s)
-    override fun encodeLong(t: T?): Long {
-      require(t != null) {"not encoding null"}
-      return p.encodeLong(t!!)
+    override fun encodeLong(t: T?): Long = if (t == null) NULL_LONG else p.encodeLong(t).also {
+      if (it == NULL_LONG) throw IllegalStateException("Bad luck: attempt to encode the sentinel long $NULL_LONG. " +
+          "Looks like we need a better way to encode nulls into longs.")
     }
-    override fun decodeLong(l: Long) = p.decodeLong(l)
-    override val naturalWidth = p.naturalWidth // change if we encode null
+    override fun decodeLong(l: Long) = if (l == NULL_LONG) null else p.decodeLong(l)
+    override val naturalWidth = -1
     override val naturalDefault = null
     override fun toString() = "N"+p.toString()
     override val nullable: PType<T?> = this
@@ -194,11 +202,8 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
       if (this === other) return true
       if (other?.javaClass != javaClass) return false
       if (!super.equals(other)) return false
-
       other as NPType<*>
-
       if (p != other.p) return false
-
       return true
     }
     override fun hashCode(): Int {
@@ -232,7 +237,7 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
     override val examples = setOf(0, -1, 1, Int.MIN_VALUE, Int.MAX_VALUE)
     override fun encode(v: Int): ByteArray = Ints.toByteArray(v)
     override fun decode(b: ByteArray, off: Int, len: Int): Int {
-      require(len == 4) {"Expected length of 4 but given $len; from offset $off bytes are $b"}
+      require(len == 4) {"Expected length of 4 but given $len; from offset $off bytes are ${Arrays.toString(b)}"}
       return Ints.fromBytes(b[off],b[off+1],b[off+2],b[off+3])
     }
     override fun decodeString(s: String): Int = s.toInt()
@@ -265,7 +270,11 @@ sealed class PType<T> : LexicoderPlus<T>, LType<T>() {
   }
   object LONG : PType<Long>(), Comparator<Long> by serialNaturalOrder() {
     override val examples = setOf(0, -1, 1, Long.MIN_VALUE, Long.MAX_VALUE)
-    override fun decode(b: ByteArray, off: Int, len: Int): Long = Longs.fromBytes(b[off],b[off+1],b[off+2],b[off+3],b[off+4],b[off+5],b[off+6],b[off+7])
+    override fun decode(b: ByteArray, off: Int, len: Int): Long {
+//      println("LONG: off is $off; len is $len; ${Arrays.toString(b)}")
+      require(len == 8) {"bad length. off is $off; len is $len; ${Arrays.toString(b)}"}
+      return Longs.fromBytes(b[off],b[off+1],b[off+2],b[off+3],b[off+4],b[off+5],b[off+6],b[off+7])
+    }
     override fun encode(v: Long): ByteArray = Longs.toByteArray(v)
     override fun decodeString(s: String) = s.toLong()
     override val naturalWidth: Int = 8

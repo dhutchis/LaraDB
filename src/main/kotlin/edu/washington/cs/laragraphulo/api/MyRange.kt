@@ -262,21 +262,33 @@ class MyRange<T> private constructor(
 
   // idea: if iter is another RangeRestrictedIterator, then intersect the ranges (assuming comp compatible)
   private inner class RangeRestrictedIterator(val comp: Comparator<T>, val iter: PeekingIterator<T>) : PeekingIterator<T>  {
-    init {
-      advanceToRange(comp, iter)
+    // Do not advance the iterator until one of the methods below has been called. Need lazy semantics.
+    private var first = true
+    private fun doFirstAdvance() {
+      if (first) {
+        advanceToRange(comp, iter)
+        inRange = checkInRange()
+        first = false
+      }
     }
-    var inRange: Boolean = checkInRange()
-    fun checkInRange(): Boolean = iter.hasNext() && (upper == null || comp.compare(iter.peek(), upper).let { it < 0 || upperType == CLOSED && it == 0 })
 
-    override fun hasNext(): Boolean = inRange
+    private var inRange: Boolean = false //checkInRange()
+    private fun checkInRange(): Boolean = iter.hasNext() && (upper == null || comp.compare(iter.peek(), upper).let { it < 0 || upperType == CLOSED && it == 0 })
+
+    override fun hasNext(): Boolean {
+      doFirstAdvance()
+      return inRange
+    }
     override fun remove() = throw UnsupportedOperationException("remove not supported")
     override fun next(): T {
+      doFirstAdvance()
       if (!inRange) throw NoSuchElementException()
       val n = iter.next()
       inRange = checkInRange()
       return n
     }
     override fun peek(): T {
+      doFirstAdvance()
       if (!inRange) throw NoSuchElementException()
       return iter.peek()
     }

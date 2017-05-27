@@ -16,9 +16,9 @@ class APITest  { // : AccumuloTestBase()
 
   @Test
   fun test() {
-    val data1: MutableList<NameTuple> = LinkedList()
+    val data1: MutableList<Tuple> = LinkedList()
 
-    val tcvListFileAction = SensorFileAction.SensorFileActionImpl<MutableList<NameTuple>>(
+    val tcvListFileAction = SensorFileAction.SensorFileActionImpl<MutableList<Tuple>>(
         { data1 },
         { l,t,c,v ->
           l += mapOf("t" to t, "c" to c, "v" to v)
@@ -35,7 +35,7 @@ class APITest  { // : AccumuloTestBase()
 //    println(C1)
 
     val tupleIterator = C1.run()
-    val list: MutableList<NameTuple> = LinkedList()
+    val list: MutableList<Tuple> = LinkedList()
     tupleIterator.forEach { list += it }
     assertTrue(list.isNotEmpty())
 

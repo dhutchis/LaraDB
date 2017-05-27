@@ -4,11 +4,8 @@ import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
-import edu.washington.cs.laragraphulo.sensor.SensorCalc
+import edu.washington.cs.laragraphulo.sensor.*
 import edu.washington.cs.laragraphulo.sensor.SensorCalc.SensorOpt
-import edu.washington.cs.laragraphulo.sensor.SensorFileAction
-import edu.washington.cs.laragraphulo.sensor.time
-import edu.washington.cs.laragraphulo.sensor.toDouble
 import edu.washington.cs.laragraphulo.util.DebugUtil
 import org.apache.accumulo.core.client.Connector
 import org.junit.Assert
@@ -110,18 +107,19 @@ class SensorExample : AccumuloTestBase() {
 
     /** Ingest two sensors' data into tables */
     private fun ingestSensors(conn: Connector) {
+      val encodeFunction = if (SensorOpt.Encode in opts) EncodeFunction.LEX else EncodeFunction.STRING
       listOf(
           filepathA to tablenameA,
           filepathB to tablenameB
       ).forEach { (filepath, tablename) ->
-        val (cnt, t) = time { ingestSensor(conn, filepath, tablename) }
+        val (cnt, t) = time { ingestSensor(conn, filepath, tablename, encodeFunction) }
         logger.debug{"Created $tablename and wrote $cnt entries to it from $filepath in $t seconds"}
       }
     }
 
     /** Ingest a sensor's data into a table
      * @return The number of entries written to Accumulo. */
-    private fun ingestSensor(conn: Connector, filepath: String, tablename: String): Long {
+    fun ingestSensor(conn: Connector, filepath: String, tablename: String, encodeFunction: EncodeFunction): Long {
       // Find the file that contains the sensor data and check that it exists.
       val url: URL = Thread.currentThread().contextClassLoader.getResource(filepath)
       Assert.assertNotNull(url)
@@ -131,7 +129,7 @@ class SensorExample : AccumuloTestBase() {
       // See SensorFileAction for details.
       val action = SensorFileAction.ingestAction(conn, tablename,
           // (if the Encode optimization is enabled, then user a byte-array encoding rather than a String encoding)
-          SensorOpt.Encode in opts,
+          encodeFunction,
           // (if the table to ingest already exists, delete and recreate it)
           recreateTable = true)
       // If you wish to simply see the entries from the CSV files rather than insert them into Accumulo,

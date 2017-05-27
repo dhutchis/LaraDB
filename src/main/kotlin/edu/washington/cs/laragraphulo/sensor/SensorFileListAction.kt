@@ -42,7 +42,7 @@ class SensorFileListInsert(
       println(files.map { it.file.nameWithoutExtension to it.date })
     }
 
-    val fa: FileAction = SensorFileAction.ingestAction(conn, table, encode,
+    val fa: FileAction = SensorFileAction.ingestAction(conn, table, if (encode) EncodeFunction.LEX else EncodeFunction.STRING,
         createTable = false)
 //        object : FileAction {
 //      override fun run(f: File) {

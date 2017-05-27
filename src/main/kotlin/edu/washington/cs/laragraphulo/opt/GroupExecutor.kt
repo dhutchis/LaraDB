@@ -1,6 +1,8 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.util.concurrent.*
+import edu.washington.cs.laragraphulo.api.PSchema
+import edu.washington.cs.laragraphulo.api.Table
 
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.ClientConfiguration
@@ -216,6 +218,52 @@ interface AccumuloConfig : Serializable {
   val username: String
 
   val authenticationToken: AuthenticationToken
+
+  fun setSchema(table: Table, ps: PSchema) {
+    // todo - use a human-readable version of the PSchema, not the base64 serialization
+    val ser = SerializationUtil.serializeBase64(ps)
+    connector.tableOperations().setProperty(table, PROP_PSCHEMA, ser)
+  }
+  fun getSchema(table: Table): PSchema {
+    val props: Iterable<Map.Entry<String, String>> = connector.tableOperations().getProperties(table)
+    val ser = props.find { it.key == PROP_PSCHEMA }?.value ?: throw IllegalStateException(
+        "The table $table exists but does not have a PSchema set in its table properties under $PROP_PSCHEMA")
+    return SerializationUtil.deserializeBase64(ser) as PSchema
+  }
+
+  /**
+   * This method shouldn't really be public, but it is useful for setting up some of the iterators.
+
+   * Create the basic iterator settings for the [RemoteWriteIterator].
+   * @param prefix A prefix to apply to keys in the option map, e.g., the "B" in "B.tableName".
+   * @param remoteTable Name of table to write to. Null does not put in the table name.
+   * @param remoteTableTranspose Name of table to write transpose to. Null does not put in the transpose table name.
+   * @param authorizations Authorizations for the server-side iterator. Null means use default: Authorizations.EMPTY
+   * @return The basic set of options for [RemoteWriteIterator].
+   */
+  fun basicRemoteOpts(prefix: String = "", remoteTable: String? = null,
+                      remoteTableTranspose: String? = null, authorizations: Authorizations? = null): Map<String, String> {
+    val opt = HashMap<String, String>()
+    val instance = connector.instance.instanceName
+    val zookeepers = connector.instance.zooKeepers
+    val user = connector.whoami()
+    opt.put(prefix + RemoteSourceIterator.ZOOKEEPERHOST, zookeepers)
+    opt.put(prefix + RemoteSourceIterator.INSTANCENAME, instance)
+    if (remoteTable != null)
+      opt.put(prefix + RemoteSourceIterator.TABLENAME, remoteTable)
+    if (remoteTableTranspose != null)
+      opt.put(prefix + RemoteWriteIterator.TABLENAMETRANSPOSE, remoteTableTranspose)
+    opt.put(prefix + RemoteSourceIterator.USERNAME, user)
+    opt.put(prefix + RemoteSourceIterator.AUTHENTICATION_TOKEN, SerializationUtil.serializeWritableBase64(authenticationToken))
+    opt.put(prefix + RemoteSourceIterator.AUTHENTICATION_TOKEN_CLASS, authenticationToken.javaClass.name)
+    if (authorizations != null && authorizations != Authorizations.EMPTY)
+      opt.put(prefix + RemoteSourceIterator.AUTHORIZATIONS, authorizations.serialize())
+    return opt
+  }
+
+  companion object {
+    const val PROP_PSCHEMA = "table.custom.pschema"
+  }
 }
 
 class FakeAccumuloConfig : AccumuloConfig {
@@ -289,11 +337,11 @@ class AccumuloConfigImpl : AccumuloConfig {
   }
 
   @Throws(IOException::class, ClassNotFoundException::class)
-  private fun readObject(`in`: java.io.ObjectInputStream) {
-    `in`.defaultReadObject()
+  private fun readObject(oin: java.io.ObjectInputStream) {
+    oin.defaultReadObject()
 
     val auth = GraphuloUtil.subclassNewInstance(authenticationTokenClass, AuthenticationToken::class.java)
-    auth.readFields(`in`)
+    auth.readFields(oin)
     // Safe to set the final field authenticationToken.
 
     // Use Java reflection, not Kotlin reflection
@@ -485,7 +533,7 @@ abstract class DelegatingIterator : SKVI {
   override fun next() = skvi.next()
   override fun deepCopy(env: IteratorEnvironment?): SortedKeyValueIterator<Key,Value> = skvi.deepCopy(env)
   override fun hasTop() = skvi.hasTop()
-  override fun seek(range: Range?, columnFamilies: MutableCollection<ByteSequence>?, inclusive: Boolean) = skvi.seek(range, columnFamilies, inclusive)
+  override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) = skvi.seek(range, columnFamilies, inclusive)
   override fun getTopKey(): Key = skvi.topKey
 }
 
@@ -518,9 +566,7 @@ abstract class SerializerSetting<D>(
 
 
 class DeserializeDelegateIterator : DelegatingIterator(), OptionDescriber {
-  companion object : SerializerSetting<SKVI>(DeserializeDelegateIterator::class.java) {
-
-  }
+  companion object : SerializerSetting<SKVI>(DeserializeDelegateIterator::class.java)
 
   override fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SortedKeyValueIterator<Key, Value> {
     val skvi = deserializeFromOptions(options)

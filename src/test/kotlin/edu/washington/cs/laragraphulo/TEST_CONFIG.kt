@@ -26,14 +26,16 @@ object TEST_CONFIG {
 
   val DEFAULT_TEST_CONFIG_FILE = "GraphuloTest.conf"
 
+  const val DEFAULT_MINI_TSERVERS = 1
+
   init {
     val s = System.getProperty("TEST_CONFIG") // environment variable // "miniDebug"//
     if (s == null && File(DEFAULT_TEST_CONFIG_FILE).exists()) {
       loadConfigFromFileOrSystem(DEFAULT_TEST_CONFIG_FILE)
       if (_accumuloTester == null)
-        _accumuloTester = MiniAccumuloTester(2, false, false)
+        _accumuloTester = MiniAccumuloTester(DEFAULT_MINI_TSERVERS, false, false)
     } else if (s == null) {
-      _accumuloTester = MiniAccumuloTester(2, false, false)
+      _accumuloTester = MiniAccumuloTester(DEFAULT_MINI_TSERVERS, false, false)
     } else if (s.startsWith("txe1-")) {
       val instance = s.substring(5)
       val file = File("/home/gridsan/groups/databases/$instance/accumulo_user_password.txt")
@@ -70,17 +72,17 @@ object TEST_CONFIG {
           // interpret value as a file path
           loadConfigFromFileOrSystem(s)
           if (_accumuloTester == null)
-            _accumuloTester = MiniAccumuloTester(1, false, false)
+            _accumuloTester = MiniAccumuloTester(DEFAULT_MINI_TSERVERS, false, false)
         }
       }
     }
     logger.info("Using $accumuloTester")
   }
 
-  val KEY_INSTANCE_NAME = "accumulo.it.cluster.standalone.instance.name"
-  val KEY_ZOOKEEPERS = "accumulo.it.cluster.standalone.zookeepers"
-  val KEY_USER = "accumulo.it.cluster.standalone.admin.principal"
-  val KEY_PASSWORD = "accumulo.it.cluster.standalone.admin.password"
+  const val KEY_INSTANCE_NAME = "accumulo.it.cluster.standalone.instance.name"
+  const val KEY_ZOOKEEPERS = "accumulo.it.cluster.standalone.zookeepers"
+  const val KEY_USER = "accumulo.it.cluster.standalone.admin.principal"
+  const val KEY_PASSWORD = "accumulo.it.cluster.standalone.admin.password"
 
   private fun loadConfigFromFileOrSystem(filename: String?) {
     var instancename: String? = null

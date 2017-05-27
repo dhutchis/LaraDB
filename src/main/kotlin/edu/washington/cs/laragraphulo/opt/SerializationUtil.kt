@@ -113,7 +113,7 @@ class SerializationUtil private constructor() {
       try {
         ObjectOutputStream(outputStream).use { out -> out.writeObject(obj) }
       } catch (ex: IOException) {
-        throw RuntimeException(ex)
+        throw RuntimeException("while attempting to serialize $obj", ex)
       }
 
     }

@@ -1,10 +1,10 @@
 package edu.washington.cs.laragraphulo.api
 
-import com.google.common.collect.*
+import com.google.common.collect.PeekingIterator
+import edu.washington.cs.laragraphulo.LexicoderPlus
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.warn
-import org.apache.accumulo.core.client.lexicoder.Lexicoder
 import org.apache.accumulo.core.client.lexicoder.impl.AbstractLexicoder
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Value
@@ -14,8 +14,6 @@ import java.io.IOException
 import java.io.ObjectInputStream
 import java.io.Serializable
 import java.util.*
-import kotlin.NoSuchElementException
-import kotlin.collections.ArrayList
 import kotlin.properties.ReadWriteProperty
 import kotlin.reflect.KProperty
 
@@ -29,7 +27,7 @@ fun <E> Collection<E>.disjoint(other: Collection<E>): Boolean {
 /**
  * Return a NameTuple with the same keys but the values set to the default values.
  */
-fun NameTuple.copyDefault(ns: Schema): NameTuple {
+fun Tuple.copyDefault(ns: Schema): Tuple {
   require(this.keys == (ns.keys + ns.vals).toSet())
   return this.mapValues { (attr, value) ->
     ns.getValue(attr)?.default ?: value
@@ -43,9 +41,9 @@ val SINGLE_ZERO = byteArrayOf(ZERO_BYTE) // sort null values first
 
 /** Would this come in handy? Uses an extra byte to flag null values. Probably not. */
 class NullLexicoder<T>(
-    private val lexicoder: Lexicoder<T>
-) : AbstractLexicoder<T>() {
-  override fun encode(v: T): ByteArray {
+    private val lexicoder: LexicoderPlus<T>
+) : AbstractLexicoder<T?>(), Serializable {
+  override fun encode(v: T?): ByteArray {
     return if (v == null) {
       SINGLE_ZERO
     } else {
@@ -58,8 +56,8 @@ class NullLexicoder<T>(
   }
 
   override fun decodeUnchecked(b: ByteArray, offset: Int, len: Int): T? {
-    return if (b.size == 1 && b[0] == ZERO_BYTE) null
-    else decodeUnchecked(b, 1, b.size-1)
+    return if (b[0] == ZERO_BYTE) null
+    else lexicoder.decode(b, offset+1, len-1)
   }
 }
 
@@ -70,6 +68,8 @@ interface Attribute<T> : Comparable<Attribute<T>>, Serializable {
   fun withNewName(name: Name) = Attribute(name, type)
   operator fun component1() = name
   operator fun component2() = type
+
+  fun defaultPhysical(): PAttribute<T> = PAttribute(name, type.defaultPhysical)
 
   companion object {
     operator fun <T> invoke(name: Name, type: LType<T>): Attribute<T> = AttributeImpl(name, type)
@@ -110,6 +110,8 @@ interface ValAttribute<T> : Attribute<T> {
   override fun withNewName(name: Name) = ValAttribute(name, type, default)
   operator fun component3() = default
 
+  override fun defaultPhysical(): PValAttribute<T> = PValAttribute(name, type.defaultPhysical, default)
+
   companion object {
     operator fun <T> invoke(name: Name, type: LType<T>, default: T): ValAttribute<T> = ValAttributeImpl(name, type, default)
   }
@@ -148,7 +150,7 @@ interface ValAttribute<T> : Attribute<T> {
 open class Schema(
   val keys: List<Attribute<*>>,
   val vals: List<ValAttribute<*>>
-) : Comparator<NameTuple>, Serializable {
+) : Comparator<Tuple>, Serializable {
   init {
     val kns = keys.map(Attribute<*>::name)
     val vns = vals.map(ValAttribute<*>::name)
@@ -186,10 +188,19 @@ open class Schema(
 
   override fun toString(): String = "Schema(keys=$keys, vals=$vals)"
 
-  override fun compare(t1: NameTuple, t2: NameTuple): Int = compareByKey(keys, t1, t2)
+  override fun compare(t1: Tuple, t2: Tuple): Int = compareByKey(keys, t1, t2)
+
+  /** Default physical schema.
+   * Todo: make other physical schemas. We may not always want to put all the keys in the row, for example if we need a coarser grouping.
+   * */
+  open fun defaultPSchema(): PSchema {
+    val pkeys = keys.map(Attribute<*>::defaultPhysical)
+    val pvals = vals.map(ValAttribute<*>::defaultPhysical)
+    return PSchema(row = pkeys, pvals = pvals)
+  }
 
   companion object {
-    fun compareByKey(keys: List<Attribute<*>>, t1: NameTuple, t2: NameTuple): Int {
+    fun compareByKey(keys: List<Attribute<*>>, t1: Tuple, t2: Tuple): Int {
       keys.forEach {
         val n = it.name
         assert(n in t1 && n in t2)
@@ -203,8 +214,8 @@ open class Schema(
 
 data class KeyComparator(
     val keys: List<Attribute<*>>
-) : Comparator<NameTuple>, Serializable {
-  override fun compare(t1: NameTuple, t2: NameTuple): Int = Schema.compareByKey(keys, t1, t2)
+) : Comparator<Tuple>, Serializable {
+  override fun compare(t1: Tuple, t2: Tuple): Int = Schema.compareByKey(keys, t1, t2)
 }
 
 // ======================= TUPLE
@@ -218,7 +229,7 @@ data class KeyComparator(
 open class ExtFun(
     val name: String,
     val extSchema: Schema,
-    val extFun: (NameTuple) -> List<NameTuple> // not included in equals(); use name instead
+    val extFun: (Tuple) -> List<Tuple> // not included in equals(); use name instead
 ) : Serializable {
   override fun toString(): String = "ExtFun($name, extSchema=$extSchema)"
   override fun equals(other: Any?): Boolean {
@@ -244,7 +255,7 @@ open class ExtFun(
 class MapFun(
     name: String,
     val mapValues: List<ValAttribute<*>>,
-    val mapFun: (NameTuple) -> NameTuple
+    val mapFun: (Tuple) -> Tuple
 ) : ExtFun(name, extSchema = Schema(listOf(), mapValues), extFun = { tuple -> listOf(mapFun(tuple)) }) {
   override fun toString(): String = "MapFun($name, mapValues=$mapValues)"
 }
@@ -393,6 +404,8 @@ data class TimesFun<T1,T2,T3>(
 data class KeyValue(val key: Key, val value: Value) : Serializable {
   constructor(kv: Pair<Key, Value>): this(kv.first, kv.second)
   constructor(kv: Map.Entry<Key, Value>): this(kv.key, kv.value)
+
+  fun toTuple(ps: PSchema): Tuple = TupleByKeyValue(ps, key, value)
 }
 
 interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
@@ -418,7 +431,7 @@ interface KeyValueIterator : AccumuloLikeIterator<SeekKey,KeyValue> {
   override fun deepCopy(env: IteratorEnvironment): KeyValueIterator
 }
 
-interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
+interface TupleIterator : AccumuloLikeIterator<TupleSeekKey, Tuple> {
   override fun init(options: Map<String, String>, env: IteratorEnvironment): TupleIterator = this
   /** Requirement: `X.deepCopy(_) == X` */
   override fun deepCopy(env: IteratorEnvironment): TupleIterator
@@ -433,21 +446,21 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
     }
   }
 
-  class DataTupleIterator(val comp: Comparator<NameTuple>, collection: Iterable<NameTuple>) : TupleIterator {
-    val list: List<NameTuple> = collection.sortedWith(comp)
+  class DataTupleIterator(val comp: Comparator<Tuple>, collection: Iterable<Tuple>) : TupleIterator {
+    val list: List<Tuple> = collection.sortedWith(comp)
     var iter = list.iterator().peeking()
     override fun seek(seek: TupleSeekKey) {
       iter = seek.range.restrict(comp, list.iterator().peeking())
     }
 
     override fun hasNext(): Boolean = iter.hasNext()
-    override fun next(): NameTuple = iter.next()
-    override fun peek(): NameTuple = iter.peek()
+    override fun next(): Tuple = iter.next()
+    override fun peek(): Tuple = iter.peek()
     // no deep copying necessary because collection is materialized
     override fun deepCopy(env: IteratorEnvironment) = DataTupleIterator(comp, list)
   }
   /** Only allows a single iteration. No deep copying. */
-  class DataTupleIteratorOnce(val comp: Comparator<NameTuple>, var iter: PeekingIterator<NameTuple>) : TupleIterator {
+  class DataTupleIteratorOnce(val comp: Comparator<Tuple>, var iter: PeekingIterator<Tuple>) : TupleIterator {
     var seeked = false
     override fun seek(seek: TupleSeekKey) {
       if (seeked) logger.warn{"seeking more than once on $this"}
@@ -455,8 +468,8 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey,NameTuple> {
       seeked = true
     }
     override fun hasNext(): Boolean = iter.hasNext()
-    override fun next(): NameTuple = iter.next()
-    override fun peek(): NameTuple = iter.peek()
+    override fun next(): Tuple = iter.next()
+    override fun peek(): Tuple = iter.peek()
     override fun deepCopy(env: IteratorEnvironment) = throw UnsupportedOperationException("cannot deepCopy this class; only allows a single iteration through")
     companion object : Loggable {
       override val logger: Logger = logger<DataTupleIteratorOnce>()
@@ -504,7 +517,7 @@ data class SeekKey(
     val families: Collection<ABS> = Collections.emptyList(),
     val inclusive: Boolean = false
 ) {
-  fun toTupleSeekKey(ps: PhysicalSchema): TupleSeekKey =
+  fun toTupleSeekKey(ps: PSchema): TupleSeekKey =
       TupleSeekKey(
 //          MyRange.fromGuava(range) { k -> TupleByKeyValue(ps, k, null) },
           MyRange.fromAccumulo(range).transform { k -> TupleByKeyValue(ps, k, null) },
@@ -513,11 +526,11 @@ data class SeekKey(
 }
 
 data class TupleSeekKey(
-    val range: MyRange<NameTuple> = MyRange.all(),
+    val range: MyRange<Tuple> = MyRange.all(),
     val families: Collection<ABS> = Collections.emptyList(),
     val inclusive: Boolean = false
 ) {
-  fun toSeekKey(ps: PhysicalSchema): SeekKey =
+  fun toSeekKey(ps: PSchema): SeekKey =
       SeekKey(
           MyRange.toAccumulo(range.transform { tuple -> ps.encodeToKeyValue(tuple).key }),
           families, inclusive

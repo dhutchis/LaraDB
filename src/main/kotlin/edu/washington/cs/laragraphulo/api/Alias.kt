@@ -1,10 +1,16 @@
 package edu.washington.cs.laragraphulo.api
 
 import com.google.common.collect.Iterators
+import com.google.common.collect.PeekingIterator
 import org.apache.accumulo.core.data.ArrayByteSequence
 
-typealias NameTuple = Map<Name,*>
+typealias Tuple = Map<Name,*>
+fun Tuple.toKeyValue(ps: PSchema): KeyValue
+    = if (this is TupleByKeyValue && this.v != null) KeyValue(this.k,this.v)
+      else ps.encodeToKeyValue(this)
+
 typealias NOPE = UnsupportedOperationException
+typealias SKVI = org.apache.accumulo.core.iterators.SortedKeyValueIterator<org.apache.accumulo.core.data.Key,org.apache.accumulo.core.data.Value>
 
 
 /** An attribute name. */
@@ -19,4 +25,4 @@ typealias Width = Int
 /** A table name */
 typealias Table = String
 
-fun <T> Iterator<T>.peeking() = Iterators.peekingIterator(this)
+fun <T> Iterator<T>.peeking(): PeekingIterator<T> = Iterators.peekingIterator(this)

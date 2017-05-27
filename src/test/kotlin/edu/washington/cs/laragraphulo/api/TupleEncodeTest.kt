@@ -21,9 +21,9 @@ class TupleEncodeTest {
     private fun signum(i: Int) = if (i < 0) -1 else if (i == 0) 0 else 1
 
     private val rand = Random().apply { this.nextLong().let { logger.debug{"random seed: $it"}; this.setSeed(it) } }
-    /** Allocates the given attributes randomly around the various parts of a PhysicalSchema.
+    /** Allocates the given attributes randomly around the various parts of a PSchema.
      * Does not use column visibility and does not put STRING data into the timestamp. */
-    fun genRandomSchema(ins0: List<PAttribute<*>>): PhysicalSchema {
+    fun genRandomSchema(ins0: List<PAttribute<*>>): PSchema {
       val useTs = ins0.any { it.type != PType.STRING } && rand.nextBoolean()
 //      val useVis = rand.nextBoolean()
       // May add an extra "value" value attribute
@@ -41,7 +41,7 @@ class TupleEncodeTest {
       } }
       assert(par.sum() == num) {"partition $par out of ${ins.count()} items (ts is $ts)"}
       val pre = par.fold(listOf(0)) { list, p -> list + (list.last() + p) } // 2, 1, 0, 2 --> 0, 2, 3, 3, 5
-      return PhysicalSchema(
+      return PSchema(
           row = ins.subList(pre[0], pre[1]),
           family = ins.subList(pre[1], pre[2]),
           colq = ins.subList(pre[2], pre[3]),
@@ -54,11 +54,11 @@ class TupleEncodeTest {
 
   @ParameterizedTest
   @MethodSource(names = arrayOf("testCases"))
-  fun testEncodeRandom(pair: Pair<List<PAttribute<*>>, List<NameTuple>>) {
+  fun testEncodeRandom(pair: Pair<List<PAttribute<*>>, List<Tuple>>) {
     val (attrs,tuples) = pair
     val ps = genRandomSchema(attrs)
-    val iter = KvToTupleAdapter(ps, TupleToKvAdapter(ps, tuples.iterator()))
+    val iter = KvToTupleAdapter(ps, TupleToKvAdapter(ps, TupleIterator.DataTupleIterator(ps, tuples)))
 //    val iter = TupleOp.LoadData(ps, tuples)
-    assertTrue(Iterators.elementsEqual(tuples.iterator(), iter))
+    assertTrue(Iterators.elementsEqual(TupleIterator.DataTupleIterator(ps, tuples), iter))
   }
 }

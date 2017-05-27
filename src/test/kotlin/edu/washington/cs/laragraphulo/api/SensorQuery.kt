@@ -13,9 +13,9 @@ object SensorQuery {
   //val attrV00 = ValAttribute("v", Double::class.java, 0.0)
   val attrCnt = ValAttribute("cnt", LType.UINT, 0)
 
-  val nullTuple: NameTuple = mapOf("v" to null)
-  val zeroIntTuple: NameTuple = mapOf("v" to 0)
-  val oneIntTuple: NameTuple = mapOf("v" to 1)
+  val nullTuple: Tuple = mapOf("v" to null)
+  val zeroIntTuple: Tuple = mapOf("v" to 0)
+  val oneIntTuple: Tuple = mapOf("v" to 1)
 
 
   // =============== SCHEMAs
@@ -39,7 +39,7 @@ object SensorQuery {
     val t = tuple["t"] as Long
     val tm = t % BIN_SIZE
     val tb = t - tm + (if (tm >= BIN_SIZE /2) BIN_SIZE else 0) // new t
-    val res: NameTuple = mapOf("t'" to tb, "v" to tuple["v"])
+    val res: Tuple = mapOf("t'" to tb, "v" to tuple["v"])
     listOf(res)
   }
 
