@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.examples.sensor
 
+import edu.mit.ll.graphulo.util.GraphuloUtil
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.api.PSchema
 import edu.washington.cs.laragraphulo.api.TupleByKeyValue
@@ -46,6 +47,9 @@ class Sensor_Lara_Accumulo_Example : AccumuloTestBase() {
     val sensorSchema = PSchema(listOf(aT), colq = listOf(aC), pvals = listOf(aV))
     ac.setSchema("sensorA", sensorSchema)
     ac.setSchema("sensorB", sensorSchema)
+
+    // Delete the result table if it exists
+    GraphuloUtil.deleteTables(ac.connector, "sensorC")
 
     // This is the Sensor Query
     val query = TupleOp.Store(SensorQuery.C, "sensorC")

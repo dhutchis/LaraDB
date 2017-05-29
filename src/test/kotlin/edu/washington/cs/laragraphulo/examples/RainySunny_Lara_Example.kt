@@ -15,14 +15,14 @@ import java.util.*
 /**
  * Example demonstrating a simple Lara Ext function call using the Lara API.
  *
- * Run this example via `mvn test -Dtest=HelloWorld_Lara_Example`.
+ * Run this example via `mvn test -Dtest=RainySunny_Lara_Example`.
  * The test does not use Accumulo.
  */
-class HelloWorld_Lara_Example {
+class RainySunny_Lara_Example {
 
   /** The main entry point of this example. START READING HERE. */
   @Test
-  fun helloWorldExample() {
+  fun rainySunnyExample() {
     // ============= INPUT DATA
     val exampleData = listOf(
         /* Row to Value */
@@ -65,7 +65,7 @@ class HelloWorld_Lara_Example {
   /** Static variables and methods */
   companion object : Loggable {
     /** This is used for logging messages */
-    override val logger: Logger = logger<HelloWorld_Lara_Example>()
+    override val logger: Logger = logger<RainySunny_Lara_Example>()
 
     const val RAINY = "Rainy"
     const val SUNNY = "Sunny"

@@ -103,7 +103,7 @@ class RainySunny_Graphulo_Example : AccumuloTestBase() {
      */
     private fun runQuery(G: Graphulo, table1: String, table2: String) {
       // Create an IteratorSetting for the map iterator.
-      val iteratorList = listOf(MapRainToSunIterator.iteratorSetting(1))
+      val iteratorList = listOf(MapRainToSunIterator.Companion.iteratorSetting(1))
       
       // Execute the query. Most of the parameters to the general Graphulo OneTable function are null or -1, 
       // which means "use default" or "don't use this extra feature".
