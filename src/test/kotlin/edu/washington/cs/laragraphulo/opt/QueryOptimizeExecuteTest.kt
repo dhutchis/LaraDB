@@ -171,7 +171,7 @@ Store(RelationKey('public','adhoc','netflow_subset'),
           Thread.currentThread().contextClassLoader.
           getResource(resourcePath)?.let {
         File(it.path)
-      } ?: null
+      }
       if (netflow_sample_file != null) {
         val fileurl = "file://"+netflow_sample_file.absolutePath
         val filescan = "FileScan('$fileurl', 'CSV', $netflow_sample_scheme)"

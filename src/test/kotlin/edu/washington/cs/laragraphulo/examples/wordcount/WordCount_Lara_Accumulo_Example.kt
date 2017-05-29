@@ -22,6 +22,7 @@ import java.util.*
  * The test uses a MiniAccumuloInstance by default; setup the file GraphuloTest.conf to use a real Accumulo instance.
  */
 class WordCount_Lara_Accumulo_Example : AccumuloTestBase() {
+
   @Test
   fun wordCountExample() {
     /* Obtain AccumuloConfig (connection information for Accumulo instance).

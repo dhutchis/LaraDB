@@ -259,7 +259,7 @@ class KeyValueToTuple(
 
 
   private lateinit var rowIter: OneRowIterator<KeyValue>
-  private lateinit var tupleKey: TupleKey
+//  private lateinit var tupleKey: TupleKey
   private lateinit var keyListBuilt: List<ArrayByteSequence>
   private var valNamePos: Int = -1
   private lateinit var family: ArrayByteSequence
