@@ -193,32 +193,26 @@ examples with suffix `_Lara_Standalone_Example` run as an in-memory standalone p
 examples with suffix `_Lara_Accumulo_Example` run on an Accumulo via the Lara API.
 
 #### RainySunny Example (Graphulo)
-See the query in [RainySunnyQuery](src/main/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunnyQuery.kt)
+See the query expressed in the Lara API in 
+[RainySunnyQuery](src/main/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunnyQuery.kt).
 This query performs a simple map operation that changes all instances of the word "Rainy" to "Sunny" in a set of documents.
-The examples are [RainySunny_Graphulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunny_Graphulo_Example.kt),
-[RainySunny_Lara_Standalone_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunny_Lara_Standalone_Example.kt),
-[RainySunny_Lara_Accumulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunny_Lara_Accumulo_Example.kt).
 
+See the [rainy-sunny examples here](src/test/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny).
 
 #### WordCount Example (Lara Standalone)
-See [WordCount_Lara_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/WordCount_Lara_Example.kt).
+See the query expressed in the Lara API in 
+[WordCountQuery](src/main/kotlin/edu/washington/cs/laragraphulo/examples/wordcount/WordCountQuery.kt).
 This example demonstrates the Lara API for the task of counting words across a collection of documents.
 
+See the [word count examples here](src/test/kotlin/edu/washington/cs/laragraphulo/examples/wordcount).
+
 #### Sensor Query Examples (Graphulo, Lara Standalone, Lara Accumulo)
+See the query expressed in the Lara API in 
+[SensorQuery](src/main/kotlin/edu/washington/cs/laragraphulo/examples/sensor/SensorQuery.kt).
 This family of examples solves a sensory query task to compute the covariances of the differences in measurements 
 between two sensors. The sensor data is read from [Array of Things](https://arrayofthings.github.io/) CSV files.
-The file [SensorQuery](src/main/kotlin/edu/washington/cs/laragraphulo/examples/sensor/SensorQuery.kt)
-contains the complete query expressed in the Lara API.
 
-There are three implementations of the sensor query:
-
-1. [Sensor_Graphulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/sensor/Sensor_Graphulo_Example.kt) 
-   -- runs the sensor query on an Accumulo cluster via Graphulo library calls. 
-2. [Sensor_Lara_Standalone_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/sensor/Sensor_Lara_Standalone_Example.kt) 
-   -- runs the sensor query as an in-memory standalone program via the Lara API.
-3. [Sensor_Lara_Accumulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/sensor/Sensor_Lara_Accumulo_Example.kt) 
-   -- runs the sensor query on an Accumulo cluster via the Lara API.
-
+See the [sensor examples here](src/test/kotlin/edu/washington/cs/laragraphulo/examples/sensor).
 
 
 ### How to use LaraDB in Java client code

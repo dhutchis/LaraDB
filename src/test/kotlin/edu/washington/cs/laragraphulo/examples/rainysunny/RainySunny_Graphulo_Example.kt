@@ -109,7 +109,7 @@ class RainySunny_Graphulo_Example : AccumuloTestBase() {
     private fun viewAndVerifyResult(conn: org.apache.accumulo.core.client.Connector, table: String) {
       conn.createScanner(table, org.apache.accumulo.core.security.Authorizations.EMPTY).use { scanner ->
         val scannedData = scanner.map { (k,v) -> k.row.toString() to v.toString() }
-        scannedData.forEach { logger.debug {it} }
+        logger.debug{scannedData}
         org.junit.Assert.assertEquals(scannedData, expectedResult)
       }
     }

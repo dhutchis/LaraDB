@@ -4,6 +4,7 @@ import edu.washington.cs.laragraphulo.api.*
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 
 
 /**
@@ -14,14 +15,14 @@ import org.junit.jupiter.api.Assertions.assertEquals
  * The test does not use Accumulo.
  */
 class RainySunny_Lara_Standalone_Example {
-  @org.junit.Test
+  @Test
   fun rainySunnyExample() {
     // Instantiate the query with actual data, so that we can run it here.
     val query = RainySunnyQuery.query.instantiateLoad(mapOf(RainySunnyQuery.table1 to RainySunnyQuery.rainyData))
 
     // ============= RUN! (and print the result)
     val scannedData = query.run().toList()
-    scannedData.forEach { logger.debug {it} }
+    logger.debug{scannedData}
 
     // ============= CHECK CORRECTNESS
     assertEquals(scannedData, RainySunnyQuery.sunnyData)
