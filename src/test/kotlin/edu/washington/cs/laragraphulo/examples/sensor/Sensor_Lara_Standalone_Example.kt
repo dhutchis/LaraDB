@@ -35,10 +35,7 @@ class Sensor_Lara_Standalone_Example { // : AccumuloTestBase()
 
     // Construct an iterator that implements the query. Read the results into memory.
     val tupleIterator = C1.run()
-    val list: MutableList<edu.washington.cs.laragraphulo.api.Tuple> = java.util.LinkedList()
-    tupleIterator.forEach { list += it }
-    assertTrue(list.isNotEmpty())
-
+    val list = tupleIterator.toList()
 
     // The remaining code ensures that the sensor query runs even if we only want some range of the results.
     tupleIterator.seek(edu.washington.cs.laragraphulo.api.TupleSeekKey())
@@ -54,19 +51,28 @@ class Sensor_Lara_Standalone_Example { // : AccumuloTestBase()
     assertTrue(!tupleIterator.hasNext())
   }
 
-  fun readSensorData(filepath: String): List<edu.washington.cs.laragraphulo.api.Tuple> {
-    val sensorData: MutableList<edu.washington.cs.laragraphulo.api.Tuple> = java.util.LinkedList()
+  companion object {
+    fun readSensorData(filepath: String): List<edu.washington.cs.laragraphulo.api.Tuple> {
+      val sensorData: MutableList<edu.washington.cs.laragraphulo.api.Tuple> = java.util.LinkedList()
 
-    val tcvListFileAction = edu.washington.cs.laragraphulo.sensor.SensorFileAction.SensorFileActionImpl<MutableList<Tuple>>(
-        { sensorData },
-        { l, t, c, v ->
-          l += mapOf("t" to t, "c" to c, "v" to v); l
-        },
-        { }
-    )
-    val urlA = Thread.currentThread().contextClassLoader.getResource(filepath)
-    tcvListFileAction(urlA)
-    sensorData.sortWith(edu.washington.cs.laragraphulo.api.KeyComparator(SensorQuery.initialSchema.keys))
-    return sensorData
+      val tcvListFileAction = edu.washington.cs.laragraphulo.sensor.SensorFileAction.SensorFileActionImpl<MutableList<Tuple>>(
+          { sensorData },
+          { l, t, c, v ->
+            l += mapOf("t" to t, "c" to c, "v" to v); l
+          },
+          { }
+      )
+      val urlA = Thread.currentThread().contextClassLoader.getResource(filepath)
+      tcvListFileAction(urlA)
+      sensorData.sortWith(edu.washington.cs.laragraphulo.api.KeyComparator(SensorQuery.initialSchema.keys))
+      return sensorData
+    }
+
+    fun <T> Iterator<T>.toList(): List<T> {
+      val l = java.util.LinkedList<T>()
+      while (this.hasNext())
+        l += this.next()
+      return l
+    }
   }
 }

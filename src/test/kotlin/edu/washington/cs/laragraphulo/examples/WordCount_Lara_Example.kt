@@ -7,6 +7,7 @@ import edu.washington.cs.laragraphulo.api.LType.*
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
 import org.junit.Test
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.slf4j.Logger
 import java.util.*
 
@@ -28,7 +29,7 @@ class WordCount_Lara_Example {
         "doc1" to "she sells sea shells by the sea shore",
         "doc2" to "the shells she sells are surely seashells",
         "doc3" to "so if she sells shells on the seashore",
-        "doc4" to "i’m sure she sells seashore shells"
+        "doc4" to "i'm sure she sells seashore shells"
     ).map { (docid,text) -> mapOf("docid" to docid, "text" to text) }
 
     // ============= ATTRIBUTES
@@ -59,11 +60,11 @@ class WordCount_Lara_Example {
 
     // ============= RUN! (and print the result)
     val scannedData = query.run().toList()
+    println(scannedData)
     scannedData.forEach { logger.debug {it} }
 
-//    // ============= CHECK CORRECTNESS
-//    val expectedResult = exampleData.map {map -> map + ("v" to map["v"]!!.replace(RAINY, SUNNY)) }
-//    Assert.assertEquals(scannedData, expectedResult)
+    // ============= CHECK CORRECTNESS
+    assertEquals(scannedData, expected)
   }
   
 
@@ -74,15 +75,30 @@ class WordCount_Lara_Example {
     /** This is used for logging messages */
     override val logger: Logger = logger<WordCount_Lara_Example>()
 
-    const val RAINY = "Rainy"
-    const val SUNNY = "Sunny"
-
-
     fun <T> Iterator<T>.toList(): List<T> {
       val l = LinkedList<T>()
       while (this.hasNext())
         l += this.next()
       return l
     }
+    
+    private val expected = listOf(
+        mapOf("count" to 1, "word" to "are"),
+        mapOf("count" to 1, "word" to "by"),
+        mapOf("count" to 1, "word" to "i'm"),
+        mapOf("count" to 1, "word" to "if"),
+        mapOf("count" to 1, "word" to "on"),
+        mapOf("count" to 2, "word" to "sea"),
+        mapOf("count" to 1, "word" to "seashells"),
+        mapOf("count" to 2, "word" to "seashore"),
+        mapOf("count" to 4, "word" to "sells"),
+        mapOf("count" to 4, "word" to "she"),
+        mapOf("count" to 4, "word" to "shells"),
+        mapOf("count" to 1, "word" to "shore"),
+        mapOf("count" to 1, "word" to "so"),
+        mapOf("count" to 1, "word" to "sure"),
+        mapOf("count" to 1, "word" to "surely"),
+        mapOf("count" to 3, "word" to "the")
+    )
   }
 }
