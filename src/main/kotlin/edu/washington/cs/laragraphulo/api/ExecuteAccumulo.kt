@@ -2,11 +2,14 @@ package edu.washington.cs.laragraphulo.api
 
 import edu.washington.cs.laragraphulo.opt.*
 import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
+import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.data.Key
+import org.apache.accumulo.core.data.Range
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.OptionDescriber
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
+import org.apache.accumulo.core.security.Authorizations
 import java.io.Serializable
 
 
@@ -89,3 +92,40 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
     return true
   }
 }
+
+
+/** Execute a qury on the Accumulo pointed to by this AccumuloConfig */
+fun AccumuloConfig.execute(query: TupleOp.Store) {
+  val ac = this
+
+  val pipelineFun: (TupleOp.Store) -> Unit = { store ->
+    // create the table we want to store to and set its schema
+//      val ntc = NewTableConfiguration().setProperties()
+    print("Create ${store.table}. ")
+    println("Schema ${store.resultSchema.defaultPSchema()}. ")
+    ac.connector.tableOperations().create(store.table)
+    ac.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
+
+    val oneBaseTable = store.getBaseTables().first()
+    print("On $oneBaseTable: ")
+    val tos = TupleOpSetting(store, oneBaseTable, ac)
+    val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, tos, 25)
+
+    ac.connector.createBatchScanner(oneBaseTable, Authorizations.EMPTY, 15).use { bs ->
+      val ranges = listOf(Range())
+      bs.setRanges(ranges)
+      bs.addScanIterator(itset)
+
+      println("Execute $store")
+      bs.iterator().forEach { (k, v) -> println("${k.toStringNoTime()} -> $v") }
+    }
+  }
+
+  println("Execute Query: $query")
+  val pipelines: List<TupleOp.Store> = query.splitPipeline()
+  print("Pipelines to execute: ")
+  println(pipelines.joinToString("\n","[\n","\n]"))
+
+  pipelines.forEach(pipelineFun)
+}
+

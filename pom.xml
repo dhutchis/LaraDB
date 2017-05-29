@@ -94,6 +94,8 @@
     </dependency>
 
     <!-- Upgrading Guava from the version packaged with Accumulo. -->
+    <!-- ! Accumulo bug: TabletServer:2317 fails because uses API clientAddress.getHostText()
+    which is removed in Guava 22.0; Accumulo needs to switch call to getHost(). -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
