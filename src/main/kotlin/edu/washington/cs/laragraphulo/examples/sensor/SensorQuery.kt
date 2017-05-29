@@ -1,7 +1,13 @@
-package edu.washington.cs.laragraphulo.api
+package edu.washington.cs.laragraphulo.examples.sensor
+
+import edu.washington.cs.laragraphulo.api.*
 
 
-
+/**
+ * This is a query on sensor data written in the Lara API
+ * to compute the covariances of the difference in measurements between two sensors.
+ *
+ */
 object SensorQuery {
 
   // =============== ATTRIBUTEs (Types are given in Types.kt)
@@ -54,8 +60,8 @@ object SensorQuery {
 //  tuple - "cnt" + ("v" to res)
   }
 
-  val subtractVn = TimesFun.withNullAnnihilators<Double,Double,Double>("Subtract",LType.NDOUBLE, Double::minus)
-  val multiplyVn = TimesFun.withNullAnnihilators<Double,Double,Double>("Multiply",LType.NDOUBLE, Double::times)
+  val subtractVn = TimesFun.withNullAnnihilators<Double, Double, Double>("Subtract", LType.NDOUBLE, Double::minus)
+  val multiplyVn = TimesFun.withNullAnnihilators<Double, Double, Double>("Multiply", LType.NDOUBLE, Double::times)
   val divideMinusOneFun = TimesFun<Double?,Int,Double?>("DivideMinusOne", null, 0, LType.NDOUBLE) { a, b ->
     if (a != null && b != 0) a / (b - 1) else null
   }
@@ -65,7 +71,8 @@ object SensorQuery {
   }
   val anyFun = PlusFun("Any", 0) { a, b -> if (a != 0 || b != 0) 1 else 0 }
   val plusIntFun = PlusFun("Plus", 0, Int::plus)
-  val plusDoubleNullFun = PlusFun.withNullIdentity<Double>("Plus",Double::plus)
+  val plusDoubleNullFun = PlusFun.withNullIdentity<Double>("Plus", Double::plus)
+
 
 
   // =============== QUERY

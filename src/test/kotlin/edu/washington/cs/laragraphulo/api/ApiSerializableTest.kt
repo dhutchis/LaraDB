@@ -1,5 +1,6 @@
 package edu.washington.cs.laragraphulo.api
 
+import edu.washington.cs.laragraphulo.examples.sensor.SensorQuery
 import edu.washington.cs.laragraphulo.opt.AccumuloConfigImpl
 import edu.washington.cs.laragraphulo.opt.SerializationUtil
 import org.apache.accumulo.core.client.security.tokens.PasswordToken

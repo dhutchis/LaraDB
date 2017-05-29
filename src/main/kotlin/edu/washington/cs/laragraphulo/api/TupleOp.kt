@@ -882,4 +882,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 //    }
 //  }
 
+  // todo - make a PrintTupleOp for debugging purposes
+  // then can run it ClientSide if we like, after adapting KeyValues to Tuples :)
+
+
 }

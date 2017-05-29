@@ -1,18 +1,13 @@
 package edu.washington.cs.laragraphulo.examples
 
-import com.google.common.collect.Iterators
 import edu.mit.ll.graphulo.Graphulo
-import edu.mit.ll.graphulo.apply.ApplyIterator
-import edu.mit.ll.graphulo.apply.ApplyOp
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.Connector
-import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.data.*
-import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.security.Authorizations
 import org.junit.Assert
 import org.junit.Test
@@ -20,19 +15,20 @@ import org.slf4j.Logger
 
 
 /**
- * Example demonstrating
- * (1) how to ingest data into Accumulo,
- * (2) how to run a Graphulo query with a simple filter, and
- * (3) how to scan data from an Accumulo table.
+ * This example demonstrates how to use the Graphulo library to execute a query with a single custom iterator.
+ * The example first ingests the data in [exampleData] into Accumulo [table1], which includes the string "Hello Rainy World!"
+ * The custom iterator changes all instances of the word "Rainy" to "Sunny".
+ * The Graphulo query runs this query on [table1] in Accumulo and stores the result in [table2].
+ * Finally, the example scans [table2] from Accumulo and prints out its entries, verifying that they are Sunny as expected.
  *
- * Run this example via `mvn test -Dtest=HelloWorldExample`.
+ * Run this example via `mvn test -Dtest=RainySunny_Graphulo_Example`.
  * The test uses a MiniAccumuloInstance by default; setup the file GraphuloTest.conf to use a real Accumulo instance.
  */
-class HelloWorldExample : AccumuloTestBase() {
+class RainySunny_Graphulo_Example : AccumuloTestBase() {
 
   /** The main entry point of this example. START READING HERE. */
   @Test
-  fun helloWorldExample() {
+  fun rainySunnyExample() {
     val table1 = "exHelloWorld1"
     val table2 = "exHelloWorld2"
 
@@ -47,13 +43,11 @@ class HelloWorldExample : AccumuloTestBase() {
 
     // Delete the tables if they exist, so that we can start with fresh tables
     setOf(table1,table2).forEach { table ->
-      conn.tableOperations().let { 
-        if (it.exists(table)) {
-          logger.debug{"$table already exists; deleting to start with a fresh table"}
-          it.delete(table)
-        }
-        it.create(table)
+      if (conn.tableOperations().exists(table)) {
+        logger.debug{"$table already exists; deleting to start with a fresh table"}
+        conn.tableOperations().delete(table)
       }
+      conn.tableOperations().create(table)
     }
     
     logger.debug{"Now ingesting example data into $table1"}
@@ -73,34 +67,13 @@ class HelloWorldExample : AccumuloTestBase() {
   }
   
 
-  /** A simple iterator that changes [SUNNY] to [RAINY] in the Value of tuples seen. */
-  class MapRainToSunIterator : ApplyOp {
-    override fun init(options: Map<String, String>?, env: IteratorEnvironment?) {}
-    override fun seekApplyOp(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {}
-    
-    override fun apply(k: Key, v: Value): Iterator<Map.Entry<Key, Value>> {
-      val newValue = Value(v.toString().replace(RAINY, SUNNY))
-      return mapOf(k to newValue).iterator()
-    }
 
-    companion object {
-      /** A helper method that creates an [IteratorSetting], in order to use this in queries.  */
-      fun iteratorSetting(priority: Int): IteratorSetting {
-        val itset = IteratorSetting(priority, ApplyIterator::class.java)
-        itset.addOption(ApplyIterator.APPLYOP, MapRainToSunIterator::class.java.name)
-        return itset
-      }
-    }
-  }
   
   
   /** Static variables and methods */
   companion object : Loggable {
     /** This is used for logging messages */
-    override val logger: Logger = logger<HelloWorldExample>()
-
-    const val RAINY = "Rainy"
-    const val SUNNY = "Sunny"
+    override val logger: Logger = logger<RainySunny_Graphulo_Example>()
 
     private val exampleData = listOf(
         /* Row to Value */
@@ -109,8 +82,7 @@ class HelloWorldExample : AccumuloTestBase() {
         "msg3" to "Hello Rainy World!"
     )
 
-    private val expectedResult = exampleData.map {(k,v) -> k to v.replace(RAINY, SUNNY)}
-    
+    private val expectedResult = exampleData.map {(k,v) -> k to v.replace("Rainy", "Sunny")}
     
     /** Ingest example data into table */
     private fun ingestHelloRainyWorld(conn: Connector, table: String) {
@@ -122,7 +94,6 @@ class HelloWorldExample : AccumuloTestBase() {
         }
       }
     }
-    
 
     /**
      * Perform an operation which copies data from one table into another table

@@ -1,4 +1,4 @@
-package edu.washington.cs.laragraphulo.examples
+package edu.washington.cs.laragraphulo.examples.sensor
 
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.Loggable
@@ -16,65 +16,68 @@ import java.net.URL
 import java.util.*
 
 /**
- * Example demonstrating
+ * This example runs a version of the task in [SensorQuery] via calls to the Graphulo library.
+ * It executes on an Accumulo instance.
+ * See [SensorCalc] for the Graphulo iterator code.
+ *
+ * The example demonstrates
  * (1) how to parse sensor data from two CSV files and ingest into Accumulo,
- * (2) how to run a complex sensor query that computes covariances, and
+ * (2) how to run a complex sensor query that computes covariances, calling down to the Graphulo interface, and
  * (3) how to scan the result.
  *
- * Run this example via `mvn test -Dtest=SensorExample`.
+ * Run this example via `mvn test -Dtest=Sensor_Graphulo_Example`.
  * The test uses a MiniAccumuloInstance by default; setup the file GraphuloTest.conf to use a real Accumulo instance.
  *
  * This data came from Array of Things sensors placed in Seattle and Denver.
  * See <https://arrayofthings.github.io/>.
  */
-class SensorExample : AccumuloTestBase() {
+class Sensor_Graphulo_Example : AccumuloTestBase() {
 
   /** The main entry point of this example. START READING HERE. */
   @Test
   fun sensorExample() {
-    /*  SETUP CONNECTOR
+    /*  Obtain AccumuloConfig (connection information for Accumulo instance).
     In your code, you would write something similar to:
-      val cc = ClientConfiguration.loadDefault().withInstance("instance").withZkHosts("localhost:2181").withZkTimeout(5000)
-      val instance = ZooKeeperInstance(cc)
-      val conn = instance.getConnector("root", new PasswordToken("secret"))
+      val ac = AccumuloConfigImpl(instanceName = "instance", zookeeperHosts = "localhost:2181",
+        username = "root", authenticationToken = PasswordToken("secret"))
     In this example, we use the connector that the test environment is built with.
      */
-    val conn = tester.accumuloConfig.connector
+    val ac = tester.accumuloConfig
 
     logger.debug{"=== Parse and ingest sensor data ==="}
-    ingestSensors(conn)
+    ingestSensors(ac.connector)
 
     // The following object contains code to execute the sensor query.
-    // It requires a credential (e.g. password) for the Accumulo instance.
-    val credential = tester.accumuloConfig.authenticationToken
-    val sensorQuery = SensorCalc(conn, credential, tablenameA, tablenameB, opts)
+    val sensorQuery = SensorCalc(ac.connector, ac.authenticationToken, tablenameA, tablenameB, opts)
 
     // Execute the query
     val t = sensorQuery.timeAll()
-    logger.debug{t}
+    logger.debug{"Query execution time: $t"}
 
     // Display the result covariances
     // (You can put the names of other tables you wish to view in here, e.g. intermediary tables
     logger.debug{"Now viewing results of the query, covariance:"}
     listOf(sensorQuery.sensorC).forEach {
       val sw = StringWriter()
-      DebugUtil.printTable(it, conn, it, 14, sw::write) {
+      DebugUtil.printTable(it, ac.connector, it, 14, sw::write) {
         // This decodes the result, from a byte-array back to a String, if the Encode optimization is enabled
-        it.get().toDouble(SensorCalc.SensorOpt.Encode in opts).toString()
+        it.get().toDouble(SensorOpt.Encode in opts).toString()
       }
       logger.debug(sw.toString())
     }
 
     // In case you scan the result table from the console, this Formatter displays the covariances in human-readable form
     if (SensorOpt.Encode in opts)
-      conn.tableOperations().setProperty(sensorQuery.sensorC, "table.formatter", "edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay")
+      ac.connector.tableOperations().setProperty(sensorQuery.sensorC,
+          "table.formatter", "edu.washington.cs.laragraphulo.sensor.DoubleValueDisplay")
   }
+
 
 
   /** Static variables and methods */
   companion object : Loggable {
     /** This is used for logging messages */
-    override val logger: Logger = logger<SensorExample>()
+    override val logger: Logger = logger<Sensor_Graphulo_Example>()
 
     /**
      * This is the set of optimizations that are enabled for the sensor query in this example.

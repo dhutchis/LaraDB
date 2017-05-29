@@ -163,6 +163,7 @@ Run `mvn clean` to delete output from previously run tests.
 
 [MiniAccumulo]: https://accumulo.apache.org/1.8/accumulo_user_manual.html#_mini_accumulo_cluster
 
+
 ### Develop
 If you're interested in using an IDE for development, [IntelliJ](https://www.jetbrains.com/idea/) is a good choice.
 You can use the free Community Edition.
@@ -173,6 +174,8 @@ You can fix this by manually setting the port in the `bin/idea.sh` file in your 
 according to the [instructions posted here](https://stackoverflow.com/questions/13345986/intellij-idea-using-10001-port).
 Otherwise if you don't fix it, you may not be able to run IntelliJ and Accumulo concurrently.
 You could also change Accumulo's ports from their default.
+
+
 
 ### Examples
 The classes in [`src/test/kotlin/edu/washington/cs/laragraphulo/examples`](src/test/kotlin/edu/washington/cs/laragraphulo/examples)
@@ -185,11 +188,30 @@ using the instructions in the Test section above.
 This has the advantage of retaining input and result tables 
 in Accumulo, so that you may inspect them more closely after the example finishes.
 
-Here is a list of included examples:
+#### RainySunny Example (Graphulo)
+See [RainySunny_Graphulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/RainySunny_Graphulo_Example.kt).
+This example demonstrates how to use the Graphulo library to execute a query with a single custom iterator.
+The iterator performs a simple map operation that changes all instances of the word "Rainy" to "Sunny".
 
-1. [HelloWorldExample](src/test/kotlin/edu/washington/cs/laragraphulo/examples/HelloWorldExample.kt) -- ingest data, perform a query with a map iterator, and scan the result.
-2. [SensorExample](src/test/kotlin/edu/washington/cs/laragraphulo/examples/SensorExample.kt) -- ingest [Array of Things](https://arrayofthings.github.io/) CSV data from two sensors, 
-perform a query to calculate measurement type covariance, and print the results.
+#### WordCount Example (Lara Standalone)
+See [WordCount_Lara_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/WordCount_Lara_Example.kt).
+This example demonstrates the Lara API for the task of counting words across a collection of documents.
+
+#### Sensor Query Examples (Graphulo, Lara Standalone, Lara Accumulo)
+This family of examples solves a sensory query task to compute the covariances of the differences in measurements 
+between two sensors. The sensor data is read from [Array of Things](https://arrayofthings.github.io/) CSV files.
+The file [SensorQuery](src/main/kotlin/edu/washington/cs/laragraphulo/examples/sensor/SensorQuery.kt)
+contains the complete query expressed in the Lara API.
+
+There are three implementations of the sensor query:
+
+1. [Sensor_Graphulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/sensor/Sensor_Graphulo_Example.kt) 
+   -- runs the sensor query on an Accumulo cluster via Graphulo library calls. 
+2. [Sensor_Lara_Standalone_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/sensor/Sensor_Lara_Standalone_Example.kt) 
+   -- runs the sensor query as an in-memory standalone program via the Lara API.
+3. [Sensor_Lara_Accumulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/sensor/Sensor_Lara_Accumulo_Example.kt) 
+   -- runs the sensor query on an Accumulo cluster via the Lara API.
+
 
 
 ### How to use LaraDB in Java client code

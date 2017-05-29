@@ -94,7 +94,7 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
 }
 
 
-/** Execute a qury on the Accumulo pointed to by this AccumuloConfig */
+/** Execute a query on the Accumulo pointed to by this AccumuloConfig */
 fun AccumuloConfig.execute(query: TupleOp.Store) {
   val ac = this
 
