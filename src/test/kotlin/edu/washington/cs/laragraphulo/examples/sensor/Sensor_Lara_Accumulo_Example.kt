@@ -32,8 +32,7 @@ class Sensor_Lara_Accumulo_Example : AccumuloTestBase() {
     In your code, you would write something similar to:
       val ac = AccumuloConfigImpl(instanceName = "instance", zookeeperHosts = "localhost:2181",
         username = "root", authenticationToken = PasswordToken("secret"))
-    In this example, we use the connector that the test environment is built with.
-     */
+    In this example, we use the connector that the test environment is built with. */
     val ac = tester.accumuloConfig
 
     // Ingest sensor data into Accumulo

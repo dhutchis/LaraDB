@@ -1,5 +1,7 @@
 package edu.washington.cs.laragraphulo.api
 
+import com.google.common.collect.Iterators
+import com.google.common.collect.PeekingIterator
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.debug
@@ -7,16 +9,17 @@ import edu.washington.cs.laragraphulo.api.TupleOp.*
 import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
 import edu.washington.cs.laragraphulo.opt.EMPTY_B
+import org.apache.accumulo.core.client.Scanner
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Range
 import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
+import org.apache.hadoop.io.Text
 import org.slf4j.Logger
 import java.nio.ByteBuffer
 import java.text.DateFormat
 import java.text.SimpleDateFormat
-import java.util.*
 
 
 //fun TupleOp.getBaseTables(): Set<Table> = when(this) {
@@ -87,7 +90,7 @@ private fun getTime(): Long {
   return t
 }
 private val dateFormat: DateFormat = SimpleDateFormat("'temp_'yyyyMMdd_HHmmssSSS")
-fun genName(): String = dateFormat.format(Date(getTime()))
+fun genName(): String = dateFormat.format(java.util.Date(getTime()))
 
 // todo - gen date string, Store, DeepCopy
 
@@ -98,7 +101,7 @@ fun genName(): String = dateFormat.format(Date(getTime()))
 fun TupleOp.splitPipeline(): List<Store> {
   // maybe keep more information like what tables we need to create, but we could get that information from the Store operators too
   // every pipeline ends in a Store
-  val pipelines: MutableList<Store> = LinkedList()
+  val pipelines: MutableList<Store> = java.util.LinkedList()
   /** The last op before the Sort (to be transformed into a Store),
    * mapped to the Load of that Store. */
   val prePipelines: MutableMap<Sort, Load> = HashMap()
@@ -300,7 +303,7 @@ class PSchema(
 
 }
 
-class TupleByKeyValue(ps: PSchema, val k: Key, val v: Value?): Map<String,Any?> {
+class TupleByKeyValue(val ps: PSchema, val k: Key, val v: Value?): Map<String,Any?> {
   val map: Map<Name, Lazy<Any?>>
   init {
     val r: Map<Name, Lazy<Any?>> = ps.rowNames.zip(decodeSplit(ps.row, k.rowData as ABS)).toMap()
@@ -328,6 +331,15 @@ class TupleByKeyValue(ps: PSchema, val k: Key, val v: Value?): Map<String,Any?> 
   override fun get(key: String): Any? = map[key]?.value
   override fun isEmpty(): Boolean = map.isEmpty()
   override fun toString(): String = "TupleByKeyValue(map=$map)"
+
+  override fun equals(other: Any?): Boolean {
+    if (this === other) return true
+    if (other == null) return false
+    if (other is TupleByKeyValue) return ps == other.ps && k == other.k && v == other.v
+    if (other !is Map<*,*>) return false
+    return size == other.size && mapForced.value == other // todo - what about default values that may not be present?
+  }
+  override fun hashCode() = mapForced.value.hashCode()
 
 
   companion object {
@@ -506,3 +518,45 @@ class KvToSkviAdapter(private val inner: KeyValueIterator): SKVI {
     override val logger: Logger = logger<KvToSkviAdapter>()
   }
 }
+
+fun mapKvToKvAdapter(mapKv: Iterator<Map.Entry<Key,Value>>): Iterator<KeyValue> {
+  return Iterators.transform(mapKv) { KeyValue(it!!) }
+}
+
+fun Scanner.asKvIterator(): KeyValueIterator {
+  return ScannerKvIterator(this)
+}
+
+class ScannerKvIterator(private val scanner: Scanner) : KeyValueIterator {
+  var iter: PeekingIterator<Map.Entry<Key, Value>>? = null
+  override fun seek(seek: SeekKey) {
+    scanner.range = seek.range
+    scanner.clearColumns()
+    if (!seek.inclusive && seek.families.isNotEmpty())
+      throw NOPE("not yet supported: exclusion set of columns")
+    seek.families.forEach { scanner.fetchColumn(Text(it.toArray()), EMPTY_TEXT) }
+    iter = null
+  }
+
+  override fun hasNext(): Boolean {
+    if (iter == null) iter = Iterators.peekingIterator(scanner.iterator())
+    return iter!!.hasNext()
+  }
+
+  override fun next(): KeyValue {
+    if (iter == null) iter = Iterators.peekingIterator(scanner.iterator())
+    return KeyValue(iter!!.next())
+  }
+
+  override fun peek(): KeyValue {
+    if (iter == null) iter = Iterators.peekingIterator(scanner.iterator())
+    return KeyValue(iter!!.peek()) // this could be optimized by caching top value
+  }
+
+  override fun deepCopy(env: IteratorEnvironment) = throw NOPE("no deepCopy")
+  companion object {
+    val EMPTY_TEXT = Text()
+  }
+}
+
+

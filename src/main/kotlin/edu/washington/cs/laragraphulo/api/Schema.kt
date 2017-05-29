@@ -429,6 +429,7 @@ interface AccumuloLikeIterator<K,T> : PeekingIterator<T> {
 
 interface KeyValueIterator : AccumuloLikeIterator<SeekKey,KeyValue> {
   override fun deepCopy(env: IteratorEnvironment): KeyValueIterator
+  override fun init(options: Map<String, String>, env: IteratorEnvironment): KeyValueIterator = this
 }
 
 interface TupleIterator : AccumuloLikeIterator<TupleSeekKey, Tuple> {

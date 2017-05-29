@@ -1,17 +1,9 @@
-package edu.washington.cs.laragraphulo.examples
+package edu.washington.cs.laragraphulo.examples.rainysunny
 
 import edu.mit.ll.graphulo.Graphulo
 import edu.washington.cs.laragraphulo.AccumuloTestBase
-import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.logger
-import org.apache.accumulo.core.client.BatchWriterConfig
-import org.apache.accumulo.core.client.Connector
-import org.apache.accumulo.core.data.*
-import org.apache.accumulo.core.security.Authorizations
-import org.junit.Assert
-import org.junit.Test
-import org.slf4j.Logger
 
 
 /**
@@ -27,7 +19,7 @@ import org.slf4j.Logger
 class RainySunny_Graphulo_Example : AccumuloTestBase() {
 
   /** The main entry point of this example. START READING HERE. */
-  @Test
+  @org.junit.Test
   fun rainySunnyExample() {
     val table1 = "exHelloWorld1"
     val table2 = "exHelloWorld2"
@@ -55,7 +47,7 @@ class RainySunny_Graphulo_Example : AccumuloTestBase() {
     
     // Create a Graphulo object to do query operations.
     // This requires a credential (e.g. password) for the Accumulo instance.
-    val G = Graphulo(conn, tester.accumuloConfig.authenticationToken)
+    val G = edu.mit.ll.graphulo.Graphulo(conn, tester.accumuloConfig.authenticationToken)
     
     // Perform an operation which copies data from one table into another table
     // with a MAP that modifies the tuples.
@@ -71,9 +63,9 @@ class RainySunny_Graphulo_Example : AccumuloTestBase() {
   
   
   /** Static variables and methods */
-  companion object : Loggable {
+  companion object : edu.washington.cs.laragraphulo.Loggable {
     /** This is used for logging messages */
-    override val logger: Logger = logger<RainySunny_Graphulo_Example>()
+    override val logger: org.slf4j.Logger = logger<RainySunny_Graphulo_Example>()
 
     private val exampleData = listOf(
         /* Row to Value */
@@ -82,13 +74,13 @@ class RainySunny_Graphulo_Example : AccumuloTestBase() {
         "msg3" to "Hello Rainy World!"
     )
 
-    private val expectedResult = exampleData.map {(k,v) -> k to v.replace("Rainy", "Sunny")}
+    private val expectedResult = exampleData.map { (k,v) -> k to v.replace("Rainy", "Sunny")}
     
     /** Ingest example data into table */
-    private fun ingestHelloRainyWorld(conn: Connector, table: String) {
-      conn.createBatchWriter(table, BatchWriterConfig()).use { bw ->
+    private fun ingestHelloRainyWorld(conn: org.apache.accumulo.core.client.Connector, table: String) {
+      conn.createBatchWriter(table, org.apache.accumulo.core.client.BatchWriterConfig()).use { bw ->
         exampleData.forEach { (k, v) ->
-          val m = Mutation(k)
+          val m = org.apache.accumulo.core.data.Mutation(k)
           m.put("", "", v)
           bw.addMutation(m)
         }
@@ -114,11 +106,11 @@ class RainySunny_Graphulo_Example : AccumuloTestBase() {
 
 
     /** View the contents of the second table and verify that it produced the expected result. */
-    private fun viewAndVerifyResult(conn: Connector, table: String) {
-      conn.createScanner(table, Authorizations.EMPTY).use { scanner ->
+    private fun viewAndVerifyResult(conn: org.apache.accumulo.core.client.Connector, table: String) {
+      conn.createScanner(table, org.apache.accumulo.core.security.Authorizations.EMPTY).use { scanner ->
         val scannedData = scanner.map { (k,v) -> k.row.toString() to v.toString() }
         scannedData.forEach { logger.debug {it} }
-        Assert.assertEquals(scannedData, expectedResult)
+        org.junit.Assert.assertEquals(scannedData, expectedResult)
       }
     }
 

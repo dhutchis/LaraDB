@@ -1,11 +1,11 @@
 package edu.washington.cs.laragraphulo.api
 
 import edu.washington.cs.laragraphulo.opt.*
+import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
+import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.IteratorSetting
-import org.apache.accumulo.core.data.Key
-import org.apache.accumulo.core.data.Range
-import org.apache.accumulo.core.data.Value
+import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.OptionDescriber
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
@@ -127,5 +127,35 @@ fun AccumuloConfig.execute(query: TupleOp.Store) {
   println(pipelines.joinToString("\n","[\n","\n]"))
 
   pipelines.forEach(pipelineFun)
+}
+
+
+fun AccumuloConfig.ingestData(table: Table, ps: PSchema, data: Iterable<Tuple>, deleteIfExists: Boolean) {
+  GraphuloUtil.recreateTables(this.connector, deleteIfExists, table)
+  val iter = TupleToKvAdapter(ps, TupleIterator.DataTupleIterator(ps, data))
+  this.setSchema(table, ps)
+  this.connector.createBatchWriter(table, BatchWriterConfig().setMaxWriteThreads(15)).use { bw ->
+    var r: ByteSequence = ArrayByteSequence(byteArrayOf())
+    var m = Mutation(byteArrayOf())
+    for ((k, v) in iter) {
+      val kr = k.rowData
+      if (kr != r) {
+        if (m.size() > 0) bw.addMutation(m)
+        m = Mutation(kr.toArray())
+        r = kr
+      }
+      m.put(k.columnFamily, k.columnQualifier, k.columnVisibilityParsed, k.timestamp, v)
+    }
+    if (m.size() > 0) bw.addMutation(m)
+  }
+}
+
+fun AccumuloConfig.scanAccumulo(
+    table: Table, range: Range = Range()
+): Iterator<Tuple> {
+  val ps = this.getSchema(table)
+  val scanner = this.connector.createScanner(table, Authorizations.EMPTY)
+  scanner.range = range
+  return KvToTupleAdapter(ps, scanner.asKvIterator())
 }
 

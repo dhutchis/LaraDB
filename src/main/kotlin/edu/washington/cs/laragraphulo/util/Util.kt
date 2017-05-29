@@ -977,27 +977,40 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 
   }
 
+  fun recreateTables(connector: Connector, deleteIfExists: Boolean, vararg tns: String) {
+    val tops = connector.tableOperations()
+    tns.forEach {
+      if (tops.exists(it)) {
+        if (deleteIfExists) {
+          tops.delete(it)
+          tops.create(it)
+        }
+      } else {
+        tops.create(it)
+      }
+    }
+  }
+
   /** Delete tables. If they already exist, delete and re-create them if forceDelete==true,
    * otherwise throw an IllegalStateException.  */
   fun deleteTables(connector: Connector, vararg tns: String) {
     val tops = connector.tableOperations()
-    for (tn in tns) {
-      if (tn != null && tops.exists(tn)) {
-        try {
-          tops.delete(tn)
-        } catch (e: AccumuloException) {
-          logger.error("Problem deleing temporary table " + tn, e)
-          throw RuntimeException(e)
-        } catch (e: AccumuloSecurityException) {
-          logger.error("Problem deleing temporary table " + tn, e)
-          throw RuntimeException(e)
-        } catch (e: TableNotFoundException) {
-          logger.error("crazy", e)
-          throw RuntimeException(e)
+    tns
+        .filter { tops.exists(it) }
+        .forEach {
+          try {
+            tops.delete(it)
+          } catch (e: AccumuloException) {
+            logger.error("Problem deleting temporary table " + it, e)
+            throw RuntimeException(e)
+          } catch (e: AccumuloSecurityException) {
+            logger.error("Problem deleting temporary table " + it, e)
+            throw RuntimeException(e)
+          } catch (e: TableNotFoundException) {
+            logger.error("crazy", e)
+            throw RuntimeException(e)
+          }
         }
-
-      }
-    }
   }
 
   /** Switches row and column qualifier. Returns HashMap.  */

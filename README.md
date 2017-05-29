@@ -188,10 +188,17 @@ using the instructions in the Test section above.
 This has the advantage of retaining input and result tables 
 in Accumulo, so that you may inspect them more closely after the example finishes.
 
+The examples whose name ends with the suffix `_Graphulo_Example` run on Accumulo via calls to the Graphulo library;
+examples with suffix `_Lara_Standalone_Example` run as an in-memory standalone program via the Lara API;
+examples with suffix `_Lara_Accumulo_Example` run on an Accumulo via the Lara API.
+
 #### RainySunny Example (Graphulo)
-See [RainySunny_Graphulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/RainySunny_Graphulo_Example.kt).
-This example demonstrates how to use the Graphulo library to execute a query with a single custom iterator.
-The iterator performs a simple map operation that changes all instances of the word "Rainy" to "Sunny".
+See the query in [RainySunnyQuery](src/main/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunnyQuery.kt)
+This query performs a simple map operation that changes all instances of the word "Rainy" to "Sunny" in a set of documents.
+The examples are [RainySunny_Graphulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunny_Graphulo_Example.kt),
+[RainySunny_Lara_Standalone_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunny_Lara_Standalone_Example.kt),
+[RainySunny_Lara_Accumulo_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/rainysunny/RainySunny_Lara_Accumulo_Example.kt).
+
 
 #### WordCount Example (Lara Standalone)
 See [WordCount_Lara_Example](src/test/kotlin/edu/washington/cs/laragraphulo/examples/WordCount_Lara_Example.kt).
