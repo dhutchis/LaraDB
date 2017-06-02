@@ -187,15 +187,16 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       /** This can also be a [MapFun] */
       val extFun: ExtFun
   ): TupleOp(parent) {
+    val extSchema = extFun.extSchema(parent.resultSchema)
     override val resultSchema = Schema(
-        keys = parent.resultSchema.keys + extFun.extSchema.keys,
-        vals = extFun.extSchema.vals
+        keys = parent.resultSchema.keys + extSchema.keys,
+        vals = extSchema.vals
     )
     override fun reconstruct(args: Array<TupleOp>) = if (args[0] === parent) this else copy(parent = args[0])
     fun reconstruct(p: TupleOp) = if (p === parent) this else copy(parent = p)
 
     init {
-      require(extFun.extSchema.keys.disjoint(parent.resultSchema.keys))
+      require(extSchema.keys.disjoint(parent.resultSchema.keys))
       {"ext generates keys that are already present in the parent. Ext: ${extFun.extSchema}. Parent schema: ${parent.resultSchema}."}
     }
 
@@ -212,16 +213,17 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 //        }
 //      }
 //    } */
-    val parentKeyNames = parent.resultSchema.keys.map { it.name }
 
     override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator =
-        ExtIterator(parent.run(instMap, env), extFun, parentKeyNames)
+        ExtIterator(parent.run(instMap, env), extFun, parent.resultSchema)
 
     class ExtIterator(
         val iter: TupleIterator,
         val extFun: ExtFun,
-        val parentKeyNames: List<Name>
+        val parentResultSchema: Schema
     ) : TupleIterator {
+      val parentKeyNames: List<Name> = parentResultSchema.keys.map { it.name }
+      val extSchema = extFun.extSchema(parentResultSchema)
       private var top: PeekingIterator<Tuple> by Staged { findTop() }
 
       fun findTop(): PeekingIterator<Tuple> {
@@ -245,13 +247,13 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       override fun peek(): Tuple = top.peek()
       override fun seek(seek: TupleSeekKey) {
         // eliminate extra generated keys from seek keys
-        val newSeek = if (extFun.extSchema.keys.isNotEmpty())
-          seek.copy(range = seek.range.transform { it.filterKeys { it !in extFun.extSchema.keys.map(Attribute<*>::name) } })
+        val newSeek = if (extSchema.keys.isNotEmpty())
+          seek.copy(range = seek.range.transform { it.filterKeys { it !in extSchema.keys.map(Attribute<*>::name) } })
         else seek
         iter.seek(newSeek)
         top = findTop()
       }
-      override fun deepCopy(env: IteratorEnvironment): TupleIterator = ExtIterator(iter.deepCopy(env), extFun, parentKeyNames)
+      override fun deepCopy(env: IteratorEnvironment): TupleIterator = ExtIterator(iter.deepCopy(env), extFun, parentResultSchema)
     }
 
     private class PrependKeysIterator(
@@ -607,11 +609,14 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 
 
 
-  fun join(p2: TupleOp, timesFuns: Map<Name,TimesFun<*,*,*>>) = MergeJoin(this, p2, timesFuns)
+  fun join(p2: TupleOp, timesFuns: Map<Name,TimesFun<*,*,*>>,
+           filterFun: FilterFun? = null) = MergeJoin(this, p2, timesFuns, filterFun)
   data class MergeJoin(
       val p1: TupleOp,
       val p2: TupleOp,
-      val timesFuns: Map<Name,TimesFun<*,*,*>>
+      val timesFuns: Map<Name,TimesFun<*,*,*>>,
+      /** A filter function on tuple1 + tuple2 from p1 and p2, before calling timesFun. */
+      val filterFun: FilterFun? = null
   ): TupleOp(p1, p2) {
     override val resultSchema = Schema(
         keys = unionKeys(p1.resultSchema.keys,p2.resultSchema.keys),
@@ -678,7 +683,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       return MergeJoinIterator(seekTransform(p2KeysNotIn1), seekTransform(p1KeysNotIn2),
           p1.resultSchema.keys.intersect(p2.resultSchema.keys).toList(),
           p1.resultSchema.keys.map { it.name }, p2.resultSchema.keys.map { it.name },
-          p1.run(instMap, env), p2.run(instMap, env), timesFuns)
+          p1.run(instMap, env), p2.run(instMap, env), timesFuns, filterFun)
     }
 
     data class MergeJoinIterator(
@@ -689,25 +694,34 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
         val p2keys: List<Name>,
         val i1: TupleIterator,
         val i2: TupleIterator,
-        val timesFuns: Map<Name, TimesFun<*,*,*>>
+        val timesFuns: Map<Name, TimesFun<*,*,*>>,
+        val filterFun: FilterFun? = null
     ) : TupleIterator {
 
       val comparator = KeyComparator(keys)
       var topIter: PeekingIterator<Tuple> by Staged { findTop() }
       var seekKey = TupleSeekKey(MyRange.all(), listOf(), false)
 
-      override fun deepCopy(env: IteratorEnvironment) = MergeJoinIterator(seekTransform1, seekTransform2, keys, p1keys, p2keys, i1.deepCopy(env), i2.deepCopy(env), timesFuns)
+      override fun deepCopy(env: IteratorEnvironment) =
+          MergeJoinIterator(seekTransform1, seekTransform2, keys, p1keys, p2keys,
+              i1.deepCopy(env), i2.deepCopy(env), timesFuns, filterFun)
 
       class OneRowIterator<T>(val rowComparator: Comparator<T>,
-                              private val iter: PeekingIterator<T>) : PeekingIterator<T> by iter {
+                              private val iter: PeekingIterator<T>) : PeekingIterator<T> {
         val firstTuple: T? = if (iter.hasNext()) iter.peek() else null
 
-        override fun next(): T = if (hasNext()) iter.next() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
+        override fun next(): T =
+            if (hasNext()) iter.next() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
 
-        override fun hasNext(): Boolean = iter.hasNext() && rowComparator.compare(firstTuple, iter.peek()) == 0
+        override fun hasNext(): Boolean =
+            iter.hasNext() && rowComparator.compare(firstTuple, iter.peek()) == 0
 
-        override fun peek(): T = if (hasNext()) iter.peek() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
+        override fun peek(): T =
+            if (hasNext()) iter.peek() else throw NoSuchElementException("the iterator is past the original row $firstTuple")
+
+        override fun remove() = throw NOPE()
       }
+
       fun readRow(
           /** See TupleComparatorByKeyPrefix */
           rowComparator: Comparator<Tuple>,
@@ -773,7 +787,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       }
 
       private fun times(t1: Tuple, t2: Tuple): Tuple {
-        return timesFuns.mapValues { (name,f) ->
+        return if (filterFun?.filterFun?.invoke(t1 + t2) ?: true) timesFuns.mapValues { (name,f) ->
           @Suppress("UNCHECKED_CAST")
           when {
             name in t1 && name in t2 -> (f.times as (Any?, Any?) -> Any?)(t1[name], t2[name]) // we should always have this case
@@ -782,42 +796,51 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
             else -> f.resultZero
           }
         } + t1.filterKeys { it in p1keys } + t2.filterKeys { it in p2keys }
+        else mapOf<String,Any?>()
       }
 
       class CartesianIterator(
           private val firstIter: PeekingIterator<Tuple>,
           private val secondIterable: Iterable<Tuple>,
-          private val multiplyOp: (Tuple, Tuple) -> Tuple
+          private val multiplyOp: (Tuple, Tuple) -> Tuple?
       ) : Iterator<Tuple> {
         private var secondIter: PeekingIterator<Tuple> = Iterators.peekingIterator(secondIterable.iterator())
+        private var top: Tuple? = null
 
         init {
           if (!firstIter.hasNext() || !secondIter.hasNext()) {
             while (firstIter.hasNext()) firstIter.next()
+          } else
+            findTop()
+        }
+
+        private fun findTop() {
+          if (!prepNext()) return
+          top = multiplyOp(firstIter.peek(), secondIter.next())
+          while (top == null) {
+//            secondIter.next()
+            if (!prepNext()) return
+            top = multiplyOp(firstIter.peek(), secondIter.next())
           }
         }
 
-        /*
-        1. scan left until we find a position where hasNext() is true. If all are false then terminate.
-        2. advance that iterator at the position and fill in curTuples
-        3. reset all iterators to the right and fill in curTuples
-         */
-
-        override fun hasNext(): Boolean = firstIter.hasNext() && secondIter.hasNext()
+        override fun hasNext(): Boolean = top != null
 
         override fun next(): Tuple {
-          val ret = multiplyOp(firstIter.peek(), secondIter.next())
-          prepNext()
+          val ret = top!!
+          top = null
+          findTop()
           return ret
         }
 
-        private fun prepNext() {
+        private fun prepNext(): Boolean {
           if (!secondIter.hasNext()) {
             firstIter.next()
             if (!firstIter.hasNext())
-              return
+              return false
             secondIter = Iterators.peekingIterator(secondIterable.iterator())
           }
+          return true
         }
       }
 

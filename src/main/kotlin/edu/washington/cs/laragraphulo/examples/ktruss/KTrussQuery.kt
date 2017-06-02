@@ -113,8 +113,8 @@ object KTrussQuery {
 //
 //      val load = TupleOp.Load(Atmp, initialSchema)
 //      val query: TupleOp.Store = load.rename(mapOf("r" to "m", "c" to "r"))
-//          .joinFilter(load.rename(mapOf("r" to "m")), mapOf("v" to twoTimes)) { it: Map<String, *> -> it["r"] != it["c"] }
-//          .sortAgg(listOf("r", "c"), mapOf("v" to plus), AtmpAlt) // store to table2
+//          .join(load.rename(mapOf("r" to "m")), mapOf("v" to twoTimes), FilterFun("nodiag") { it: Map<String, *> -> it["r"] != it["c"] })
+//          .sortAgg(listOf("r", "c"), mapOf("v" to plus), AtmpAlt) // todo and store to table2
 //
 //      val tosQuery = TupleOpSetting(query, Atmp, ac)
 //      nppAfter = tosQuery.executeSingle()

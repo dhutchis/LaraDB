@@ -226,11 +226,18 @@ data class KeyComparator(
 
 // ======================= UDFs
 
+/**
+ * Must return default values when passed default values, for any key.
+ */
 open class ExtFun(
     val name: String,
-    val extSchema: Schema,
+    /** Schema of tuples produced by the Ext as a function of the parent schema. New key attributes are appended to those of the parent. */
+    val extSchema: (Schema) -> Schema,
     val extFun: (Tuple) -> List<Tuple> // not included in equals(); use name instead
 ) : Serializable {
+  constructor(name: String, extSchema: Schema, extFun: (Tuple) -> List<Tuple>)
+  : this(name, {extSchema}, extFun)
+
   override fun toString(): String = "ExtFun($name, extSchema=$extSchema)"
   override fun equals(other: Any?): Boolean {
     if (this === other) return true
@@ -252,12 +259,23 @@ open class ExtFun(
 /**
  * Must return default values when passed default values, for any key.
  */
-class MapFun(
+open class MapFun(
     name: String,
-    val mapValues: List<ValAttribute<*>>,
+    /** Value attributes of tuples produced by the Map as a function of the parent schema. */
+    val mapValues: (Schema) -> List<ValAttribute<*>>,
     val mapFun: (Tuple) -> Tuple
-) : ExtFun(name, extSchema = Schema(listOf(), mapValues), extFun = { tuple -> listOf(mapFun(tuple)) }) {
+) : ExtFun(name, extSchema = {Schema(listOf(), mapValues(it))}, extFun = { tuple -> listOf(mapFun(tuple)) }) {
+  constructor(name: String, mapValues: List<ValAttribute<*>>, mapFun: (Tuple) -> Tuple)
+  : this(name, {mapValues}, mapFun)
+
   override fun toString(): String = "MapFun($name, mapValues=$mapValues)"
+}
+
+class FilterFun(
+    name: String,
+    val filterFun: (Tuple) -> Boolean
+) : MapFun(name, mapValues = {it.vals}, mapFun = { if (filterFun(it)) it else mapOf<String,Any?>() }) {
+  override fun toString(): String = "FilterFun($name)"
 }
 
 
