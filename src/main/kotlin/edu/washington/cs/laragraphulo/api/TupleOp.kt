@@ -181,6 +181,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 
 
   fun ext(extFun: ExtFun) = Ext(this, extFun)
+  fun map(mapFun: MapFun) = Ext(this, mapFun)
   data class Ext(
       val parent: TupleOp,
       /** This can also be a [MapFun] */
@@ -232,7 +233,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
           topParent = iter.next()
           topIter = extFun.extFun(topParent).iterator()
         } while (iter.hasNext() && !topIter.hasNext())
-        return PrependKeysIterator(parentKeyNames, topParent, topIter).peeking()
+        return PrependKeysIterator(parentKeyNames, topParent, topIter).peeking() // could reuse this object for performance
       }
 
       override fun hasNext(): Boolean = top.hasNext()
@@ -590,6 +591,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
     }
   }
 
+
+  fun store(table: Table) = Store(this, table)
   data class Store(
       val p: TupleOp,
       val table: Table

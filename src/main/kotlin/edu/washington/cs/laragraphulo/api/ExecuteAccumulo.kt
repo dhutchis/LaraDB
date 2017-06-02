@@ -25,7 +25,7 @@ class TupleOpSerializer : Serializer<TupleOpSetting, TupleOpSetting> {
 }
 /** This is what we need to run a TupleOp stack in Accumulo. */
 data class TupleOpSetting(
-    val tupleOp: TupleOp.Store,
+    val tupleOp: TupleOp,
     /** Name of the table that we're scanning over. */
     val thisTable: Table,
     val accumuloConfig: AccumuloConfig
@@ -41,7 +41,6 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
 
     // replace Load statements with this iterator and RemoteSourceIterators
     val baseTables = store.getBaseTables()
-
     // get schemas of base tables - assume all the schemas are set.
     val baseTablesSchemas = baseTables.map { table ->
       table to accumuloConfig.getSchema(table)
@@ -63,17 +62,22 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
       KvToTupleAdapter(ps, SkviToIteratorAdapter(skvi))
     }
     // also change Sorts to do nothing
-    val storeLoaded = store.instantiateLoadTupleIterator(tupleIters).disableFullResorts() as TupleOp.Store
+    val storeLoaded = store.instantiateLoadTupleIterator(tupleIters).disableFullResorts()
 
     //  instantiate Stores with remote write iterators
-    // for now, assume there is only one Store and it is the last one
-    val runBeforeStore: TupleIterator = storeLoaded.p.run(env)
-    val skviBeforeStore = KvToSkviAdapter(TupleToKvAdapter(storeLoaded.resultSchema.defaultPSchema(), runBeforeStore))
+    // for now, only check if the last operator is a Store
+    if (storeLoaded is TupleOp.Store) {
+      val runBeforeStore: TupleIterator = storeLoaded.p.run(env)
+      val skviBeforeStore = KvToSkviAdapter(TupleToKvAdapter(storeLoaded.resultSchema.defaultPSchema(), runBeforeStore))
 
-    val remoteOpts = accumuloConfig.basicRemoteOpts(remoteTable = store.table)
-    val rwi = RemoteWriteIterator()
-    rwi.init(skviBeforeStore, remoteOpts, env)
-    return rwi
+      val remoteOpts = accumuloConfig.basicRemoteOpts(remoteTable = storeLoaded.table)
+      val rwi = RemoteWriteIterator()
+      rwi.init(skviBeforeStore, remoteOpts, env)
+      return rwi
+    } else {
+      val ti = storeLoaded.run(env)
+      return KvToSkviAdapter(TupleToKvAdapter(storeLoaded.resultSchema.defaultPSchema(), ti))
+    }
   }
 
   override fun describeOptions(): OptionDescriber.IteratorOptions {
@@ -95,38 +99,70 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
 
 
 /** Execute a query on the Accumulo pointed to by this AccumuloConfig */
-fun AccumuloConfig.execute(query: TupleOp.Store) {
-  val ac = this
-
-  val pipelineFun: (TupleOp.Store) -> Unit = { store ->
-    // create the table we want to store to and set its schema
-//      val ntc = NewTableConfiguration().setProperties()
-    print("Create ${store.table}. ")
-    println("Schema ${store.resultSchema.defaultPSchema()}. ")
-    ac.connector.tableOperations().create(store.table)
-    ac.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
-
-    val oneBaseTable = store.getBaseTables().first()
-    print("On $oneBaseTable: ")
-    val tos = TupleOpSetting(store, oneBaseTable, ac)
-    val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, tos, 25)
-
-    ac.connector.createBatchScanner(oneBaseTable, Authorizations.EMPTY, 15).use { bs ->
-      val ranges = listOf(Range())
-      bs.setRanges(ranges)
-      bs.addScanIterator(itset)
-
-      println("Execute $store")
-      bs.iterator().forEach { (k, v) -> println("${k.toStringNoTime()} -> $v") }
-    }
-  }
-
+fun AccumuloConfig.execute(query: TupleOp.Store): Long {
   println("Execute Query: $query")
   val pipelines: List<TupleOp.Store> = query.splitPipeline()
   print("Pipelines to execute: ")
   println(pipelines.joinToString("\n","[\n","\n]"))
 
-  pipelines.forEach(pipelineFun)
+  val totalEntries = pipelines.map {
+    val oneBaseTable = it.getBaseTables().first()
+    print("On $oneBaseTable: ")
+    val tos = TupleOpSetting(it, oneBaseTable, this)
+    tos.executeSingle()
+  }.reduce(Long::plus)
+
+  println("[[[$totalEntries total entries for pipeline]]]")
+  return totalEntries
+}
+
+/** Execute a single query fragment on the Accumulo pointed to by this AccumuloConfig */
+fun TupleOpSetting.executeSingle(): Long {
+  val ac = this.accumuloConfig
+  val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, this, 25)
+  val store = this.tupleOp
+
+  if (store is TupleOp.Store) {
+    print("Create ${store.table}. ")
+    ac.connector.tableOperations().create(store.table)
+    ac.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
+  }
+  println("Schema ${store.resultSchema.defaultPSchema()}. ")
+
+  return ac.connector.createBatchScanner(this.thisTable, Authorizations.EMPTY, 15).use { bs ->
+    val ranges = listOf(Range())
+    bs.setRanges(ranges)
+    bs.addScanIterator(itset)
+    var totalEntries = 0L
+    var count = 0
+
+    println("Execute ${this.tupleOp}")
+    bs.iterator().forEach { (k, v) ->
+      val numEntries = RemoteWriteIterator.decodeValue(v, null)
+      println("[$numEntries entries] ${k.toStringNoTime()} -> $v")
+      totalEntries += numEntries
+      count++
+    }
+    if (count != 1)
+      println("[[$totalEntries total entries]]")
+    totalEntries
+  }
+}
+
+/** Attach a TupleOp to an Accumulo table. */
+fun TupleOpSetting.attachIterator(priority: Int = 22) {
+  val ac = this.accumuloConfig
+  val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, this, priority)
+  val store = this.tupleOp
+
+  if (store is TupleOp.Store) {
+    print("Create ${store.table}. ")
+    ac.connector.tableOperations().create(store.table)
+    ac.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
+  }
+  println("Schema ${store.resultSchema.defaultPSchema()}. ")
+
+  GraphuloUtil.applyIteratorSoft(itset, ac.connector.tableOperations(), this.thisTable)
 }
 
 
@@ -157,5 +193,10 @@ fun AccumuloConfig.scanAccumulo(
   val scanner = this.connector.createScanner(table, Authorizations.EMPTY)
   scanner.range = range
   return KvToTupleAdapter(ps, scanner.asKvIterator())
+}
+
+fun AccumuloConfig.clone(table1: Table, table2: Table) {
+  this.connector.tableOperations().clone(table1, table2,
+      true, null, null)
 }
 

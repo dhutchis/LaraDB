@@ -494,9 +494,7 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
     val scopesToConsider: EnumSet<IteratorUtil.IteratorScope>
     if (scopeStrs != null && !scopeStrs.isEmpty()) {
       scopesToConsider = EnumSet.noneOf(IteratorUtil.IteratorScope::class.java)
-      for (scope in splitD4mString(scopeStrs))
-        scopesToConsider.add(
-            IteratorUtil.IteratorScope.valueOf(scope.toLowerCase()))
+      splitD4mString(scopeStrs).mapTo(scopesToConsider) { IteratorUtil.IteratorScope.valueOf(it.toLowerCase()) }
     } else
       scopesToConsider = EnumSet.allOf(IteratorUtil.IteratorScope::class.java)
 
