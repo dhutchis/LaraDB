@@ -62,7 +62,7 @@ fun TupleOp.instantiateLoad(tableMap: Map<Table, Iterable<Tuple>>): TupleOp = th
 }
 fun TupleOp.disableFullResorts(): TupleOp = this.transform {
   when (it) {
-    is Sort -> Sort(it.p, it.newSort, false)
+    is Sort -> it.copy(fullResort = false)
     else -> it
   }
 }
@@ -92,7 +92,6 @@ private fun getTime(): Long {
 private val dateFormat: DateFormat = SimpleDateFormat("'temp_'yyyyMMdd_HHmmssSSS")
 fun genName(): String = dateFormat.format(java.util.Date(getTime()))
 
-// todo - gen date string, Store, DeepCopy
 
 /** Create a list of TupleOps in topological order, from the top-most Loads down.
  * Each one contains TupleOps until a Sort (pipeline-breaker).
@@ -152,14 +151,8 @@ fun TupleOp.splitPipeline(): List<Store> {
   return pipelines
 }
 
-// Key, Value -> NameTuple
-// PType of each attribute
-// that has all the information we need to decode
 // map of Attribute in Schema to PType that implements that attribute
 // + where the PType is stored: row, column family, column qualifier, timestamp, value
-// row --
-// colf --
-// ensure all types are covered
 // we want to create functions that obtain the data for each attribute:
 // tuple["t"] --> ptype.decode( key[row_idx] )
 

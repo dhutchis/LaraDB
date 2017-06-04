@@ -1,16 +1,21 @@
 package edu.washington.cs.laragraphulo.api
 
+import edu.washington.cs.laragraphulo.*
 import edu.washington.cs.laragraphulo.opt.*
+import edu.washington.cs.laragraphulo.opt.AccumuloConfig.Companion.PROP_PSCHEMA
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
+import org.slf4j.Logger
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.data.*
 import org.apache.accumulo.core.iterators.IteratorEnvironment
+import org.apache.accumulo.core.iterators.IteratorUtil
 import org.apache.accumulo.core.iterators.OptionDescriber
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.accumulo.core.security.Authorizations
 import java.io.Serializable
+import java.util.*
 
 
 class TupleOpSerializer : Serializer<TupleOpSetting, TupleOpSetting> {
@@ -32,8 +37,9 @@ data class TupleOpSetting(
 ) : Serializable
 
 class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
-  companion object : SerializerSetting<TupleOpSetting>(TupleOpSKVI::class.java) {
+  companion object : SerializerSetting<TupleOpSetting>(TupleOpSKVI::class.java), Loggable {
 //    const val OPT_THIS_TABLE = "THIS_TABLE"
+    override val logger: Logger = logger<TupleOpSKVI>()
   }
 
   override fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SKVI {
@@ -43,7 +49,18 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
     val baseTables = store.getBaseTables()
     // get schemas of base tables - assume all the schemas are set.
     val baseTablesSchemas = baseTables.map { table ->
-      table to accumuloConfig.getSchema(table)
+//      logger.debug{"Fetch Schema for $table"}
+      try {
+        val ser = env.config.get(PROP_PSCHEMA)
+        val ps = SerializationUtil.deserializeBase64(ser) as PSchema
+        logger.info{"Schema for $table is $ps"}
+        table to ps
+      } catch(e: Exception) {
+        logger.warn{"Cannot fetch schema from environment for $table"}
+        // We should not need to use this method. It is less reliable because table information
+        // may be cached or inconsistent, leading to TableNotFoundException, even though we execute on this table.
+        table to accumuloConfig.getSchema(table)
+      }
     }.toMap()
 
     // what about the PhysicalSchemas?
@@ -63,11 +80,13 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
     }
     // also change Sorts to do nothing
     val storeLoaded = store.instantiateLoadTupleIterator(tupleIters).disableFullResorts()
+    logger.info{"Loading TupleOp: $storeLoaded"}
 
     //  instantiate Stores with remote write iterators
     // for now, only check if the last operator is a Store
     if (storeLoaded is TupleOp.Store) {
       val runBeforeStore: TupleIterator = storeLoaded.p.run(env)
+      logger.info{"Loading TupleOpIterator: $runBeforeStore"}
       val skviBeforeStore = KvToSkviAdapter(TupleToKvAdapter(storeLoaded.resultSchema.defaultPSchema(), runBeforeStore))
 
       val remoteOpts = accumuloConfig.basicRemoteOpts(remoteTable = storeLoaded.table)
@@ -124,10 +143,22 @@ fun TupleOpSetting.executeSingle(): Long {
 
   if (store is TupleOp.Store) {
     print("Create ${store.table}. ")
-    ac.connector.tableOperations().create(store.table)
+    GraphuloUtil.recreateTables(ac.connector, false, store.table)
     ac.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
+    println("Schema ${store.resultSchema.defaultPSchema()}. ")
+    if (store.aggMap.isNotEmpty()) {
+      // we are summing into a possibly existing table with entries
+      // I assume the new entries match the schema of the existing entries
+      // the agg iterator should decode entries (both new and old) the same way,
+      // and mergeunion them
+      val aggtop = TupleOp.Load(store.table, store.resultSchema)
+          .agg(store.resultSchema.keys.map(Attribute<*>::name), store.aggMap)
+//          .log()
+      val names = store.aggMap.map { (_,agg) -> agg.name }.joinToString("_")
+      val aggset = TupleOpSetting(aggtop, store.table, ac)
+      aggset.attachIterator(2, "Aggregation_$names")
+    }
   }
-  println("Schema ${store.resultSchema.defaultPSchema()}. ")
 
   return ac.connector.createBatchScanner(this.thisTable, Authorizations.EMPTY, 15).use { bs ->
     val ranges = listOf(Range())
@@ -150,17 +181,19 @@ fun TupleOpSetting.executeSingle(): Long {
 }
 
 /** Attach a TupleOp to an Accumulo table. */
-fun TupleOpSetting.attachIterator(priority: Int = 22) {
+fun TupleOpSetting.attachIterator(priority: Int = 22, name: String = TupleOpSKVI::class.java.simpleName,
+                                  scopes: EnumSet<IteratorUtil.IteratorScope> = EnumSet.allOf(IteratorUtil.IteratorScope::class.java)) {
   val ac = this.accumuloConfig
-  val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, this, priority)
+  val itset = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, this, priority, name)
+  GraphuloUtil.addOnScopeOption(itset, scopes)
   val store = this.tupleOp
 
   if (store is TupleOp.Store) {
     print("Create ${store.table}. ")
     ac.connector.tableOperations().create(store.table)
     ac.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
+    println("Schema ${store.resultSchema.defaultPSchema()}. ")
   }
-  println("Schema ${store.resultSchema.defaultPSchema()}. ")
 
   GraphuloUtil.applyIteratorSoft(itset, ac.connector.tableOperations(), this.thisTable)
 }
@@ -199,4 +232,6 @@ fun AccumuloConfig.clone(table1: Table, table2: Table) {
   this.connector.tableOperations().clone(table1, table2,
       true, null, null)
 }
+
+fun AccumuloConfig.exists(table: Table) = this.connector.tableOperations().exists(table)
 

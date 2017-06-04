@@ -3,6 +3,9 @@ package edu.washington.cs.laragraphulo.examples.ktruss
 import edu.washington.cs.laragraphulo.api.*
 import edu.washington.cs.laragraphulo.opt.AccumuloConfig
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
+import org.apache.accumulo.core.client.impl.Tables
+import org.apache.accumulo.core.iterators.IteratorUtil
+import java.util.*
 
 object KTrussQuery {
   const val table0 = "testKTruss0"
@@ -50,33 +53,32 @@ object KTrussQuery {
   val nodiag = MapFun("nodiag", listOf(attrV)) {
     if (it["r"] == it["c"]) mapOf("v" to 0) else it
   }
-  val ktrussFilter = MapFun("ktrussFilter", listOf(attrV)) {
+  val ktrussFilter = FilterFun("ktrussFilter") {
     val v = it["v"] as Int
-    if (v % 2 == 0 && (v-1)/2 >= k-2) it
-    else mapOf("v" to 0)
+    v % 2 == 1 && (v-1)/2 >= k-2
   }
   val abs0 = MapFun("abs0", listOf(attrV)) {
     when (it["v"] as Int) {
       0, 1 -> it
-      else -> mapOf("v" to 0)
+      else -> mapOf("v" to 1)
     }
   }
 
   // ============= QUERY
   val query0 = TupleOp.Load(table0, initialSchema)
-      .store(table1)
+      .store(table1, mapOf())
 
   // 1 loop iteration
   val load = TupleOp.Load(table1, initialSchema)
   val queryLoop = load.rename(mapOf("r" to "m", "c" to "r"))
       .join(load.rename(mapOf("r" to "m")), mapOf("v" to twoTimes))
       .map(nodiag)
-      .sort(listOf("r", "c", "m"))
+      .sort(listOf("r", "c", "m"), listOf())
       .agg(listOf("r", "c"), mapOf("v" to plus))
       .union(load, mapOf("v" to plus))
-      .map(ktrussFilter)
+      .filter(ktrussFilter)
       .map(abs0)
-      .store(table2)
+      .store(table2, mapOf())
   val queryCheck = queryLoop.agg(listOf(), mapOf("v" to plus))
   // check nnz between loops
   // use table2 as table1 in next loop, if there is another loop
@@ -98,43 +100,89 @@ object KTrussQuery {
 //  // switch table1, table2
 
 
-//  fun kTrussAdj(ac: AccumuloConfig, tableA: Table, tableR: Table) {
-//    var nppBefore: Long
-//    var nppAfter = 0L
-//    var totalnpp = 0L
-//    var (Atmp, AtmpAlt) = "${tableA}_kTrussAdj_".let {
-//      "${it}tmpA" to "${it}tmpAalt"
-//    }
-//    GraphuloUtil.deleteTables(ac.connector, Atmp, AtmpAlt, tableR)
-//    ac.clone(tableA, Atmp)
-//
-//    do {
-//      nppBefore = nppAfter
-//
-//      val load = TupleOp.Load(Atmp, initialSchema)
-//      val query: TupleOp.Store = load.rename(mapOf("r" to "m", "c" to "r"))
-//          .join(load.rename(mapOf("r" to "m")), mapOf("v" to twoTimes), FilterFun("nodiag") { it: Map<String, *> -> it["r"] != it["c"] })
+  /**
+   * Require [tableR] must not exist.
+   */
+  fun kTrussAdj(ac: AccumuloConfig, tableA: Table, tableR: Table): Table {
+    var nppBefore: Long
+    var nppAfter = 0L
+    var totalnpp = 0L
+    var (Atmp, AtmpAlt) = "${tableA}_kTrussAdj_".let {
+      "${it}tmpA" to "${it}tmpAalt"
+    }
+    GraphuloUtil.deleteTables(ac.connector, Atmp, AtmpAlt, tableR)
+    ac.clone(tableA, Atmp)
+
+    do {
+      nppBefore = nppAfter
+//      Tables.clearCache(ac.connector.instance)
+//      ac.connector.tableOperations().clearLocatorCache(Atmp)
+      ac.clone(Atmp, AtmpAlt)
+
+//      println("AtmpAlt on clone from Atmp")
+//      GraphuloUtil.printTable(ac.connector, AtmpAlt, initialSchema.defaultPSchema())
+
+//      val AtmpAltProps = ac.connector.tableOperations().getProperties(AtmpAlt)
+//      println("Properties AtmpAlt:")
+//      AtmpAltProps.forEach { if (it.key.startsWith("table.iterator")) println("\t$it") }
+
+
+      val load = TupleOp.Load(Atmp, initialSchema)
+      val query: TupleOp.Store = load.rename(mapOf("r" to "m", "c" to "r"))
+          .join(load.rename(mapOf("r" to "m")), mapOf("v" to twoTimes), FilterFun("nodiag") { it["r"] != it["c"] })
+          .sort(listOf("r", "c"), droppedKeys = listOf("m"))
+//          .log()
+          .store(AtmpAlt, aggMap = mapOf("v" to plus))
 //          .sortAgg(listOf("r", "c"), mapOf("v" to plus), AtmpAlt) // todo and store to table2
-//
-//      val tosQuery = TupleOpSetting(query, Atmp, ac)
-//      nppAfter = tosQuery.executeSingle()
-//      totalnpp += nppAfter
-//
-//      val filter = TupleOp.Load(AtmpAlt, initialSchema)
-//          .map(ktrussFilter)
-//          .map(abs0)
-//      val tosFilter = TupleOpSetting(filter, AtmpAlt, ac)
-//      tosFilter.attachIterator()
-//
-//      val t = Atmp
-//      Atmp = AtmpAlt // result is in Atmp
-//      AtmpAlt = t
-//      GraphuloUtil.deleteTables(ac.connector, AtmpAlt)
-//
-//    } while (nppBefore != nppAfter)
-//
-//    println("total npp: $totalnpp")
-//  }
+      // allow sort to have fewer keys
+      // allow store to take a plus function
+      // Check Store does not have to create a new table
+
+      val tosQuery = TupleOpSetting(query, Atmp, ac)
+      nppAfter = tosQuery.executeSingle()
+      totalnpp += nppAfter
+
+//      println("AtmpAlt on write/aggregate from Atmp scan query")
+//      GraphuloUtil.printTable(ac.connector, AtmpAlt, initialSchema.defaultPSchema())
+
+      val filter = TupleOp.Load(AtmpAlt, initialSchema)
+//          .log()
+          .filter(ktrussFilter)
+          .map(abs0)
+
+
+      val tosFilter = TupleOpSetting(filter, AtmpAlt, ac)
+      tosFilter.attachIterator(10, "FilterAbs0", EnumSet.of(IteratorUtil.IteratorScope.scan))
+
+      println("AtmpAlt on filter: table $AtmpAlt")
+      GraphuloUtil.printTable(ac.connector, AtmpAlt, initialSchema.defaultPSchema())
+
+
+
+      val t = Atmp
+      Atmp = AtmpAlt // result is in Atmp
+      AtmpAlt = t
+      GraphuloUtil.deleteTables(ac.connector, AtmpAlt)
+
+    } while (nppBefore != nppAfter)
+
+//    Tables.clearCache(ac.connector.instance)
+//    ac.connector.tableOperations().clearLocatorCache(Atmp)
+
+    // ??? For some reason the entries are messed up when I perform this clone;
+    //     A '4' entry changes to a '5'.
+    // Is there an Accumulo bug for table cloning???
+//    ac.clone(Atmp, tableR)
+
+//      val props = ac.connector.tableOperations().getProperties(tableR)
+//      println("Properties $tableR:")
+//      props.forEach { if (it.key.startsWith("table.iterator")) println("\t$it") }
+
+    println("total npp: $totalnpp")
+    return Atmp
+//    println("written to $tableR from $Atmp")
+//    GraphuloUtil.printTable(ac.connector, tableR, initialSchema.defaultPSchema())
+  }
 
 
 
@@ -151,5 +199,5 @@ object KTrussQuery {
       mapOf("r" to 4, "c" to 1, "v" to 1),
       mapOf("r" to 3, "c" to 2, "v" to 1),
       mapOf("r" to 4, "c" to 3, "v" to 1)
-  )
+  ).sortedWith(initialSchema)
 }

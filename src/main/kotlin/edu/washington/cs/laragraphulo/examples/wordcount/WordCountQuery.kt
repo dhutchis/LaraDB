@@ -40,7 +40,7 @@ object WordCountQuery {
   // ============= QUERY
   val query = Load(table1, initialSchema)
       .ext(extFun)
-      .sort(listOf("word", "docid"))
+      .sort(listOf("word", "docid"), listOf())
       .agg(listOf("word"), mapOf("count" to plus))
 
 

@@ -80,7 +80,7 @@ object SensorQuery {
       ext(filterFun)
       .ext(binFun)
       .ext(createCntFun)
-      .sort(listOf("t'", "c", "t"))
+      .sort(listOf("t'", "c", "t"), listOf())
       .agg(setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
       .ext(divideVnCntFun)
 
@@ -88,7 +88,7 @@ object SensorQuery {
       .ext(filterFun)
       .ext(binFun)
       .ext(createCntFun)
-      .sort(listOf("t'", "c", "t"))
+      .sort(listOf("t'", "c", "t"), listOf())
       .agg(setOf("t'", "c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
       .ext(divideVnCntFun)
 
@@ -98,7 +98,7 @@ object SensorQuery {
       .agg(setOf("t'"), mapOf("v" to anyFun))
       .agg(setOf(), mapOf("v" to plusIntFun))
 
-  val X0 = X.sort(listOf("c", "t'"))
+  val X0 = X.sort(listOf("c", "t'"), listOf())
 
   val M = X0.ext(createCntFun)
       .agg(setOf("c"), mapOf("v" to plusDoubleNullFun, "cnt" to plusIntFun))
@@ -106,11 +106,11 @@ object SensorQuery {
 
   // note: this contains a common sub-expression (X0 and M from X0)
   val U = X0.join(M, mapOf("v" to subtractVn)).
-      sort(listOf("t'","c"))
+      sort(listOf("t'","c"), listOf())
 
   // note: this contains a common sub-expression (U and renamed U)
   val C = U.join(U.rename(mapOf("c" to "c'")), mapOf("v" to multiplyVn)).
-      sort(listOf("c", "c'", "t'"))
+      sort(listOf("c", "c'", "t'"), listOf())
       .agg(setOf("c", "c'"), mapOf("v" to plusDoubleNullFun))
       // note: this contains a common sub-expression (current result and N)
       .join(N, mapOf("v" to divideMinusOneFun))

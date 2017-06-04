@@ -7,6 +7,7 @@ import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.util.GraphuloUtil.UnimplementedIteratorEnvironment
 import edu.washington.cs.laragraphulo.warn
+import edu.washington.cs.laragraphulo.debug
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.slf4j.Logger
 import java.io.Serializable
@@ -182,6 +183,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 
   fun ext(extFun: ExtFun) = Ext(this, extFun)
   fun map(mapFun: MapFun) = Ext(this, mapFun)
+  fun filter(filterFun: FilterFun) = Ext(this, filterFun)
   data class Ext(
       val parent: TupleOp,
       /** This can also be a [MapFun] */
@@ -226,6 +228,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       val extSchema = extFun.extSchema(parentResultSchema)
       private var top: PeekingIterator<Tuple> by Staged { findTop() }
 
+
+
       fun findTop(): PeekingIterator<Tuple> {
         if (!iter.hasNext())
           return Collections.emptyIterator<Tuple>().peeking()
@@ -235,7 +239,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
           topParent = iter.next()
           topIter = extFun.extFun(topParent).iterator()
         } while (iter.hasNext() && !topIter.hasNext())
-        return PrependKeysIterator(parentKeyNames, topParent, topIter).peeking() // could reuse this object for performance
+        return PrependKeysIterator(parentKeyNames, topParent, topIter,
+            extSchema.vals.map { it.name to it.default }.toMap()).peeking() // could reuse this object for performance
       }
 
       override fun hasNext(): Boolean = top.hasNext()
@@ -254,19 +259,24 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
         top = findTop()
       }
       override fun deepCopy(env: IteratorEnvironment): TupleIterator = ExtIterator(iter.deepCopy(env), extFun, parentResultSchema)
+
+      override fun toString(): String {
+        return "ExtIterator(extFun=$extFun, iter=$iter)"
+      }
     }
 
     private class PrependKeysIterator(
         keysToPrepend: List<String>,
         parent: Tuple,
-        val iter: Iterator<Tuple>
+        val iter: Iterator<Tuple>,
+        val defaultValues: Map<Name, *>
     ) : Iterator<Tuple> {
       val parentKeys = parent.filterKeys { it in keysToPrepend }
       override fun hasNext(): Boolean = iter.hasNext()
       override fun next(): Tuple {
         val n = iter.next().filterKeys { it !in parentKeys }
 //        check(parentKeys.keys.all { it !in n }) {"the tuple resulting from this ext emitted a key that is present in the parent keys. Tuple: $n. ParentKeys: $parentKeys"}
-        return parentKeys + n
+        return defaultValues + parentKeys + n
       }
     }
 
@@ -516,6 +526,9 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
           }
         }
       }
+
+      override fun toString() =
+          "MergeUnionIterator(plusFuns=$plusFuns, keyNames=$keyNames, i1=$i1, i2=$i2)"
     }
 
 
@@ -564,20 +577,24 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       }
       override fun peek(): Tuple = top ?: throw NoSuchElementException()
       override fun deepCopy(env: IteratorEnvironment) = RenameIterator(parentIter.deepCopy(env), renameMap)
+
+      override fun toString() = "RenameIterator(renameMap=$renameMap, parentIter=$parentIter)"
     }
 
   }
 
-  fun sort(newSort: List<Name>) = Sort(this, newSort)
+  fun sort(newSort: List<Name>, droppedKeys: Iterable<Name>) = Sort(this, newSort, true, droppedKeys)
   //  fun sort(vararg newSort: Name): TupleOp = Sort(this, newSort.toList())
   data class Sort(
       val p: TupleOp,
       val newSort: List<Name>,
       /** Determines if this Sort actually collects all data and re-sorts or not. */
-      val fullResort: Boolean = true
+      val fullResort: Boolean = true,
+      val droppedKeys: Iterable<Name> = listOf()
   ) : TupleOp(p) {
     override val resultSchema = Schema(
-        newSort.apply { require(this.toSet() == p.resultSchema.keys.map { it.name }.toSet()) {"not all names re-sorted: $newSort on ${p.resultSchema}"} }
+        newSort.apply { require((this.toSet()+droppedKeys) == p.resultSchema.keys.map { it.name }.toSet())
+                        {"not all names re-sorted: $newSort on ${p.resultSchema}"} }
             .map { name -> p.resultSchema.keys.find{it.name == name}!! },
         p.resultSchema.vals
     )
@@ -594,10 +611,12 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
   }
 
 
-  fun store(table: Table) = Store(this, table)
+  fun store(table: Table, aggMap: Map<Name, PlusFun<*>>) = Store(this, table, aggMap)
   data class Store(
       val p: TupleOp,
-      val table: Table
+      val table: Table,
+      /** Summing iterators to aggregate values added to the result table. */
+      val aggMap: Map<Name, PlusFun<*>> = mapOf()
   ) : TupleOp(p) {
     override val resultSchema = p.resultSchema
     override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else copy(args[0])
@@ -702,6 +721,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
       var topIter: PeekingIterator<Tuple> by Staged { findTop() }
       var seekKey = TupleSeekKey(MyRange.all(), listOf(), false)
 
+
+
       override fun deepCopy(env: IteratorEnvironment) =
           MergeJoinIterator(seekTransform1, seekTransform2, keys, p1keys, p2keys,
               i1.deepCopy(env), i2.deepCopy(env), timesFuns, filterFun)
@@ -786,7 +807,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
         return r
       }
 
-      private fun times(t1: Tuple, t2: Tuple): Tuple {
+      private fun times(t1: Tuple, t2: Tuple): Tuple? {
         return if (filterFun?.filterFun?.invoke(t1 + t2) ?: true) timesFuns.mapValues { (name,f) ->
           @Suppress("UNCHECKED_CAST")
           when {
@@ -796,8 +817,11 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
             else -> f.resultZero
           }
         } + t1.filterKeys { it in p1keys } + t2.filterKeys { it in p2keys }
-        else mapOf<String,Any?>()
+        else null
       }
+
+      override fun toString() =
+          "MergeJoinIterator(timesFuns=$timesFuns, filterFun=$filterFun, i1=$i1, i2=$i2)"
 
       class CartesianIterator(
           private val firstIter: PeekingIterator<Tuple>,
@@ -886,6 +910,47 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 
     companion object : Loggable {
       override val logger: Logger = logger<LoadOnce>()
+    }
+  }
+
+  fun log() = Log(this)
+  data class Log(
+      private val p: TupleOp
+  ) : TupleOp(p) {
+    override val resultSchema = p.resultSchema
+    override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else Log(args[0])
+    override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator {
+      return LogTupleIterator(p.run(instMap, env))
+    }
+
+    class LogTupleIterator(
+        val piter: TupleIterator
+    ) : TupleIterator by piter {
+      var hasPeeked = false
+      override fun peek(): Tuple {
+        val d = piter.peek()
+        if (!hasPeeked) {
+          logger.debug { "peek: $d" }
+          hasPeeked = true
+        }
+        return d
+      }
+
+      override fun next(): Tuple {
+        val d = piter.next()
+        if (!hasPeeked) {
+          logger.debug { "next: $d" }
+        }
+        hasPeeked = false
+        return d
+      }
+
+      companion object : Loggable {
+        override val logger: Logger = logger<LogTupleIterator>()
+      }
+
+      override fun deepCopy(env: IteratorEnvironment) = LogTupleIterator(piter.deepCopy(env))
+      // todo: remove init?
     }
   }
 

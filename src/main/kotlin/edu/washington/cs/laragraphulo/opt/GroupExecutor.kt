@@ -1,8 +1,11 @@
 package edu.washington.cs.laragraphulo.opt
 
 import com.google.common.util.concurrent.*
+import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.api.PSchema
 import edu.washington.cs.laragraphulo.api.Table
+import edu.washington.cs.laragraphulo.logger
+import edu.washington.cs.laragraphulo.info
 
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.client.ClientConfiguration
@@ -19,6 +22,7 @@ import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.accumulo.core.iterators.OptionDescriber
 import org.apache.accumulo.core.iterators.SortedKeyValueIterator
 import org.apache.accumulo.core.security.Authorizations
+import org.slf4j.Logger
 import java.io.IOException
 import java.io.Serializable
 import java.util.*
@@ -528,6 +532,7 @@ abstract class DelegatingIterator : SKVI {
 
   override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment) {
     skvi = initDelegate(source, options, env)
+    logger.info{"Init Delegate: $skvi"}
   }
   override fun getTopValue(): Value = skvi.topValue
   override fun next() = skvi.next()
@@ -535,6 +540,9 @@ abstract class DelegatingIterator : SKVI {
   override fun hasTop() = skvi.hasTop()
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) = skvi.seek(range, columnFamilies, inclusive)
   override fun getTopKey(): Key = skvi.topKey
+  companion object  : Loggable {
+    override val logger: Logger = logger<DelegatingIterator>()
+  }
 }
 
 /**
@@ -548,10 +556,11 @@ abstract class SerializerSetting<D>(
     const val OPT_SERIALIZER_CLASS = "serializer_class"
   }
 
-  fun <T : D>iteratorSetting(serializer: Serializer<T,T>, skvi: T, priority: Int = 10): IteratorSetting {
+  fun <T : D>iteratorSetting(serializer: Serializer<T,T>, skvi: T, priority: Int = 10,
+                             name: String = delegatingClass.simpleName): IteratorSetting {
     val serializer_class = serializer.javaClass.name
     val serialized_skvi = serializer.serializeToString(skvi)
-    return IteratorSetting(priority, delegatingClass,
+    return IteratorSetting(priority, name, delegatingClass,
         mapOf(OPT_SERIALIZER_CLASS to serializer_class, OPT_SERIALIZED_DATA to serialized_skvi))
   }
 

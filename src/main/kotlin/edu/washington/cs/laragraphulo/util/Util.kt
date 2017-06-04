@@ -4,6 +4,8 @@ import com.google.common.collect.BoundType
 import com.google.common.collect.ImmutableRangeSet
 import com.google.common.collect.RangeSet
 import edu.washington.cs.laragraphulo.Loggable
+import edu.washington.cs.laragraphulo.api.PSchema
+import edu.washington.cs.laragraphulo.api.TupleByKeyValue
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.opt.D4mRangeFilter
 import edu.washington.cs.laragraphulo.opt.DynamicIteratorSetting
@@ -1076,6 +1078,15 @@ System.out.println(",a,,".split(",",-1).length + Arrays.toString(",a,,".split(",
 //      dis.append(IteratorSetting(1, RemoteWriteIterator::class.java, optC))
 //    return dis.toIteratorSetting()
 //  }
+
+  fun printTable(connector: Connector, table: String, ps: PSchema) {
+    connector.createScanner(table, Authorizations.EMPTY).use { scanner ->
+      scanner.iterator().forEach { (k,v) ->
+        // The TupleByKeyValue class decodes the Accumulo key-values using the physical schmea they are encoded in.
+        println(TupleByKeyValue(ps, k, v))
+      }
+    }
+  }
 
 }
 

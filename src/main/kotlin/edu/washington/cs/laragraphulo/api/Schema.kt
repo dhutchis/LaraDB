@@ -264,7 +264,8 @@ open class MapFun(
     /** Value attributes of tuples produced by the Map as a function of the parent schema. */
     val mapValues: (Schema) -> List<ValAttribute<*>>,
     val mapFun: (Tuple) -> Tuple
-) : ExtFun(name, extSchema = {Schema(listOf(), mapValues(it))}, extFun = { tuple -> listOf(mapFun(tuple)) }) {
+) : ExtFun(name, extSchema = {Schema(listOf(), mapValues(it))},
+    extFun = { tuple -> listOf(mapFun(tuple)) }) {
   constructor(name: String, mapValues: List<ValAttribute<*>>, mapFun: (Tuple) -> Tuple)
   : this(name, {mapValues}, mapFun)
 
@@ -274,7 +275,8 @@ open class MapFun(
 class FilterFun(
     name: String,
     val filterFun: (Tuple) -> Boolean
-) : MapFun(name, mapValues = {it.vals}, mapFun = { if (filterFun(it)) it else mapOf<String,Any?>() }) {
+) : ExtFun(name, extSchema = {Schema(listOf(), it.vals)},
+    extFun = { if (filterFun(it)) listOf(it) else listOf() }) {
   override fun toString(): String = "FilterFun($name)"
 }
 
@@ -462,6 +464,7 @@ interface TupleIterator : AccumuloLikeIterator<TupleSeekKey, Tuple> {
       override fun next() = throw UnsupportedOperationException("empty TupleIterator")
       override fun peek() = throw UnsupportedOperationException("empty TupleIterator")
       override fun deepCopy(env: IteratorEnvironment) = this
+      override fun toString() = "EMPTY"
     }
   }
 

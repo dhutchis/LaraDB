@@ -545,6 +545,10 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
     return copy
   }
 
+  override fun toString(): String {
+    return "RWI(table=$tableName, source=$source)"
+  }
+
   companion object : Loggable {
     override val logger: org.slf4j.Logger = logger<RemoteWriteIterator>()
 
@@ -676,6 +680,7 @@ class RemoteWriteIterator : OptionDescriber, SortedKeyValueIterator<Key, Value> 
       return numEntries
     }
   }
+
 
 
 }

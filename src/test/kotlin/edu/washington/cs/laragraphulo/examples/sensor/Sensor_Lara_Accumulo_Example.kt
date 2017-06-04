@@ -1,12 +1,12 @@
 package edu.washington.cs.laragraphulo.examples.sensor
 
-import edu.mit.ll.graphulo.util.GraphuloUtil
 import edu.washington.cs.laragraphulo.AccumuloTestBase
 import edu.washington.cs.laragraphulo.api.PSchema
 import edu.washington.cs.laragraphulo.api.TupleByKeyValue
 import edu.washington.cs.laragraphulo.api.TupleOp
 import edu.washington.cs.laragraphulo.api.execute
 import edu.washington.cs.laragraphulo.sensor.EncodeFunction
+import edu.washington.cs.laragraphulo.util.GraphuloUtil
 import org.apache.accumulo.core.security.Authorizations
 import org.junit.Test
 
