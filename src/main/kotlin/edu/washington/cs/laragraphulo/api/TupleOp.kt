@@ -8,6 +8,7 @@ import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.util.GraphuloUtil.UnimplementedIteratorEnvironment
 import edu.washington.cs.laragraphulo.warn
 import edu.washington.cs.laragraphulo.debug
+import edu.washington.cs.laragraphulo.opt.Type
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.slf4j.Logger
 import java.io.Serializable
@@ -290,7 +291,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
     //    constructor(table: String, schema: Schema, iter: Iterator<NameTuple>): this(table, schema, Collections.emptyIterator())
     override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment) = throw UnsupportedOperationException("Cannot run a Load() Op; need to provide a data source for this: $this")
     override fun reconstruct(args: Array<TupleOp>) = this
-    override fun toString() = "Load(table='$table')"
+    override fun toString() = "Load(table='$table', $resultSchema)"
 
   }
 
@@ -920,17 +921,23 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
     override val resultSchema = p.resultSchema
     override fun reconstruct(args: Array<TupleOp>) = if (args[0] === p) this else Log(args[0])
     override fun _run(instMap: MutableMap<TupleOp, TupleIterator>, env: IteratorEnvironment): TupleIterator {
-      return LogTupleIterator(p.run(instMap, env))
+      return LogTupleIterator(p.run(instMap, env), resultSchema)
     }
 
     class LogTupleIterator(
-        val piter: TupleIterator
+        val piter: TupleIterator,
+        val resultSchema: Schema
     ) : TupleIterator by piter {
       var hasPeeked = false
+      val SC1 = listOf(Attribute("t'",LType.ULONG), Attribute("c",LType.STRING), Attribute("c'",LType.STRING))
+      val SC2 = Schema(listOf(Attribute("c",LType.STRING), Attribute("c'",LType.STRING), Attribute("t'",LType.ULONG)), listOf(ValAttribute("v", LType.NDOUBLE, null))).defaultPSchema()
       override fun peek(): Tuple {
         val d = piter.peek()
         if (!hasPeeked) {
-          logger.debug { "peek: $d" }
+          if (resultSchema.keys == SC1)
+            logger.debug { "peek: $d. ${Arrays.toString(SC2.encodeToKeyValue(d).key.rowData.toArray())}" }
+          else
+            logger.debug { "peek: $d" }
           hasPeeked = true
         }
         return d
@@ -949,7 +956,8 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
         override val logger: Logger = logger<LogTupleIterator>()
       }
 
-      override fun deepCopy(env: IteratorEnvironment) = LogTupleIterator(piter.deepCopy(env))
+      override fun deepCopy(env: IteratorEnvironment) =
+          LogTupleIterator(piter.deepCopy(env), resultSchema)
       // todo: remove init?
     }
   }

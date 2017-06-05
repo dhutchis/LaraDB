@@ -26,7 +26,7 @@ object TEST_CONFIG {
 
   val DEFAULT_TEST_CONFIG_FILE = "GraphuloTest.conf"
 
-  const val DEFAULT_MINI_TSERVERS = 2
+  const val DEFAULT_MINI_TSERVERS = 1
 
   init {
     val s = System.getProperty("TEST_CONFIG") // environment variable // "miniDebug"//

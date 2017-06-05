@@ -50,17 +50,19 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
     // get schemas of base tables - assume all the schemas are set.
     val baseTablesSchemas = baseTables.map { table ->
 //      logger.debug{"Fetch Schema for $table"}
-      try {
-        val ser = env.config.get(PROP_PSCHEMA)
-        val ps = SerializationUtil.deserializeBase64(ser) as PSchema
-        logger.info{"Schema for $table is $ps"}
-        table to ps
-      } catch(e: Exception) {
-        logger.warn{"Cannot fetch schema from environment for $table"}
-        // We should not need to use this method. It is less reliable because table information
-        // may be cached or inconsistent, leading to TableNotFoundException, even though we execute on this table.
-        table to accumuloConfig.getSchema(table)
-      }
+      if (table == thisTable)
+        try {
+          val ser = env.config.get(PROP_PSCHEMA)
+          val ps = SerializationUtil.deserializeBase64(ser) as PSchema
+          logger.info{"Schema for $table is $ps"}
+          table to ps
+        } catch(e: Exception) {
+          logger.warn{"Cannot fetch schema from environment for $table"}
+          // We should not need to use this method. It is less reliable because table information
+          // may be cached or inconsistent, leading to TableNotFoundException, even though we execute on this table.
+          table to accumuloConfig.getSchema(table)
+        }
+      else table to accumuloConfig.getSchema(table)
     }.toMap()
 
     // what about the PhysicalSchemas?
@@ -76,6 +78,7 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
         rsi.init(null, remoteOpts, env)
         rsi
       }
+      logger.debug{"Schema for table $table is $ps"}
       KvToTupleAdapter(ps, SkviToIteratorAdapter(skvi))
     }
     // also change Sorts to do nothing
@@ -87,6 +90,7 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
     if (storeLoaded is TupleOp.Store) {
       val runBeforeStore: TupleIterator = storeLoaded.p.run(env)
       logger.info{"Loading TupleOpIterator: $runBeforeStore"}
+      logger.debug{"Schema to store in ${storeLoaded.table} is ${storeLoaded.resultSchema}"}
       val skviBeforeStore = KvToSkviAdapter(TupleToKvAdapter(storeLoaded.resultSchema.defaultPSchema(), runBeforeStore))
 
       val remoteOpts = accumuloConfig.basicRemoteOpts(remoteTable = storeLoaded.table)

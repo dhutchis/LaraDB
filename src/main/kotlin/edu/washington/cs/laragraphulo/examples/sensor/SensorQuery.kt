@@ -109,8 +109,10 @@ object SensorQuery {
       sort(listOf("t'","c"), listOf())
 
   // note: this contains a common sub-expression (U and renamed U)
-  val C = U.join(U.rename(mapOf("c" to "c'")), mapOf("v" to multiplyVn)).
-      sort(listOf("c", "c'", "t'"), listOf())
+  val C = U.join(U.rename(mapOf("c" to "c'")), mapOf("v" to multiplyVn))
+//      .log()
+      .sort(listOf("c", "c'", "t'"), listOf())
+//      .log()
       .agg(setOf("c", "c'"), mapOf("v" to plusDoubleNullFun))
       // note: this contains a common sub-expression (current result and N)
       .join(N, mapOf("v" to divideMinusOneFun))

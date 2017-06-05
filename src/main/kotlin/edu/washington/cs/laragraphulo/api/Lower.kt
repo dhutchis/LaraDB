@@ -20,6 +20,7 @@ import org.slf4j.Logger
 import java.nio.ByteBuffer
 import java.text.DateFormat
 import java.text.SimpleDateFormat
+import java.util.*
 
 
 //fun TupleOp.getBaseTables(): Set<Table> = when(this) {
@@ -365,7 +366,9 @@ class TupleByKeyValue(val ps: PSchema, val k: Key, val v: Value?): Map<String,An
         assert(remainingAttr.size > 1)
         val startIdx = posWidthIndexes.last()
 
-        val GetSplitData = lazy { splitAndUnescape(data.backingArray, data.offset() + startIdx, data.length() - startIdx).apply { require(this.size == remainingAttr.size) }  }
+        val GetSplitData = lazy { splitAndUnescape(data.backingArray, data.offset() + startIdx, data.length() - startIdx)
+            .apply { require(this.size == remainingAttr.size) {"this.size=${this.size}. remainingAttr.size=${remainingAttr.size}. attrs=${attrs} this=$this. startIdx=$startIdx. " +
+                "\n${Arrays.toString(data.toArray())}"} }  }
 
         posWidthAccessors + remainingAttr.mapIndexed { i, lastAttr ->
           lazy {
@@ -461,10 +464,14 @@ class KvToTupleAdapter(val ps: PSchema, private val iter: KeyValueIterator): Tup
 
   override fun peek(): Tuple = if (top != null) top!! else {
     val (k, v) = iter.peek()
+//    logger.debug{"ps: $ps, row: ${java.util.Arrays.toString(k.rowData.toArray())}"}
     val t = TupleByKeyValue(ps, k, v)
     top = t; t
   }
   override fun deepCopy(env: IteratorEnvironment) = KvToTupleAdapter(ps, iter.deepCopy(env))
+  companion object : Loggable {
+    override val logger: Logger = logger<KvToTupleAdapter>()
+  }
 }
 
 class TupleToKvAdapter(val ps: PSchema, private val tupleIter: TupleIterator): KeyValueIterator {
@@ -473,6 +480,7 @@ class TupleToKvAdapter(val ps: PSchema, private val tupleIter: TupleIterator): K
   override fun hasNext(): Boolean = top != null || tupleIter.hasNext()
   override fun next(): KeyValue {
     val tuple = tupleIter.next().toKeyValue(ps)
+//    logger.debug{"insert ps: $ps, row: ${java.util.Arrays.toString(tuple.key.rowData.toArray())}"}
     top = null
     return tuple
   }
@@ -487,6 +495,9 @@ class TupleToKvAdapter(val ps: PSchema, private val tupleIter: TupleIterator): K
     top = t; t
   }
   override fun deepCopy(env: IteratorEnvironment) = TupleToKvAdapter(ps, tupleIter.deepCopy(env))
+  companion object : Loggable {
+    override val logger: Logger = logger<TupleToKvAdapter>()
+  }
 }
 
 /** Note: no no-args constructor. This adapter is not designed as a standalone Accumulo SKVI. */
