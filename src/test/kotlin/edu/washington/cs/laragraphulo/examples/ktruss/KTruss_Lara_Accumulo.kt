@@ -23,7 +23,8 @@ class KTruss_Lara_Accumulo : AccumuloTestBase() {
     // Delete the result table if it exists
     GraphuloUtil.deleteTables(ac.connector, KTrussQuery.table2)
 
-    val resultTable = KTrussQuery.kTrussAdj(ac, KTrussQuery.table0, KTrussQuery.table2)
+    val resultTable = KTrussQuery.table2
+    KTrussQuery.kTrussAdj(ac, KTrussQuery.table0, KTrussQuery.table2)
 
     // Print the covariances by scanning the result table from the query.
     printVerifyTable(resultTable, KTrussQuery.initialSchema.defaultPSchema())

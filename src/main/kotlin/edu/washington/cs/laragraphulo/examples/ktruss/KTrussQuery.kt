@@ -103,7 +103,7 @@ object KTrussQuery {
   /**
    * Require [tableR] must not exist.
    */
-  fun kTrussAdj(ac: AccumuloConfig, tableA: Table, tableR: Table): Table {
+  fun kTrussAdj(ac: AccumuloConfig, tableA: Table, tableR: Table) {
     var nppBefore: Long
     var nppAfter = 0L
     var totalnpp = 0L
@@ -173,13 +173,13 @@ object KTrussQuery {
     //     A '4' entry changes to a '5'.
     // Is there an Accumulo bug for table cloning???
 //    ac.clone(Atmp, tableR)
+    ac.connector.tableOperations().rename(Atmp, tableR)
 
 //      val props = ac.connector.tableOperations().getProperties(tableR)
 //      println("Properties $tableR:")
 //      props.forEach { if (it.key.startsWith("table.iterator")) println("\t$it") }
 
     println("total npp: $totalnpp")
-    return Atmp
 //    println("written to $tableR from $Atmp")
 //    GraphuloUtil.printTable(ac.connector, tableR, initialSchema.defaultPSchema())
   }
