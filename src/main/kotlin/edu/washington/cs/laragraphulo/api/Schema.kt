@@ -244,12 +244,12 @@ open class ExtFun(
     if (other?.javaClass != javaClass) return false
     other as ExtFun
     if (name != other.name) return false
-    if (extSchema != other.extSchema) return false
+//    if (extSchema != other.extSchema) return false
     return true
   }
   override fun hashCode(): Int {
-    var result = name.hashCode()
-    result = 31 * result + extSchema.hashCode()
+    val result = name.hashCode()
+//    result = 31 * result + extSchema.hashCode()
     return result
   }
 
