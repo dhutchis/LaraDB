@@ -529,6 +529,14 @@ abstract class DelegatingIterator : SKVI {
   abstract fun initDelegate(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment): SKVI
 
   private lateinit var skvi: SKVI
+    //get private set
+
+  fun unwrap(): SKVI {
+    var i = skvi
+    while (i is DelegatingIterator)
+      i = i.skvi
+    return i
+  }
 
   override fun init(source: SortedKeyValueIterator<Key, Value>, options: Map<String, String>, env: IteratorEnvironment) {
     skvi = initDelegate(source, options, env)

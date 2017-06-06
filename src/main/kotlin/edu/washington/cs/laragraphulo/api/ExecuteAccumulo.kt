@@ -47,6 +47,7 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
 
     // replace Load statements with this iterator and RemoteSourceIterators
     val baseTables = store.getBaseTables()
+    if (thisTable !in baseTables) logger.warn{"thisTable $thisTable !in baseTables: $baseTables for query $store"}
     // get schemas of base tables - assume all the schemas are set.
     val baseTablesSchemas = baseTables.map { table ->
 //      logger.debug{"Fetch Schema for $table"}
@@ -78,8 +79,8 @@ class TupleOpSKVI : DelegatingIterator(), OptionDescriber {
         rsi.init(null, remoteOpts, env)
         rsi
       }
-      logger.debug{"Schema for table $table is $ps"}
-      KvToTupleAdapter(ps, SkviToIteratorAdapter(skvi))
+      logger.debug{"Schema for table $table is $ps on skvi $skvi${if (skvi is DelegatingIterator) "; ${skvi.unwrap()}" else ""}"}
+      KvToTupleAdapter(ps, SkviToKvAdapter(skvi))
     }
     // also change Sorts to do nothing
     val storeLoaded = store.instantiateLoadTupleIterator(tupleIters).disableFullResorts()
@@ -140,9 +141,9 @@ fun AccumuloConfig.execute(query: TupleOp.Store): Long {
 }
 
 /** Execute a single query fragment on the Accumulo pointed to by this AccumuloConfig */
-fun TupleOpSetting.executeSingle(): Long {
+fun TupleOpSetting.executeSingle(priority: Int = 25): Long {
   val ac = this.accumuloConfig
-  val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, this, 25)
+  val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, this, priority)
   val store = this.tupleOp
 
   if (store is TupleOp.Store) {

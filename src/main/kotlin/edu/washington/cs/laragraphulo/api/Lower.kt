@@ -8,7 +8,10 @@ import edu.washington.cs.laragraphulo.debug
 import edu.washington.cs.laragraphulo.api.TupleOp.*
 import edu.washington.cs.laragraphulo.encoding.escapeAndJoin
 import edu.washington.cs.laragraphulo.encoding.splitAndUnescape
+import edu.washington.cs.laragraphulo.opt.DelegatingIterator
 import edu.washington.cs.laragraphulo.opt.EMPTY_B
+import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
+import edu.washington.cs.laragraphulo.warn
 import org.apache.accumulo.core.client.Scanner
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
@@ -17,11 +20,13 @@ import org.apache.accumulo.core.data.Value
 import org.apache.accumulo.core.iterators.IteratorEnvironment
 import org.apache.hadoop.io.Text
 import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 import java.nio.ByteBuffer
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.*
 
+val logger = LoggerFactory.getLogger("edu.washington.cs.laragraphulo.api.LowerKt")
 
 //fun TupleOp.getBaseTables(): Set<Table> = when(this) {
 //  is Load -> setOf(this.table)
@@ -297,6 +302,14 @@ class PSchema(
 
 }
 
+// This is a class for lazy encoding of a Tuple to a Key.
+// If the class is decoded to a Tuple early, then no need to do the actual encoding.
+//class KeyByTuple(val ps: PSchema, val t: Tuple) : Key() {
+//  // todo override all the functions to lazily set row, colf, etc. when they are needed
+//  // todo override equals to check first if classes match
+//  // todo override clone()
+//}
+
 class TupleByKeyValue(val ps: PSchema, val k: Key, val v: Value?): Map<String,Any?> {
   val map: Map<Name, Lazy<Any?>>
   init {
@@ -446,8 +459,16 @@ class TupleByKeyValue(val ps: PSchema, val k: Key, val v: Value?): Map<String,An
   } // end companion object
 }
 
+fun KvToTupleAdapter(ps: PSchema, iter: KeyValueIterator): TupleIterator {
+  if (iter is TupleToKvAdapter) {
+    logger.debug{"re-using, with ps $ps, TupleIterator ${iter.tupleIter}"}
+    // assume the ps matches?
+    return iter.tupleIter
+  } else return KvToTupleAdapterImpl(ps, iter)
+}
+
 /** Pass this to [LoadData] to create a TupleOp. */
-class KvToTupleAdapter(val ps: PSchema, private val iter: KeyValueIterator): TupleIterator {
+class KvToTupleAdapterImpl(val ps: PSchema, private val iter: KeyValueIterator): TupleIterator {
   var top: Tuple? = null
 
   override fun hasNext(): Boolean = top != null || iter.hasNext()
@@ -470,11 +491,11 @@ class KvToTupleAdapter(val ps: PSchema, private val iter: KeyValueIterator): Tup
   }
   override fun deepCopy(env: IteratorEnvironment) = KvToTupleAdapter(ps, iter.deepCopy(env))
   companion object : Loggable {
-    override val logger: Logger = logger<KvToTupleAdapter>()
+    override val logger: Logger = logger<KvToTupleAdapterImpl>()
   }
 }
 
-class TupleToKvAdapter(val ps: PSchema, private val tupleIter: TupleIterator): KeyValueIterator {
+class TupleToKvAdapter(val ps: PSchema, val tupleIter: TupleIterator): KeyValueIterator {
   var top: KeyValue? = null
 
   override fun hasNext(): Boolean = top != null || tupleIter.hasNext()
@@ -500,8 +521,18 @@ class TupleToKvAdapter(val ps: PSchema, private val tupleIter: TupleIterator): K
   }
 }
 
+fun SkviToKvAdapter(inner0: SKVI): KeyValueIterator {
+  val inner = (inner0 as? DelegatingIterator)?.unwrap() ?: inner0
+
+  if (inner is KvToSkviAdapter) {
+    logger.debug{"re-using KeyValueIterator ${inner.inner}"}
+    return inner.inner
+  }
+  else return SkviToIteratorAdapter(inner)
+}
+
 /** Note: no no-args constructor. This adapter is not designed as a standalone Accumulo SKVI. */
-class KvToSkviAdapter(private val inner: KeyValueIterator): SKVI {
+class KvToSkviAdapter(val inner: KeyValueIterator): SKVI {
   override fun seek(range: Range, columnFamilies: Collection<ByteSequence>, inclusive: Boolean) {
     logger.debug{"seek: range: $range"}
     @Suppress("UNCHECKED_CAST")

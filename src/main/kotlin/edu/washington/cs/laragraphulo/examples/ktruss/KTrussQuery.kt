@@ -139,7 +139,7 @@ object KTrussQuery {
       // Check Store does not have to create a new table
 
       val tosQuery = TupleOpSetting(query, Atmp, ac)
-      nppAfter = tosQuery.executeSingle()
+      nppAfter = tosQuery.executeSingle(19)
       totalnpp += nppAfter
 
 //      println("AtmpAlt on write/aggregate from Atmp scan query")
