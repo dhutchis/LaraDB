@@ -4,7 +4,6 @@ import edu.washington.cs.laragraphulo.*
 import edu.washington.cs.laragraphulo.opt.*
 import edu.washington.cs.laragraphulo.opt.AccumuloConfig.Companion.PROP_PSCHEMA
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
-import edu.washington.cs.laragraphulo.util.SkviToIteratorAdapter
 import org.slf4j.Logger
 import org.apache.accumulo.core.client.BatchWriterConfig
 import org.apache.accumulo.core.client.IteratorSetting
@@ -133,47 +132,54 @@ fun AccumuloConfig.execute(query: TupleOp.Store): Long {
     val oneBaseTable = it.getBaseTables().first()
     print("On $oneBaseTable: ")
     val tos = TupleOpSetting(it, oneBaseTable, this)
-    tos.executeSingle()
+    tos.executeSingleStore()
   }.reduce(Long::plus)
 
   println("[[[$totalEntries total entries for pipeline]]]")
   return totalEntries
 }
 
-/** Execute a single query fragment on the Accumulo pointed to by this AccumuloConfig */
-fun TupleOpSetting.executeSingle(priority: Int = 25): Long {
+inline fun <R> TupleOpSetting.executeCustom(priority: Int, scannerFun: (Iterator<Map.Entry<Key,Value>>) -> R): R {
+  if (this.thisTable !in this.tupleOp.getBaseTables())
+    logger.warn{"thisTable $thisTable !in baseTables: ${this.tupleOp.getBaseTables()} for query ${this.tupleOp}"}
   val ac = this.accumuloConfig
   val itset: IteratorSetting = TupleOpSKVI.iteratorSetting(TupleOpSerializer.INSTANCE, this, priority)
-  val store = this.tupleOp
-
-  if (store is TupleOp.Store) {
-    print("Create ${store.table}. ")
-    GraphuloUtil.recreateTables(ac.connector, false, store.table)
-    ac.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
-    println("Schema ${store.resultSchema.defaultPSchema()}. ")
-    if (store.aggMap.isNotEmpty()) {
-      // we are summing into a possibly existing table with entries
-      // I assume the new entries match the schema of the existing entries
-      // the agg iterator should decode entries (both new and old) the same way,
-      // and mergeunion them
-      val aggtop = TupleOp.Load(store.table, store.resultSchema)
-          .agg(store.resultSchema.keys.map(Attribute<*>::name), store.aggMap)
-//          .log()
-      val names = store.aggMap.map { (_,agg) -> agg.name }.joinToString("_")
-      val aggset = TupleOpSetting(aggtop, store.table, ac)
-      aggset.attachIterator(2, "Aggregation_$names")
-    }
-  }
-
   return ac.connector.createBatchScanner(this.thisTable, Authorizations.EMPTY, 15).use { bs ->
     val ranges = listOf(Range())
     bs.setRanges(ranges)
     bs.addScanIterator(itset)
+    println("Execute ${this.tupleOp}")
+    scannerFun(bs.iterator())
+  }
+}
+
+/** Execute a single query fragment on the Accumulo pointed to by this AccumuloConfig */
+fun TupleOpSetting.executeSingleStore(priority: Int = 25): Long {
+  val store = this.tupleOp
+  require(store is TupleOp.Store) {"executeSingleStore should be called with a Store TupleOp: ${this.tupleOp}"}
+  store as TupleOp.Store
+
+  print("Create ${store.table}. ")
+  GraphuloUtil.recreateTables(this.accumuloConfig.connector, false, store.table)
+  this.accumuloConfig.setSchema(store.table, store.resultSchema.defaultPSchema()) // matches that in TupleOpSKVI
+  println("Schema ${store.resultSchema.defaultPSchema()}. ")
+  if (store.aggMap.isNotEmpty()) {
+    // we are summing into a possibly existing table with entries
+    // I assume the new entries match the schema of the existing entries
+    // the agg iterator should decode entries (both new and old) the same way,
+    // and mergeunion them
+    val aggtop = TupleOp.Load(store.table, store.resultSchema)
+        .agg(store.resultSchema.keys.map(Attribute<*>::name), store.aggMap)
+//          .log()
+    val names = store.aggMap.map { (_,agg) -> agg.name }.joinToString("_")
+    val aggset = TupleOpSetting(aggtop, store.table, this.accumuloConfig)
+    aggset.attachIterator(2, "Aggregation_$names")
+  }
+  return this.executeCustom(priority) { iter ->
     var totalEntries = 0L
     var count = 0
 
-    println("Execute ${this.tupleOp}")
-    bs.iterator().forEach { (k, v) ->
+    iter.forEach { (k, v) ->
       val numEntries = RemoteWriteIterator.decodeValue(v, null)
       println("[$numEntries entries] ${k.toStringNoTime()} -> $v")
       totalEntries += numEntries

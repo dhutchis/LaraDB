@@ -584,7 +584,7 @@ sealed class TupleOp(private vararg val args: TupleOp) : Serializable {
 
   }
 
-  fun sort(newSort: List<Name>, droppedKeys: Iterable<Name>) = Sort(this, newSort, true, droppedKeys)
+  fun sort(newSort: List<Name>, droppedKeys: Iterable<Name> = listOf()) = Sort(this, newSort, true, droppedKeys)
   //  fun sort(vararg newSort: Name): TupleOp = Sort(this, newSort.toList())
   data class Sort(
       val p: TupleOp,

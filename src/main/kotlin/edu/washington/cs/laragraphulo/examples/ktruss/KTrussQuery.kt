@@ -3,7 +3,6 @@ package edu.washington.cs.laragraphulo.examples.ktruss
 import edu.washington.cs.laragraphulo.api.*
 import edu.washington.cs.laragraphulo.opt.AccumuloConfig
 import edu.washington.cs.laragraphulo.util.GraphuloUtil
-import org.apache.accumulo.core.client.impl.Tables
 import org.apache.accumulo.core.iterators.IteratorUtil
 import java.util.*
 
@@ -139,13 +138,15 @@ object KTrussQuery {
       // Check Store does not have to create a new table
 
       val tosQuery = TupleOpSetting(query, Atmp, ac)
-      nppAfter = tosQuery.executeSingle(19)
+      // setting this below the VersioningIterator allows for fusion with the filter and aggregation
+      // (see SkviToKvAdapter)
+      nppAfter = tosQuery.executeSingleStore(19)
       totalnpp += nppAfter
 
 //      println("AtmpAlt on write/aggregate from Atmp scan query")
 //      GraphuloUtil.printTable(ac.connector, AtmpAlt, initialSchema.defaultPSchema())
 
-      val filter = TupleOp.Load(AtmpAlt, initialSchema)
+      val filter = TupleOp.Load(AtmpAlt, initialSchema) // fuses with the aggregation (priority 2)
 //          .log()
           .filter(ktrussFilter)
           .map(abs0)
