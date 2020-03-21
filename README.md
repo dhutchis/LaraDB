@@ -35,7 +35,7 @@ LaraDB is tested on Accumulo 1.8.
 ### People
 UW Lara team:
 
-* [Dylan Hutchison](https://www.linkedin.com/in/dylanhutchison/)
+* [Shana Hutchison](https://www.linkedin.com/in/shanahutchison/)
 * [Bill Howe](https://faculty.washington.edu/billhowe/)
 * [Dan Suciu](https://homes.cs.washington.edu/~suciu/)
 
