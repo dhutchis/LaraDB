@@ -1,6 +1,8 @@
 package edu.washington.cs.laragraphulo.encoding
 
 
+import com.google.common.primitives.Ints
+import org.apache.accumulo.core.client.lexicoder.IntegerLexicoder
 import org.apache.accumulo.core.client.lexicoder.UIntegerLexicoder
 import org.apache.accumulo.core.util.ByteBufferUtil
 import org.apache.hadoop.io.Text
@@ -12,6 +14,7 @@ import java.nio.ByteBuffer
 import java.util.*
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import kotlin.experimental.and
 
 class VariableLengthEncodingTest {
 
@@ -216,11 +219,11 @@ class VariableLengthEncodingTest {
   }
 
 
-//  @Test
+  @Test
   @Suppress("unused")
   fun printByteTable() {
     val lex = UIntegerLexicoder()
-    for (i in Byte.MIN_VALUE..Byte.MAX_VALUE) {
+    for (i in (Byte.MIN_VALUE..Byte.MAX_VALUE).union((Byte.MAX_VALUE+1)..(Byte.MAX_VALUE+3))) {
       val b = i.toByte()
 //      System.out.format("%+4d %3x%n", b, b)
       System.out.format("%+4d %3x : ", b, b)
@@ -231,32 +234,52 @@ class VariableLengthEncodingTest {
     }
   }
 
-//  @Test
+  @Test
   @Suppress("unused")
   fun printIntegerTable() {
     val lex = UIntegerLexicoder()
-    for (i in -5..270) {
+    for ( i1 in (-5..270).union(((1 shl 16)-2)..((1 shl 16)+2)).union(((1 shl 24)-2)..((1 shl 24)+2)) ) {
       //      System.out.format("%+4d %3x%n", b, b)
+      val i = i1 //Integer.reverseBytes(i1)
       System.out.format("%+4d %3x : ", i, i)
-      for (byte in lex.encode(i)) {
+      for (byte in Ints.toByteArray(i)) {
         System.out.format("%3x ", byte)
       }
       System.out.println()
     }
   }
 
-//  @Test
+  @Test
+  @Suppress("unused")
+  fun printReverseByteTable() {
+    for( i0 in (0..Byte.MAX_VALUE).union(Byte.MIN_VALUE..-1).union(256..260) ) {
+      val brev: Byte = VariableLengthHelper.lastByteReversed(i0)
+      val i = i0.toByte()
+      val iadj = (if( i < 0 ) (128+(i and 0x7F)).toByte() else i)
+      System.out.format("%+4d %02x : %02x%n", iadj, i.toByte(), brev)
+
+//      if( i % 8 == 0 && i != 0)
+//        System.out.println()
+//      System.out.format("(byte)0x%02x, ", brev)
+    }
+  }
+
+  @Test
   @Suppress("unused")
   fun testUIntLexicoder() {
-    val a = 2
-    val b = 17
+    val a = 120
+    val b = 130
     assertTrue(a < b)
     val lex = UIntegerLexicoder()
     val x = lex.encode(a)
     val y = lex.encode(b)
-    System.out.println("x: "+ Arrays.toString(x))
-    System.out.println("y: "+ Arrays.toString(y))
+    System.out.println("x: "+ Arrays.toString(x)) // 1, 120
+    System.out.println("y: "+ Arrays.toString(y)) // 1, -126
     assertTrue(WritableComparator.compareBytes(x, 0, x.size, y, 0, y.size) < 0)
+    assertTrue(Text(x) < Text(y))
+//    for (i in x.indices) // fails test
+//      if( x[i] != y[i] )
+//        assertTrue(x[i] < y[i])
   }
 
 

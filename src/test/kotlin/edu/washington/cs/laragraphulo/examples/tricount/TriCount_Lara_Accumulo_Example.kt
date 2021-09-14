@@ -7,7 +7,7 @@ import org.apache.accumulo.core.security.Authorizations
 import org.junit.Test
 import org.junit.jupiter.api.Assertions.*
 
-class TriCount_Lara_Accumulo : AccumuloTestBase() {
+class TriCount_Lara_Accumulo_Example : AccumuloTestBase() {
   companion object {
     const val table0 = "testTriCount0"
   }

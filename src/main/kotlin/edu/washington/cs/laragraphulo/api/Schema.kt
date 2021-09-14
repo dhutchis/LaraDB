@@ -194,6 +194,11 @@ open class Schema(
    * Todo: make other physical schemas. We may not always want to put all the keys in the row, for example if we need a coarser grouping.
    * */
   open fun defaultPSchema(): PSchema {
+    if (keys.size == 2) //HACK HACK HACK HACK
+      return PSchema(listOf(keys[0].defaultPhysical()),
+          colq = listOf(keys[1].defaultPhysical()),
+          pvals = vals.map(ValAttribute<*>::defaultPhysical)
+      )
     val pkeys = keys.map(Attribute<*>::defaultPhysical)
     val pvals = vals.map(ValAttribute<*>::defaultPhysical)
     return PSchema(row = pkeys, pvals = pvals)

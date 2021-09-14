@@ -4,6 +4,7 @@ import com.google.common.util.concurrent.*
 import edu.washington.cs.laragraphulo.Loggable
 import edu.washington.cs.laragraphulo.api.PSchema
 import edu.washington.cs.laragraphulo.api.Table
+import edu.washington.cs.laragraphulo.examples.ktruss.KTrussQuery
 import edu.washington.cs.laragraphulo.logger
 import edu.washington.cs.laragraphulo.info
 
@@ -14,6 +15,7 @@ import org.apache.accumulo.core.client.IteratorSetting
 import org.apache.accumulo.core.client.ZooKeeperInstance
 import org.apache.accumulo.core.client.admin.NewTableConfiguration
 import org.apache.accumulo.core.client.security.tokens.AuthenticationToken
+import org.apache.accumulo.core.client.security.tokens.PasswordToken
 import org.apache.accumulo.core.data.ByteSequence
 import org.apache.accumulo.core.data.Key
 import org.apache.accumulo.core.data.Range
@@ -268,6 +270,11 @@ interface AccumuloConfig : Serializable {
   companion object {
     const val PROP_PSCHEMA = "table.custom.pschema"
   }
+  fun kTrussAdj(tableA: Table, tableR: Table): Long {
+    this.setSchema(tableA, KTrussQuery.initialPSchema)
+    return KTrussQuery.kTrussAdj(this, tableA, tableR)
+  }
+
 }
 
 class FakeAccumuloConfig : AccumuloConfig {
@@ -307,6 +314,12 @@ class AccumuloConfigImpl : AccumuloConfig {
   override val instanceName: String
   override val zookeeperHosts: String
   override val username: String
+
+  constructor(instanceName: String,
+              zookeeperHosts: String,
+              username: String,
+              password: String)
+      : this(instanceName, zookeeperHosts, username, PasswordToken(password))
 
   constructor(instanceName: String,
               zookeeperHosts: String,

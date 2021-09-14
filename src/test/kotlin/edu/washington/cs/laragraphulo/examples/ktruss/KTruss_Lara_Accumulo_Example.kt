@@ -7,7 +7,7 @@ import org.apache.accumulo.core.security.Authorizations
 import org.junit.Test
 import org.junit.jupiter.api.Assertions.*
 
-class KTruss_Lara_Accumulo : AccumuloTestBase() {
+class KTruss_Lara_Accumulo_Example : AccumuloTestBase() {
   @Test
   fun test() {
     /* Obtain AccumuloConfig (connection information for Accumulo instance).

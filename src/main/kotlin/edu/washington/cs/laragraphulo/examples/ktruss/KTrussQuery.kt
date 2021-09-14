@@ -31,14 +31,20 @@ object KTrussQuery {
   )
 
   // ============= ATTRIBUTES
-  val attrR = Attribute("r", PType.INT)
-  val attrC = Attribute("c", PType.INT)
-  val attrV = ValAttribute("v", PType.INT, 0)
+  val intType = PType.INT_STRING
+  val attrR = Attribute("r", intType)
+  val attrC = Attribute("c", intType)
+  val attrV = ValAttribute("v", intType, 0)
 
   // ============= SCHEMA
   val initialSchema = Schema(
       keys = listOf(attrR, attrC),
       vals = listOf(attrV)
+  )
+  val initialPSchema = PSchema(
+      row = listOf(PAttribute("r", intType)),
+      colq = listOf(PAttribute("c", intType)),
+      pvals = listOf(PValAttribute("v", intType, 0))
   )
 
   // ============= UDF
@@ -47,7 +53,7 @@ object KTrussQuery {
 //        .groupBy { it }.mapValues { (_,list) -> list.count() }
 //    wordMap.map { (word,count) -> mapOf("word" to word, "count" to count) }
 //  }
-  val twoTimes = TimesFun("twoTimes", 0, 0, PType.INT) {a,b -> if (a != 0 && b != 0) 2 else 0}
+  val twoTimes = TimesFun("twoTimes", 0, 0, intType) {a,b -> if (a != 0 && b != 0) 2 else 0}
   val plus = PlusFun("plus", 0, Int::plus)
   val nodiag = MapFun("nodiag", listOf(attrV)) {
     if (it["r"] == it["c"]) mapOf("v" to 0) else it
@@ -102,7 +108,7 @@ object KTrussQuery {
   /**
    * Require [tableR] must not exist.
    */
-  fun kTrussAdj(ac: AccumuloConfig, tableA: Table, tableR: Table) {
+  fun kTrussAdj(ac: AccumuloConfig, tableA: Table, tableR: Table): Long {
     var nppBefore: Long
     var nppAfter = 0L
     var totalnpp = 0L
@@ -155,8 +161,8 @@ object KTrussQuery {
       val tosFilter = TupleOpSetting(filter, AtmpAlt, ac)
       tosFilter.attachIterator(10, "FilterAbs0", EnumSet.of(IteratorUtil.IteratorScope.scan))
 
-      println("AtmpAlt on filter: table $AtmpAlt")
-      GraphuloUtil.printTable(ac.connector, AtmpAlt, initialSchema.defaultPSchema())
+//      println("AtmpAlt on filter: table $AtmpAlt")
+//      GraphuloUtil.printTable(ac.connector, AtmpAlt, initialSchema.defaultPSchema())
 
 
 
@@ -183,6 +189,7 @@ object KTrussQuery {
     println("total npp: $totalnpp")
 //    println("written to $tableR from $Atmp")
 //    GraphuloUtil.printTable(ac.connector, tableR, initialSchema.defaultPSchema())
+    return totalnpp;
   }
 
 
